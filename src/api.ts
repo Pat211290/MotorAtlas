@@ -298,6 +298,20 @@ export async function completeRepair(workOrderId:string,note?:string){
 export async function markReadyForPickup(workOrderId:string){
   const {data,error}=await db().rpc('mark_ready_for_pickup',{p_work_order_id:workOrderId});if(error)throw error;return data;
 }
+export async function markNoCostsAndReadyForPickup(workOrderId:string){
+  const {data,error}=await db().rpc('mark_no_costs_and_ready_for_pickup',{p_work_order_id:workOrderId});
+  if(error){
+    const message=error.message.includes('invoice_already_published')
+      ?'Für diesen Auftrag wurde bereits eine Rechnung veröffentlicht.'
+      :error.message.includes('invalid_stage')
+        ?'Der Auftrag ist nicht mehr im Status „Arbeit fertig“.'
+        :error.message.includes('not_authorized')
+          ?'Du darfst diesen Auftrag nicht zur Abholung freigeben.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
 export async function closeWorkOrder(workOrderId:string){
   const {data,error}=await db().rpc('close_work_order',{p_work_order_id:workOrderId});if(error)throw error;return data;
 }
