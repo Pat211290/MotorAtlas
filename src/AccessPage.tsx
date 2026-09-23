@@ -173,6 +173,11 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
     const verify=async()=>{
       if(!tokenHash||!type){
+        if(sessionStorage.getItem('motoratlas_signup_confirmed')==='1'){
+          sessionStorage.removeItem('motoratlas_signup_confirmed');
+          setConfirmationState('success');
+          return;
+        }
         const {data}=await supabase.auth.getUser();
         if(data.user?.email_confirmed_at){
           setConfirmationState('success');
