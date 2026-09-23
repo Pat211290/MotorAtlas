@@ -90,25 +90,79 @@ function Login({setView}:{setView:(view:AppView)=>void}){
   </div>;
 }
 
+const viewHashes:Record<AppView,string>={
+  home:'#/',
+  'customer-info':'#/autofahrer',
+  'workshop-info':'#/werkstaetten',
+  'security-info':'#/sicherheit',
+  finder:'#/werkstatt-finden',
+  login:'#/anmelden',
+  office:'#/app/buero',
+  workshop:'#/app/werkstatt',
+  customer:'#/app/kunde',
+  branding:'#/app/werkstattprofil'
+};
+
+function viewFromHash(hash:string):AppView|null{
+  const entry=(Object.entries(viewHashes) as Array<[AppView,string]>).find(([,value])=>value===hash);
+  return entry?.[0]??null;
+}
+
 export default function App(){
-  const [view,setView]=useState<AppView>('home');
+  const [view,setView]=useState<AppView>(()=>viewFromHash(location.hash)??'home');
+
+  const navigate=(next:AppView)=>{
+    setView(next);
+    const target=viewHashes[next];
+    if(location.hash!==target)history.pushState({motorAtlasView:next},'',target);
+    window.scrollTo({top:0,behavior:'auto'});
+  };
+
+  useEffect(()=>{
+    const syncFromLocation=()=>{
+      const next=viewFromHash(location.hash);
+      if(next)setView(next);
+    };
+    window.addEventListener('popstate',syncFromLocation);
+    window.addEventListener('hashchange',syncFromLocation);
+    return()=>{
+      window.removeEventListener('popstate',syncFromLocation);
+      window.removeEventListener('hashchange',syncFromLocation);
+    };
+  },[]);
+
   useEffect(()=>{
     if(!supabase)return;
     supabase.auth.getSession().then(async({data})=>{
-      if(data.session&&(location.hash==='#app'||new URLSearchParams(location.search).get('app')==='1'))setView(await resolveSignedInView());
+      if(data.session&&(location.hash==='#app'||new URLSearchParams(location.search).get('app')==='1')){
+        navigate(await resolveSignedInView());
+      }
     });
   },[]);
+
+  useEffect(()=>{
+    const titles:Partial<Record<AppView,string>>={
+      home:'MotorAtlas – Werkstatt. Neu gedacht.',
+      'customer-info':'MotorAtlas für Autofahrer – Fahrzeug, Werkstatt & Dokumente',
+      'workshop-info':'MotorAtlas für Werkstätten – Digitaler Werkstattablauf',
+      'security-info':'MotorAtlas – Sicherheit & Transparenz',
+      finder:'MotorAtlas – Werkstatt finden',
+      login:'MotorAtlas – Anmelden'
+    };
+    if(titles[view])document.title=titles[view]!;
+  },[view]);
+
   return <div className="site">
     <Splash/>
-    {view==='home'&&<Marketing setView={setView}/>}
-    {view==='customer-info'&&<CustomerMarketingPage setView={setView}/>}
-    {view==='workshop-info'&&<WorkshopMarketingPage setView={setView}/>}
-    {view==='security-info'&&<SecurityMarketingPage setView={setView}/>}
-    {view==='finder'&&<WorkshopFinder setView={setView}/>}
-    {view==='login'&&<Login setView={setView}/>}
-    {view==='office'&&<OfficeDashboard setView={setView}/>}
-    {view==='workshop'&&<WorkshopBoard setView={setView}/>}
-    {view==='customer'&&<CustomerPortal setView={setView}/>}
-    {view==='branding'&&<BrandingPage setView={setView}/>}
+    {view==='home'&&<Marketing setView={navigate}/>}
+    {view==='customer-info'&&<CustomerMarketingPage setView={navigate}/>}
+    {view==='workshop-info'&&<WorkshopMarketingPage setView={navigate}/>}
+    {view==='security-info'&&<SecurityMarketingPage setView={navigate}/>}
+    {view==='finder'&&<WorkshopFinder setView={navigate}/>}
+    {view==='login'&&<Login setView={navigate}/>}
+    {view==='office'&&<OfficeDashboard setView={navigate}/>}
+    {view==='workshop'&&<WorkshopBoard setView={navigate}/>}
+    {view==='customer'&&<CustomerPortal setView={navigate}/>}
+    {view==='branding'&&<BrandingPage setView={navigate}/>}
   </div>;
 }
