@@ -24,7 +24,7 @@ function PublicFooter({setView}:{setView:(view:AppView)=>void}){
     <div><b>MotorAtlas</b><button onClick={()=>setView('customer-info')}>Für Autofahrer</button><button onClick={()=>setView('workshop-info')}>Für Werkstätten</button><button onClick={()=>setView('finder')}>Werkstatt finden</button></div>
     <div><b>Plattform</b><button onClick={()=>setView('security-info')}>Sicherheit</button><button onClick={()=>setView('login')}>Anmelden</button><button onClick={()=>setView('office')}>Produktdemo</button></div>
     <div><b>Geräte</b><span>Web</span><span>iPhone & iPad</span><span>Android</span></div>
-  </div><div className="wrap mp-footer-bottom"><span>© 2026 MotorAtlas</span><span>Datenschutz · Impressum · Nutzungsbedingungen</span></div></footer>;
+  </div><div className="wrap mp-footer-bottom"><span>© 2026 MotorAtlas</span><span className="mp-footer-legal"><button onClick={()=>setView('privacy')}>Datenschutz</button><span>·</span><button onClick={()=>setView('imprint')}>Impressum</button></span></div></footer>;
 }
 
 function BackHome({setView}:{setView:(view:AppView)=>void}){
