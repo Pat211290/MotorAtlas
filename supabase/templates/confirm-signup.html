@@ -32,13 +32,13 @@
               <div style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#0b7180;margin-bottom:10px;">KONTO AKTIVIEREN</div>
    <h1 style="margin:0 0 14px;font-size:28px;line-height:1.15;letter-spacing:-0.8px;color:#17313b;">Bestätige deine E-Mail-Adresse</h1>
    <p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#5c727c;">Willkommen bei MotorAtlas. Bitte bestätige deine E-Mail-Adresse, damit dein Konto aktiviert wird und du MotorAtlas sicher nutzen kannst.</p>
-   <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;"><tr><td bgcolor="#0b7180" style="border-radius:12px;"><a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;">E-Mail-Adresse bestätigen</a></td></tr></table>
+   <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;"><tr><td bgcolor="#0b7180" style="border-radius:12px;"><a href="https://motoratlas.de/bestaetigung?token_hash={{ .TokenHash }}&type=signup" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;">E-Mail-Adresse bestätigen</a></td></tr></table>
    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f5f9fa;border:1px solid #e2ecee;border-radius:14px;margin:0 0 22px;"><tr><td style="padding:16px 18px;">
      <div style="font-size:12px;font-weight:800;color:#35525d;margin-bottom:4px;">Warum ist das nötig?</div>
      <div style="font-size:12px;line-height:1.6;color:#6b7e86;">So stellen wir sicher, dass diese E-Mail-Adresse wirklich zu dir gehört und niemand in deinem Namen ein Konto anlegt.</div>
    </td></tr></table>
    <p style="margin:0 0 8px;font-size:12px;line-height:1.6;color:#73858d;">Falls der Button nicht funktioniert, öffne diesen Link:</p>
-   <p style="margin:0 0 22px;font-size:11px;line-height:1.6;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#0b7180;">{{ .ConfirmationURL }}</a></p>
+   <p style="margin:0 0 22px;font-size:11px;line-height:1.6;word-break:break-all;"><a href="https://motoratlas.de/bestaetigung?token_hash={{ .TokenHash }}&type=signup" style="color:#0b7180;">https://motoratlas.de/bestaetigung?token_hash={{ .TokenHash }}&type=signup</a></p>
    <p style="margin:0;font-size:12px;line-height:1.65;color:#8a979d;">Du hast kein MotorAtlas-Konto erstellt? Dann kannst du diese Nachricht ignorieren.</p>
             </td>
           </tr>
