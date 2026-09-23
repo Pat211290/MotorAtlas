@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import {
   ArrowRight, Building2, Car, CheckCircle2, Clock3, Eye, EyeOff, Gauge, LockKeyhole,
-  Mail, MailCheck, MapPin, MessageCircle, RefreshCw, ShieldCheck, Sparkles, UserRound, Users, WalletCards
+  Mail, MailCheck, MapPin, MessageCircle, Phone, RefreshCw, ShieldCheck, Sparkles, UserRound, Users, WalletCards
 } from 'lucide-react';
 import { backendConfigured, supabase } from './lib';
 import { authReturnUrl, claimMyWorkshopInvites, signUpCustomer } from './api';
@@ -148,6 +148,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [email,setEmail]=useState(()=>readPendingSignupEmail());
   const [password,setPassword]=useState('');
   const [name,setName]=useState('');
+  const [phone,setPhone]=useState('');
   const [street,setStreet]=useState('');
   const [postalCode,setPostalCode]=useState('');
   const [city,setCity]=useState('');
@@ -376,9 +377,10 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
         }catch{}
         setView(await resolveSignedInView());
       }else{
-        if(tab==='customer'&&(!street.trim()||!postalCode.trim()||!city.trim()))throw new Error('Bitte die vollständige Anschrift eintragen.');
+        if(tab==='customer'&&(!phone.trim()||!street.trim()||!postalCode.trim()||!city.trim()))throw new Error('Bitte Telefonnummer und vollständige Anschrift eintragen.');
         const result=await signUpCustomer(email,password,name,{
           accountIntent:tab==='workshop'?'workshop':'customer',
+          phone:tab==='customer'?phone:undefined,
           street:tab==='customer'?street:undefined,
           postalCode:tab==='customer'?postalCode:undefined,
           city:tab==='customer'?city:undefined
@@ -588,6 +590,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
             {tab!=='login'&&<label><span>{tab==='workshop'?'Ansprechpartner':'Vor- und Nachname'}</span><div><UserRound/><input value={name} onChange={e=>setName(e.target.value)} required placeholder={tab==='workshop'?'Max Mustermann':'Vor- und Nachname'}/></div></label>}
 
             {tab==='customer'&&<div className="access-address">
+              <label><span>Telefonnummer</span><div><Phone/><input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} required placeholder="+49 170 1234567"/></div></label>
               <label><span>Straße & Hausnummer</span><div><MapPin/><input value={street} onChange={e=>setStreet(e.target.value)} required placeholder="Musterstraße 12"/></div></label>
               <div>
                 <label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value.replace(/\D/g,'').slice(0,5))} required inputMode="numeric" placeholder="92421"/></label>
