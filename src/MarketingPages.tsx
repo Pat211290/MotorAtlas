@@ -59,6 +59,31 @@ export function CustomerMarketingPage({setView}:{setView:(view:AppView)=>void}){
 
       <section className="wrap mp-section"><div className="mp-section-head"><span>ÜBERALL DABEI</span><h2>Ein Kundenportal, das sich <em>wie eine App anfühlt.</em></h2><p>Auf iPhone und iPad kann MotorAtlas zum Home-Screen hinzugefügt werden. Android erhält zusätzlich eine eigene App-Hülle.</p></div><DeviceRibbon/></section>
 
+
+      <section className="wrap mp-section mp-outcomes">
+        <div className="mp-section-head"><span>WAS DU KONKRET DAVON HAST</span><h2>MotorAtlas soll dir nicht nur Informationen zeigen. <em>Es soll dir Zeit, Wege und unnötige Kosten ersparen.</em></h2><p>Der Nutzen entsteht dadurch, dass dein Fahrzeug, deine Werkstatt und dein aktueller Auftrag dauerhaft miteinander verbunden bleiben.</p></div>
+        <div className="mp-outcome-grid">
+          <article><Clock3/><div><b>Zeit sparen</b><p>Keine mehrfachen Telefonate für Termin, Rückfrage, Freigabe oder Status. Du siehst selbst, was gerade passiert.</p></div></article>
+          <article><FileCheck2/><div><b>Kosten vorher besser einschätzen</b><p>Diagnose und Kostenvoranschlag liegen vor der Freigabe am Auftrag. So kannst du entscheiden, bevor gearbeitet wird.</p></div></article>
+          <article><Car/><div><b>Keine Fahrzeugdaten neu erzählen</b><p>Fahrzeug, Kennzeichen, HSN/TSN, VIN, Bilder und Historie bleiben in deiner Garage hinterlegt.</p></div></article>
+          <article><MessageCircle/><div><b>Direkt am richtigen Auto kommunizieren</b><p>Chat und Anhänge sind fahrzeug- und auftragsbezogen. Kein Suchen in alten Messenger-Verläufen.</p></div></article>
+          <article><Gauge/><div><b>Immer aktuell bleiben</b><p>Termin bestätigt, Diagnose fertig, Freigabe erforderlich, Reparatur abgeschlossen – du siehst den aktuellen Stand.</p></div></article>
+          <article><ShieldCheck/><div><b>Mehr Kontrolle</b><p>Eine Chatnachricht ist keine Freigabe. Entscheidungen und Dokumente bleiben klar voneinander getrennt.</p></div></article>
+        </div>
+      </section>
+
+      <section className="mp-band customer-promise">
+        <div className="wrap mp-promise-grid">
+          <div><span className="mp-kicker">SCHNELLE HILFE, OHNE CHAOS</span><h2>Vom ersten Problem bis zur Abholung bleibt <em>alles am selben Fahrzeug.</em></h2><p>Wenn die Motorkontrollleuchte angeht oder ein ungewöhnliches Geräusch auftritt, sendest du nicht nur eine allgemeine Nachricht. Die Werkstatt erhält eine fahrzeugspezifische Anfrage mit Problem, Bild und vorhandenen Fahrzeugdaten.</p></div>
+          <div className="mp-promise-steps">
+            <article><b>01</b><span><strong>Problem melden</strong><small>Fahrzeug + Beschreibung + Bild</small></span></article>
+            <article><b>02</b><span><strong>Werkstatt reagiert</strong><small>Termin bestätigen oder Gegenvorschlag senden</small></span></article>
+            <article><b>03</b><span><strong>Diagnose & Rückfrage</strong><small>direkt im Fahrzeugvorgang</small></span></article>
+            <article><b>04</b><span><strong>Freigeben & aktuell bleiben</strong><small>bis Reparatur, Abholung und Rechnung</small></span></article>
+          </div>
+        </div>
+      </section>
+
       <section className="mp-cta"><div className="wrap"><div><span>AUTOFAHRER</span><h2>Werkstatt finden und deine digitale Fahrzeugakte starten.</h2></div><button className="btn white xl" onClick={()=>setView('finder')}>Werkstatt finden <ArrowRight/></button></div></section>
     </main>
     <PublicFooter setView={setView}/>
@@ -84,6 +109,44 @@ export function WorkshopMarketingPage({setView}:{setView:(view:AppView)=>void}){
       <section className="wrap mp-section split reverse"><div className="mp-doc-stack"><article><FileCheck2/><div><small>KOSTENVORANSCHLAG</small><b>KV 2026-00841</b><span>328,40 € · PDF</span></div><i>FREIGABE AUSSTEHEND</i></article><article><FileText/><div><small>RECHNUNG</small><b>RE 2026-00612</b><span>742,80 € · Original</span></div><i className="done">BEREIT</i></article></div><div><span className="mp-kicker">DOKUMENTE IM VORGANG</span><h2>Kein Suchen nach Anhängen, Chatverläufen und <em>„welche Version war aktuell?“</em></h2><p>Dokumente werden dem Auftrag zugeordnet. Freigaben bleiben als eigene Entscheidung getrennt vom Chat und sind zeitlich nachvollziehbar.</p><div className="mp-checks"><span><CheckCircle2/> PDF-Dokumente direkt am Auftrag</span><span><CheckCircle2/> Versionen bleiben nachvollziehbar</span><span><CheckCircle2/> Freigabe separat vom Chat</span><span><CheckCircle2/> Architektur für strukturierte E-Rechnungen</span></div></div></section>
 
       <section className="wrap mp-section"><div className="mp-section-head"><span>DEINE MARKE, NICHT UNSERE SCHABLONE</span><h2>MotorAtlas kann sich visuell an deine Werkstatt <em>anpassen.</em></h2><p>Logo und ausgewählte Markenfarben fließen dezent in Navigation, Akzente und Oberflächen ein – ohne die Bedienbarkeit zu beeinträchtigen.</p></div><div className="mp-brand-demo"><div className="mp-brand-logo">CS</div><div><small>ADAPTIVE WORKSHOP IDENTITY</small><b>Carplus Service Center</b><span>Logo → Akzentfarben → professionelle Werkstattoberfläche</span></div><div className="mp-swatches"><i/><i/><i/></div></div></section>
+
+
+      <section className="wrap mp-section mp-outcomes">
+        <div className="mp-section-head"><span>WELCHE PROBLEME MOTORATLAS LÖST</span><h2>Weniger unproduktive Kommunikation. <em>Mehr Zeit für Kunden und Fahrzeuge.</em></h2><p>MotorAtlas ersetzt nicht den persönlichen Kontakt. Es nimmt der Werkstatt die wiederkehrenden organisatorischen Schleifen ab, die Zeit kosten und keinen Umsatz erzeugen.</p></div>
+        <div className="mp-problem-solution">
+          <article><span>PROBLEM</span><b>Telefon klingelt für jeden Status</b><p>Kunden fragen nach Termin, Diagnose, Kosten oder Abholung.</p><i/><strong>MOTORATLAS</strong><small>Der aktuelle Stand ist im Kundenportal sichtbar. Rückfragen bleiben möglich, aber nicht mehr zwingend.</small></article>
+          <article><span>PROBLEM</span><b>Büro und Werkstatt arbeiten mit Zetteln oder Zurufen</b><p>Informationen gehen verloren oder müssen doppelt erfasst werden.</p><i/><strong>MOTORATLAS</strong><small>Fahrzeug eingetroffen → Diagnosequeue → Freigabe → Reparaturqueue. Ein gemeinsamer Live-Vorgang.</small></article>
+          <article><span>PROBLEM</span><b>Freigaben dauern und Fahrzeuge blockieren Platz</b><p>Der Kunde ist nicht erreichbar oder versteht nicht, worum es geht.</p><i/><strong>MOTORATLAS</strong><small>Diagnose, KVA und Chat liegen im selben Vorgang. Die verbindliche Freigabe erfolgt separat und nachvollziehbar.</small></article>
+          <article><span>PROBLEM</span><b>Neue Kunden finden die Werkstatt nicht professionell online</b><p>Website, Google-Eintrag und Telefon geben oft nur einen Teil der Informationen wieder.</p><i/><strong>MOTORATLAS</strong><small>Öffentliches Profil mit Leistungen, Öffnungszeiten, Standort, Bildern und direkter Kundenanfrage.</small></article>
+        </div>
+      </section>
+
+      <section className="mp-band dark revenue-band">
+        <div className="wrap mp-revenue-grid">
+          <div><span className="mp-kicker light">PERSONAL ENTLASTEN · UMSATZPOTENZIAL · PROFESSIONALITÄT</span><h2>MotorAtlas soll nicht mehr Arbeit machen. <em>Es soll Arbeit wegnehmen.</em></h2><p>Der wirtschaftliche Vorteil entsteht nicht durch ein einzelnes Feature, sondern durch weniger Unterbrechungen, schnellere Entscheidungen und eine professionellere digitale Kundenschnittstelle.</p></div>
+          <div className="mp-revenue-cards">
+            <article><Users/><b>Personal entlasten</b><span>Weniger Statusanrufe, doppelte Dateneingaben und interne Rückfragen.</span></article>
+            <article><Gauge/><b>Durchlauf beschleunigen</b><span>Schnellere Diagnoseweitergabe und Freigaben können Standzeiten reduzieren.</span></article>
+            <article><Building2/><b>Professioneller auftreten</b><span>Einheitliches Profil, klarer Workflow und transparente Kommunikation schaffen Vertrauen.</span></article>
+            <article><Sparkles/><b>Mehr Umsatzpotenzial</b><span>24/7 auffindbar, weniger verpasste Anfragen und mehr nutzbare Zeit für wertschöpfende Werkstattarbeit.</span></article>
+          </div>
+        </div>
+      </section>
+
+      <section className="wrap mp-section">
+        <div className="mp-section-head"><span>WARUM MOTORATLAS STATT EINER WEITEREN EINZELLÖSUNG?</span><h2>Weil Werkstattsuche allein nicht reicht. <em>Und interne Software den Kunden nicht automatisch mitnimmt.</em></h2><p>MotorAtlas verbindet öffentliche Sichtbarkeit, Kundenanfrage und den tatsächlichen Werkstattprozess in einer Plattform.</p></div>
+        <div className="mp-compare-table">
+          <div className="head"><span>Funktion</span><b>Typische Einzellösung</b><strong>MotorAtlas</strong></div>
+          <div><span>Werkstatt öffentlich finden</span><b>häufig ja</b><strong>ja</strong></div>
+          <div><span>Termin / Anfrage online</span><b>häufig ja</b><strong>ja</strong></div>
+          <div><span>Fahrzeugspezifischer Vorgang bleibt bestehen</span><b>je nach Anbieter</b><strong>ja</strong></div>
+          <div><span>Diagnose → KVA → Freigabe → Reparatur</span><b>oft getrennte Systeme</b><strong>ein Workflow</strong></div>
+          <div><span>Kunde sieht aktuellen Stand</span><b>je nach Anbieter</b><strong>integriert</strong></div>
+          <div><span>Mechanikeroberfläche ohne Finanzballast</span><b>nicht der Fokus vieler Portale</b><strong>rollenbasiert</strong></div>
+          <div><span>Öffentliches Werkstattprofil + interner Ablauf</span><b>meist getrennt</b><strong>verbunden</strong></div>
+        </div>
+        <small className="mp-compare-note">Andere Produkte unterscheiden sich im Funktionsumfang. Die Gegenüberstellung beschreibt bewusst die typische Aufteilung in Werkstattportal, Terminlösung, Messenger und interne Werkstattsoftware – nicht jedes einzelne Wettbewerbsprodukt.</small>
+      </section>
 
       <section className="mp-cta"><div className="wrap"><div><span>WERKSTATT</span><h2>MotorAtlas als digitale Arbeitsoberfläche deiner Werkstatt starten.</h2></div><button className="btn white xl" onClick={()=>setView('login')}>Werkstattkonto starten <ArrowRight/></button></div></section>
     </main>
