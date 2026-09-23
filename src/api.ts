@@ -644,11 +644,12 @@ export type PublicWorkshop={
   id:string;slug:string;name:string;street:string;postal_code:string;city:string;description?:string|null;
   services?:unknown;opening_hours?:unknown;logo_path?:string|null;brand_primary?:string|null;
   accepts_new_customers:boolean;latitude?:number|null;longitude?:number|null;verified_at:string;
+  master_workshop_verified_at?:string|null;master_workshop_title?:string|null;
 };
 
 export async function listPublicWorkshops(){
   const {data,error}=await db().from('workshops')
-    .select('id,slug,name,street,postal_code,city,description,services,opening_hours,logo_path,brand_primary,accepts_new_customers,latitude,longitude,verified_at')
+    .select('id,slug,name,street,postal_code,city,description,services,opening_hours,logo_path,brand_primary,accepts_new_customers,latitude,longitude,verified_at,master_workshop_verified_at,master_workshop_title')
     .eq('listed_publicly',true).not('verified_at','is',null).order('name',{ascending:true});
   if(error)throw error;return(data??[]) as PublicWorkshop[];
 }
