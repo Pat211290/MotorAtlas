@@ -5,9 +5,13 @@ function db(){if(!backendConfigured||!supabase)throw new Error('MotorAtlas backe
 export function authReturnUrl(query:string){
   if(typeof window==='undefined')return undefined;
   const configured=(import.meta.env.VITE_PUBLIC_APP_URL as string|undefined)?.trim();
+  const current=new URL('./',document.baseURI);
+  const isLocal=current.hostname==='localhost'||current.hostname==='127.0.0.1'||current.hostname==='0.0.0.0';
   const base=configured
     ?new URL(configured)
-    :new URL('./',document.baseURI);
+    :isLocal
+      ?new URL('https://pat211290.github.io/MotorAtlas/')
+      :current;
   base.search=query;
   base.hash='';
   return base.toString();
