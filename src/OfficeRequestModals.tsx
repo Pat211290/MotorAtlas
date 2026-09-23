@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CalendarDays, Car, UserRound, X } from 'lucide-react';
 import { decideCustomerRequest, declineServiceRequest, proposeAppointment, type WorkshopServiceRequest } from './api';
+import { QuarterHourDateTime } from './QuarterHourDateTime';
 
 export function CustomerAdmissionModal({
   open,onClose,onDone,request
@@ -68,7 +69,10 @@ export function ServiceRequestOfficeModal({
     <form onSubmit={propose}>
       <div className="service-request-summary"><Car/><div><small>KUNDENBEANSTANDUNG</small><b>{request.complaint}</b><span>{request.driveable===false?'Nicht fahrbereit':request.driveable===true?'Fahrbereit':'Fahrbereitschaft unklar'} · Warnleuchte: {request.warningLevel==='red'?'rot':request.warningLevel==='yellow'?'gelb':request.warningLevel==='none'?'keine':'unklar'}</span></div></div>
       {request.desiredStart&&<div className="desired-slot"><small>WUNSCH DES KUNDEN</small><b>{new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b></div>}
-      <div className="form-two"><label><span>Terminvorschlag</span><input type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)} required/></label><label><span>voraussichtliches Ende <small>optional</small></span><input type="datetime-local" value={endsAt} onChange={e=>setEndsAt(e.target.value)}/></label></div>
+      <div className="form-two">
+        <label><span>Terminvorschlag <small>15-Minuten-Takt</small></span><QuarterHourDateTime value={startsAt} onChange={setStartsAt} required/></label>
+        <label><span>voraussichtliches Ende <small>optional · 15-Minuten-Takt</small></span><QuarterHourDateTime value={endsAt} onChange={setEndsAt}/></label>
+      </div>
       <label><span>Hinweis zum Termin <small>optional</small></span><textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="z. B. Fahrzeug bitte morgens abstellen."/></label>
       <div className="decline-zone"><label><span>Falls nicht annehmbar: Grund <small>optional</small></span><input value={reason} onChange={e=>setReason(e.target.value)} placeholder="z. B. aktuell keine Kapazität für diese Reparatur"/></label><button type="button" className="btn secondary" disabled={busy} onClick={()=>void decline()}>Anfrage ablehnen</button></div>
       {error&&<div className="modal-error">{error}</div>}
