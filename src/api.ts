@@ -248,13 +248,26 @@ export async function resolveWorkOrderNextStep(input:{
   return data;
 }
 export async function recordApproval(input:{
-  workOrderId:string;quoteDocumentId:string;decision:'approved'|'declined'|'question_requested';
+  workOrderId:string;quoteDocumentId:string;decision:'approved'|'declined'|'question_requested'|'deferred';
   method:'portal'|'phone_recorded_by_workshop';note?:string;
 }){
   const {data,error}=await db().rpc('record_customer_approval',{
     p_work_order_id:input.workOrderId,p_quote_document_id:input.quoteDocumentId,p_decision:input.decision,
     p_method:input.method,p_note:input.note??null
   });if(error)throw error;return data;
+}
+
+export async function customerResolveAfterDiagnosis(workOrderId:string,decision:'quote'|'no_repair'|'deferred'){
+  const {data,error}=await db().rpc('customer_resolve_after_diagnosis',{
+    p_work_order_id:workOrderId,p_decision:decision
+  });
+  if(error){
+    const message=error.message.includes('invalid_stage')
+      ?'Diese Entscheidung passt nicht mehr zum aktuellen Auftragsstatus.'
+      :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function sha256(file:File){
