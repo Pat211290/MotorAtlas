@@ -1,0 +1,73 @@
+import { useMemo, useState } from 'react';
+import { Camera, CalendarDays, Car, ShieldAlert, X } from 'lucide-react';
+import { createServiceRequestDraft, submitServiceRequest, uploadRequestImage, type CustomerVehicle, type CustomerWorkshop } from './api';
+
+export function ServiceRequestModal({
+  open,onClose,onDone,vehicles,workshops
+}:{
+  open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void;vehicles:CustomerVehicle[];workshops:CustomerWorkshop[];
+}){
+  const primary=workshops.find(w=>w.isPrimary)??workshops[0];
+  const [vehicleId,setVehicleId]=useState(vehicles[0]?.id??'');
+  const [workshopId,setWorkshopId]=useState(primary?.workshopId??'');
+  const [complaint,setComplaint]=useState('');
+  const [notes,setNotes]=useState('');
+  const [desired,setDesired]=useState('');
+  const [driveable,setDriveable]=useState<'yes'|'no'|'unknown'>('yes');
+  const [warning,setWarning]=useState<'none'|'yellow'|'red'|'unknown'>('unknown');
+  const [image,setImage]=useState<File|null>(null);
+  const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);
+  const preview=useMemo(()=>image?URL.createObjectURL(image):null,[image]);
+
+  if(!open)return null;
+  const reset=()=>{setComplaint('');setNotes('');setDesired('');setDriveable('yes');setWarning('unknown');setImage(null);setError(null)};
+
+  const submit=async(event:React.FormEvent)=>{
+    event.preventDefault();
+    if(!vehicleId){setError('Bitte zuerst ein Fahrzeug auswählen.');return}
+    if(!workshopId){setError('Du benötigst zuerst eine freigegebene Werkstatt.');return}
+    if(!complaint.trim()){setError('Bitte beschreibe kurz das Problem.');return}
+    if(!image){setError('Ein Bild zum Problem ist erforderlich.');return}
+    setBusy(true);setError(null);
+    try{
+      const request=await createServiceRequestDraft({
+        workshopId,vehicleId,complaint:complaint.trim(),customerNotes:notes.trim()||undefined,
+        desiredStart:desired?new Date(desired).toISOString():undefined,
+        driveable:driveable==='unknown'?undefined:driveable==='yes',
+        warningLevel:warning
+      });
+      await uploadRequestImage(request.id,image);
+      await submitServiceRequest(request.id);
+      await onDone();reset();onClose();
+    }catch(err){setError(err instanceof Error?err.message:'Anfrage konnte nicht gesendet werden.')}
+    finally{setBusy(false)}
+  };
+
+  const selectedVehicle=vehicles.find(v=>v.id===vehicleId);
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="workflow-modal request-modal" onMouseDown={e=>e.stopPropagation()}>
+    <header><div className="modal-icon"><ShieldAlert/></div><div><span>NEUE WERKSTATTANFRAGE</span><h2>Was ist mit deinem Auto?</h2></div><button onClick={onClose} aria-label="Schließen"><X/></button></header>
+    <form onSubmit={submit}>
+      {!vehicles.length?<div className="request-blocker"><Car/><b>Noch kein Fahrzeug vorhanden.</b><span>Lege zuerst einen PKW in „Meine Garage“ an.</span></div>:<>
+        <div className="form-two">
+          <label><span>Fahrzeug</span><select value={vehicleId} onChange={e=>setVehicleId(e.target.value)}>{vehicles.map(v=><option key={v.id} value={v.id}>{[v.make,v.model,v.variant].filter(Boolean).join(' ')} · {v.licensePlate}</option>)}</select></label>
+          <label><span>Werkstatt</span><select value={workshopId} onChange={e=>setWorkshopId(e.target.value)}>{workshops.map(w=><option key={w.workshopId} value={w.workshopId}>{w.name}{w.isPrimary?' · Stammwerkstatt':''}</option>)}</select></label>
+        </div>
+        {!workshops.length&&<div className="request-blocker"><ShieldAlert/><b>Noch keine freigegebene Werkstatt.</b><span>Wähle zuerst eine Werkstatt und lass deine Kundenanfrage bestätigen.</span></div>}
+        <label><span>Problem / Beanstandung</span><textarea rows={4} value={complaint} onChange={e=>setComplaint(e.target.value)} placeholder="z. B. Motorkontrollleuchte leuchtet seit gestern. Fahrzeug fährt normal." required/></label>
+        <label><span>Zusätzliche Information <small>optional</small></span><textarea rows={2} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Seit wann? Unter welchen Bedingungen? Wurde schon etwas geprüft?"/></label>
+        <div className="request-state-grid">
+          <label><span>Fahrzeug fahrbereit?</span><div className="segment">{(['yes','no','unknown'] as const).map(value=><button key={value} type="button" className={driveable===value?'active':''} onClick={()=>setDriveable(value)}>{value==='yes'?'Ja':value==='no'?'Nein':'Unklar'}</button>)}</div></label>
+          <label><span>Warnleuchte</span><div className="segment warning-segment">{(['none','yellow','red','unknown'] as const).map(value=><button key={value} type="button" className={warning===value?'active '+value:''} onClick={()=>setWarning(value)}>{value==='none'?'Keine':value==='yellow'?'Gelb':value==='red'?'Rot':'Unklar'}</button>)}</div></label>
+        </div>
+        <label><span><CalendarDays size={14}/> Wunschtermin <small>optional</small></span><input type="datetime-local" value={desired} onChange={e=>setDesired(e.target.value)}/></label>
+        <label className="problem-photo">
+          <input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" onChange={e=>setImage(e.target.files?.[0]??null)} required/>
+          {preview?<img src={preview} alt="Problemfoto"/>:<><Camera/><b>Bild zum Problem hinzufügen</b><span>Pflicht · direkt fotografieren oder auswählen</span></>}
+        </label>
+        <div className="request-summary"><Car/><div><b>{selectedVehicle?[selectedVehicle.make,selectedVehicle.model,selectedVehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}</b><span>{selectedVehicle?.licensePlate} · Die Werkstatt erhält alle hinterlegten Fahrzeugdaten automatisch.</span></div></div>
+      </>}
+      {error&&<div className="modal-error">{error}</div>}
+      <div className="modal-actions"><button type="button" className="btn secondary" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={busy||!vehicles.length||!workshops.length||!image}>{busy?'Wird gesendet …':'Anfrage senden'}</button></div>
+    </form>
+  </section></div>;
+}
