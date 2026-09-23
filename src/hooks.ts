@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getCurrentWorkshopIdentity,getSignedInUserId,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
+  getCurrentWorkshopIdentity,getSignedInUserId,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
   subscribeCustomerOrders,subscribeWorkshop,
   type AppNotification,type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
   type LiveJob,type WorkshopAppointment,type WorkshopIdentity,type WorkshopServiceRequest
@@ -70,10 +70,11 @@ export function useCustomerWorkspace(){
   const [requests,setRequests]=useState<CustomerServiceRequest[]>([]);
   const [appointments,setAppointments]=useState<CustomerAppointment[]>([]);
   const [relationshipRequests,setRelationshipRequests]=useState<CustomerRelationshipRequest[]>([]);
+  const [notifications,setNotifications]=useState<AppNotification[]>([]);
   const [loading,setLoading]=useState(backendConfigured);
   const [error,setError]=useState<string|null>(null);
 
-  const clear=()=>{setVehicles([]);setOrders([]);setWorkshops([]);setRequests([]);setAppointments([]);setRelationshipRequests([])};
+  const clear=()=>{setVehicles([]);setOrders([]);setWorkshops([]);setRequests([]);setAppointments([]);setRelationshipRequests([]);setNotifications([])};
 
   const reload=useCallback(async()=>{
     if(!backendConfigured){setLoading(false);return;}
@@ -81,9 +82,9 @@ export function useCustomerWorkspace(){
       const id=await getSignedInUserId();
       setUserId(id);
       if(!id){clear();setLoading(false);return;}
-      const data=await loadCustomerWorkspace();
+      const [data,nextNotifications]=await Promise.all([loadCustomerWorkspace(),listMyNotifications()]);
       setVehicles(data.vehicles);setOrders(data.orders);setWorkshops(data.workshops);
-      setRequests(data.requests);setAppointments(data.appointments);setRelationshipRequests(data.relationshipRequests);setError(null);
+      setRequests(data.requests);setAppointments(data.appointments);setRelationshipRequests(data.relationshipRequests);setNotifications(nextNotifications);setError(null);
     }catch(err){
       setError(err instanceof Error?err.message:'Kundendaten konnten nicht geladen werden.');
     }finally{setLoading(false)}
@@ -108,5 +109,5 @@ export function useCustomerWorkspace(){
     };
   },[reload]);
 
-  return{userId,vehicles,orders,workshops,requests,appointments,relationshipRequests,loading,error,reload,isLive:Boolean(userId)};
+  return{userId,vehicles,orders,workshops,requests,appointments,relationshipRequests,notifications,loading,error,reload,isLive:Boolean(userId)};
 }
