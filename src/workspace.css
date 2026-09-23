@@ -222,3 +222,5 @@
   .schedule-summary{grid-template-columns:1fr 1fr}.schedule-summary article{padding:10px}.schedule-summary b{font-size:17px}
   .schedule-card{grid-template-columns:64px 1fr;padding:9px;gap:9px}.schedule-photo .vehicle-photo-real,.schedule-photo .vehicle-photo-placeholder{width:64px;height:56px}.schedule-contact,.schedule-vehicle-data{display:grid;grid-template-columns:1fr}.schedule-actions{display:grid}.vehicle-data-grid{grid-template-columns:1fr}.quarter-datetime{grid-template-columns:1fr}.notification-popover{top:calc(56px + env(safe-area-inset-top))}
 }
+
+.readonly-input{background:#f3f6f7!important;color:#74858d!important;cursor:not-allowed}
