@@ -6,7 +6,10 @@ import './marketing.css';
 import './workspace.css';
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => undefined));
+  window.addEventListener('load', () => {
+    const swUrl=new URL('sw.js',new URL(import.meta.env.BASE_URL,window.location.href)).toString();
+    navigator.serviceWorker.register(swUrl).catch(() => undefined);
+  });
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
