@@ -488,3 +488,6 @@
 }
 
 .customer-progress-steps .skipped i{background:#8a989e;box-shadow:0 0 0 1px #8a989e}.customer-progress-steps .skipped b{color:#657780}.customer-progress-steps .skipped span{color:#8a979d}
+
+.work-order-route{margin-top:10px;border:1px solid rgba(var(--brand-rgb),.18);background:linear-gradient(135deg,var(--brand-soft),#fff);border-radius:12px;padding:12px}
+.work-order-route small{display:block;font-size:7px;letter-spacing:.9px;font-weight:900;color:var(--brand)}.work-order-route b{display:block;font-size:11px;color:#405762;margin-top:3px}.work-order-route span{display:block;font-size:8px;line-height:1.45;color:#70828b;margin-top:3px}.work-order-route p{font-size:8px;line-height:1.45;color:#566d77;margin:7px 0 0;padding-top:7px;border-top:1px solid rgba(var(--brand-rgb),.12)}
