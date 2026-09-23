@@ -24,11 +24,12 @@ const statusText:Record<VerificationStatus,string>={
 };
 
 export function VerificationPanel({
-  workshopId,services,initialStatus='not_requested',reviewNote,onBeforeSubmit
+  workshopId,services,initialStatus='not_requested',verificationMode='standard',reviewNote,onBeforeSubmit
 }:{
   workshopId:string;
   services:string[];
   initialStatus?:VerificationStatus|string|null;
+  verificationMode?:string|null;
   reviewNote?:string|null;
   onBeforeSubmit?:()=>Promise<void>;
 }){
@@ -138,6 +139,23 @@ export function VerificationPanel({
       setError(translated);
     }finally{setBusy(false)}
   };
+
+  if(verificationMode==='developer_override'){
+    return <section id="verification-panel" className="panel verification-panel developer-verified">
+      <div className="verification-head">
+        <div>
+          <span className="overline">MOTORATLAS VERIFIZIERUNG</span>
+          <h3>Systemseitig vollständig freigegeben</h3>
+          <p>Diese Werkstatt besitzt eine interne Entwicklerfreigabe. Für diesen Datensatz sind keine Uploads oder Nachweise erforderlich.</p>
+        </div>
+        <span className="verification-status verified"><BadgeCheck size={16}/> Verifizierte Werkstatt</span>
+      </div>
+      <div className="developer-verification-card">
+        <ShieldCheck/>
+        <div><b>Verifizierung abgeschlossen</b><span>Betriebsstatus, öffentlicher Eintrag und Meisterwerkstatt-Kennzeichnung sind softwareseitig freigegeben und bleiben bei Profiländerungen erhalten.</span></div>
+      </div>
+    </section>;
+  }
 
   return <section id="verification-panel" className="panel verification-panel">
     <div className="verification-head">
