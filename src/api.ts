@@ -159,11 +159,27 @@ export async function publishDocument(documentId:string){
 
 export function subscribeWorkshop(workshopId:string,onChange:()=>void){
   const client=db();
-  const channel=client.channel(`workshop:${workshopId}:orders`)
-    .on('postgres_changes',{event:'*',schema:'public',table:'work_orders',filter:`workshop_id=eq.${workshopId}`},onChange)
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'work_order_events',filter:`workshop_id=eq.${workshopId}`},onChange)
-    .subscribe();
-  return()=>{void client.removeChannel(channel)};
+  let timer:number|undefined;
+  const refresh=()=>{
+    if(timer)window.clearTimeout(timer);
+    timer=window.setTimeout(onChange,120);
+  };
+  const channel=client.channel(`workshop:${workshopId}:workspace`)
+    .on('postgres_changes',{event:'*',schema:'public',table:'work_orders',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'work_order_events',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'service_requests',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'appointments',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'workshop_customer_requests',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'customer_workshop_links',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'documents',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'workshop_members',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'workshops',filter:`id=eq.${workshopId}`},refresh)
+    .subscribe(status=>{if(status==='SUBSCRIBED')refresh()});
+  return()=>{
+    if(timer)window.clearTimeout(timer);
+    void client.removeChannel(channel);
+  };
 }
 
 export type ChatThread={
@@ -357,7 +373,11 @@ export type CustomerWorkshop={
 };
 export type CustomerServiceRequest={
   id:string;workshopId:string;vehicleId:string;complaint:string;status:string;desiredStart?:string|null;desiredEnd?:string|null;
-  warningLevel?:string|null;driveable?:boolean|null;createdAt:string;
+  warningLevel?:string|null;driveable?:boolean|null;declineReason?:string|null;declinedAt?:string|null;createdAt:string;
+};
+export type CustomerRelationshipRequest={
+  id:string;workshopId:string;workshopName:string;message?:string|null;status:'pending'|'accepted'|'rejected';
+  decidedAt?:string|null;createdAt:string;updatedAt:string;
 };
 export type CustomerAppointment={
   id:string;serviceRequestId:string;workshopId:string;startsAt:string;endsAt?:string|null;status:string;note?:string|null;
@@ -365,7 +385,7 @@ export type CustomerAppointment={
 
 export async function loadCustomerWorkspace():Promise<{
   vehicles:CustomerVehicle[];orders:CustomerOrder[];workshops:CustomerWorkshop[];
-  requests:CustomerServiceRequest[];appointments:CustomerAppointment[];
+  requests:CustomerServiceRequest[];appointments:CustomerAppointment[];relationshipRequests:CustomerRelationshipRequest[];
 }>{
   const client=db();
   const {data:auth}=await client.auth.getUser();
@@ -380,15 +400,25 @@ export async function loadCustomerWorkspace():Promise<{
   if(orderResult.error)throw orderResult.error;
 
   const requestResult=await client.from('service_requests')
-      .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,created_at')
+      .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
       .eq('customer_user_id',auth.user.id).not('status','in','("cancelled","converted")').order('created_at',{ascending:false});
   if(requestResult.error)throw requestResult.error;
+
+  const relationshipRequestResult=await client.from('workshop_customer_requests')
+      .select('id,workshop_id,message,status,decided_at,created_at,updated_at')
+      .eq('customer_user_id',auth.user.id)
+      .order('updated_at',{ascending:false});
+  if(relationshipRequestResult.error)throw relationshipRequestResult.error;
 
   const linkResult=await client.from('customer_workshop_links')
       .select('id,workshop_id,is_primary').eq('customer_user_id',auth.user.id).eq('active',true);
   if(linkResult.error)throw linkResult.error;
 
-  const workshopIds=[...new Set(((linkResult.data??[]) as any[]).map(link=>link.workshop_id))];
+  const workshopIds=[...new Set([
+    ...((linkResult.data??[]) as any[]).map(link=>link.workshop_id),
+    ...((relationshipRequestResult.data??[]) as any[]).map(request=>request.workshop_id),
+    ...((requestResult.data??[]) as any[]).map(request=>request.workshop_id)
+  ])];
   const workshopResult=workshopIds.length
     ?await client.from('workshops').select('id,name,street,postal_code,city,logo_path,accepts_new_customers').in('id',workshopIds)
     :{data:[],error:null} as any;
@@ -418,10 +448,15 @@ export async function loadCustomerWorkspace():Promise<{
     }),
     requests:((requestResult.data??[]) as any[]).map(r=>({
       id:r.id,workshopId:r.workshop_id,vehicleId:r.vehicle_id,complaint:r.complaint,status:r.status,
-      desiredStart:r.desired_start,desiredEnd:r.desired_end,warningLevel:r.warning_level,driveable:r.driveable,createdAt:r.created_at
+      desiredStart:r.desired_start,desiredEnd:r.desired_end,warningLevel:r.warning_level,driveable:r.driveable,
+      declineReason:r.decline_reason,declinedAt:r.declined_at,createdAt:r.created_at
     })),
     appointments:((appointmentResult.data??[]) as any[]).map(a=>({
       id:a.id,serviceRequestId:a.service_request_id,workshopId:a.workshop_id,startsAt:a.starts_at,endsAt:a.ends_at,status:a.status,note:a.note
+    })),
+    relationshipRequests:((relationshipRequestResult.data??[]) as any[]).map(r=>({
+      id:r.id,workshopId:r.workshop_id,workshopName:(workshopMap.get(r.workshop_id) as any)?.name??'Werkstatt',
+      message:r.message,status:r.status,decidedAt:r.decided_at,createdAt:r.created_at,updatedAt:r.updated_at
     }))
   };
 }
@@ -459,11 +494,25 @@ export async function listWorkshopServiceRequests(workshopId:string):Promise<Wor
 
 export function subscribeCustomerOrders(userId:string,onChange:()=>void){
   const client=db();
-  const channel=client.channel('customer:'+userId+':orders')
-    .on('postgres_changes',{event:'*',schema:'public',table:'work_orders',filter:'customer_user_id=eq.'+userId},onChange)
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'user_id=eq.'+userId},onChange)
-    .subscribe();
-  return()=>{void client.removeChannel(channel)};
+  let timer:number|undefined;
+  const refresh=()=>{
+    if(timer)window.clearTimeout(timer);
+    timer=window.setTimeout(onChange,120);
+  };
+  const channel=client.channel('customer:'+userId+':workspace')
+    .on('postgres_changes',{event:'*',schema:'public',table:'work_orders',filter:'customer_user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'service_requests',filter:'customer_user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'workshop_customer_requests',filter:'customer_user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'customer_workshop_links',filter:'customer_user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'vehicles',filter:'owner_user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'documents',filter:'customer_user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:'user_id=eq.'+userId},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'appointments'},refresh)
+    .subscribe(status=>{if(status==='SUBSCRIBED')refresh()});
+  return()=>{
+    if(timer)window.clearTimeout(timer);
+    void client.removeChannel(channel);
+  };
 }
 
 export async function getSignedInUserId(){
