@@ -5,7 +5,7 @@ import {
   ArrowLeft, ArrowRight, Building2, CheckCircle2, MapPin, Search, ShieldCheck, Sparkles
 } from 'lucide-react';
 import { Brand, type AppView } from './components';
-import { getWorkshopLogoPublicUrl, listPublicWorkshops, type PublicWorkshop } from './api';
+import { geocodePublicWorkshop, getWorkshopLogoPublicUrl, listPublicWorkshops, type PublicWorkshop } from './api';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 function serviceLabel(code:string){
@@ -47,6 +47,27 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
       .finally(()=>!cancelled&&setLoading(false));
     return()=>{cancelled=true};
   },[]);
+
+  useEffect(()=>{
+    const missing=workshops.filter(workshop=>{
+      const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
+      return!Number.isFinite(lat)||!Number.isFinite(lng);
+    });
+    if(!missing.length)return;
+    let cancelled=false;
+    void(async()=>{
+      for(let index=0;index<missing.length;index++){
+        const workshop=missing[index];
+        try{
+          const coords=await geocodePublicWorkshop(workshop);
+          if(cancelled)return;
+          setWorkshops(current=>current.map(item=>item.id===workshop.id?{...item,latitude:coords.latitude,longitude:coords.longitude}:item));
+        }catch{}
+        if(index<missing.length-1)await new Promise(resolve=>setTimeout(resolve,1100));
+      }
+    })();
+    return()=>{cancelled=true};
+  },[workshops.length]);
 
   const filtered=useMemo(()=>{
     const needle=query.trim().toLocaleLowerCase('de-DE');
