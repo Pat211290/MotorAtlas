@@ -169,6 +169,44 @@ export async function declineServiceRequest(serviceRequestId:string,reason?:stri
 export async function markVehicleArrived(workOrderId:string){
   const {data,error}=await db().rpc('mark_vehicle_arrived',{p_work_order_id:workOrderId});if(error)throw error;return data;
 }
+export type WorkshopMemberOption={
+  userId:string;displayName:string;role:string;permissions:Record<string,unknown>;
+};
+
+export async function listWorkshopMembers(workshopId:string):Promise<WorkshopMemberOption[]>{
+  const {data,error}=await db().from('workshop_members')
+    .select('user_id,display_name,role,permissions')
+    .eq('workshop_id',workshopId).eq('active',true).order('created_at',{ascending:true});
+  if(error)throw error;
+  return((data??[]) as any[]).map(member=>({
+    userId:member.user_id,
+    displayName:member.display_name||(
+      member.role==='owner'?'Inhaber':
+      member.role==='office'?'Büro':
+      member.role==='mechanic'?'Mechaniker':'Mitarbeiter'
+    ),
+    role:member.role,
+    permissions:(member.permissions??{}) as Record<string,unknown>
+  }));
+}
+
+export async function assignWorkToMember(workOrderId:string,type:'diagnosis'|'repair',memberUserId:string){
+  const {data,error}=await db().rpc('assign_work_to_member',{
+    p_work_order_id:workOrderId,p_type:type,p_member_user_id:memberUserId
+  });
+  if(error){
+    const message=error.message.includes('target_member_not_authorized')
+      ?'Dieser Mitarbeiter hat für diese Arbeit keine Berechtigung.'
+      :error.message.includes('work_already_assigned')
+        ?'Dieser Auftrag wurde bereits einem Mitarbeiter zugeordnet.'
+        :error.message.includes('assignment_not_authorized')
+          ?'Du darfst Aufträge nicht anderen Mitarbeitern zuweisen.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
+
 export async function claimWork(workOrderId:string,type:'diagnosis'|'repair'){
   const {data,error}=await db().rpc('claim_work',{p_work_order_id:workOrderId,p_type:type});if(error)throw error;return data;
 }
@@ -368,15 +406,34 @@ export type LiveJob={
   customerUserId:string;
   serviceRequestId?:string|null;
   vehicle:string;
+  make?:string|null;
+  model?:string|null;
+  variant?:string|null;
   plate:string;
   mileage?:number|null;
+  firstRegistration?:string|null;
+  hsn?:string|null;
+  tsn?:string|null;
+  vin?:string|null;
   photoPath?:string|null;
   complaint:string;
+  customerNotes?:string|null;
+  driveable?:boolean|null;
+  warningLevel?:string|null;
+  customerName?:string|null;
+  customerEmail?:string|null;
+  customerPhone?:string|null;
+  customerStreet?:string|null;
+  customerPostalCode?:string|null;
+  customerCity?:string|null;
+  arrivedAt?:string|null;
   stage:LiveStage;
   rawStage:string;
   priority:'normal'|'urgent'|'waiting_customer'|'immobile';
   assignee?:string|null;
   assigneeUserId?:string|null;
+  assignmentType?:'diagnosis'|'repair'|null;
+  assignmentClaimedAt?:string|null;
   updatedAt:string;
 };
 
@@ -437,7 +494,7 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
 export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const client=db();
   const {data:orders,error}=await client.from('work_orders')
-    .select('id,order_number,stage,priority,vehicle_id,service_request_id,customer_user_id,updated_at')
+    .select('id,order_number,stage,priority,vehicle_id,service_request_id,customer_user_id,arrived_at,updated_at')
     .eq('workshop_id',workshopId)
     .not('stage','in','("closed","cancelled","appointment_confirmed")')
     .order('updated_at',{ascending:false});
@@ -449,16 +506,21 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const requestIds=[...new Set(rows.map(r=>r.service_request_id).filter(Boolean))];
   const orderIds=rows.map(r=>r.id);
 
-  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,license_plate,mileage,photo_path').in('id',vehicleIds);
+  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,first_registration,license_plate,hsn,tsn,vin,mileage,photo_path').in('id',vehicleIds);
   if(vehicleResult.error)throw vehicleResult.error;
   const requestResult=requestIds.length
-    ?await client.from('service_requests').select('id,complaint').in('id',requestIds)
+    ?await client.from('service_requests').select('id,complaint,customer_notes,driveable,warning_level').in('id',requestIds)
     :{data:[],error:null} as any;
   if(requestResult.error)throw requestResult.error;
   const assignmentResult=await client.from('work_order_assignments')
-    .select('work_order_id,member_user_id,status').in('work_order_id',orderIds).eq('status','claimed');
+    .select('work_order_id,member_user_id,assignment_type,status,claimed_at').in('work_order_id',orderIds).eq('status','claimed');
   if(assignmentResult.error)throw assignmentResult.error;
 
+  const customerIds=[...new Set(rows.map(r=>r.customer_user_id).filter(Boolean))];
+  const profileResult=customerIds.length
+    ?await client.from('profiles').select('id,full_name,email,phone,street,postal_code,city').in('id',customerIds)
+    :{data:[],error:null} as any;
+  if(profileResult.error)throw profileResult.error;
   const assigneeIds=[...new Set(((assignmentResult.data??[]) as any[]).map(a=>a.member_user_id).filter(Boolean))];
   const memberResult=assigneeIds.length
     ?await client.from('workshop_members').select('user_id,display_name').eq('workshop_id',workshopId).in('user_id',assigneeIds)
@@ -467,12 +529,17 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
 
   const vehicleMap=new Map(((vehicleResult.data??[]) as any[]).map(v=>[v.id,v]));
   const requestMap=new Map(((requestResult.data??[]) as any[]).map(r=>[r.id,r]));
+  const profileMap=new Map(((profileResult.data??[]) as any[]).map(p=>[p.id,p]));
   const memberMap=new Map(((memberResult.data??[]) as any[]).map(m=>[m.user_id,m.display_name]));
-  const assignmentMap=new Map(((assignmentResult.data??[]) as any[]).map(a=>[a.work_order_id,{userId:a.member_user_id,name:memberMap.get(a.member_user_id)??null}]));
+  const assignmentMap=new Map(((assignmentResult.data??[]) as any[]).map(a=>[a.work_order_id,{
+    userId:a.member_user_id,name:memberMap.get(a.member_user_id)??null,type:a.assignment_type,claimedAt:a.claimed_at
+  }]));
 
   return rows.map(row=>{
     const vehicle=vehicleMap.get(row.vehicle_id) as any;
     const request=requestMap.get(row.service_request_id) as any;
+    const profile=profileMap.get(row.customer_user_id) as any;
+    const assignment=assignmentMap.get(row.id) as any;
     return{
       id:row.id,
       orderNumber:row.order_number,
@@ -480,15 +547,23 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
       customerUserId:row.customer_user_id,
       serviceRequestId:row.service_request_id,
       vehicle:vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug',
+      make:vehicle?.make??null,model:vehicle?.model??null,variant:vehicle?.variant??null,
       plate:vehicle?.license_plate??'—',
-      mileage:vehicle?.mileage??null,
+      mileage:vehicle?.mileage??null,firstRegistration:vehicle?.first_registration??null,
+      hsn:vehicle?.hsn??null,tsn:vehicle?.tsn??null,vin:vehicle?.vin??null,
       photoPath:vehicle?.photo_path??null,
       complaint:request?.complaint??'Kein Beanstandungstext hinterlegt.',
+      customerNotes:request?.customer_notes??null,driveable:request?.driveable??null,warningLevel:request?.warning_level??null,
+      customerName:profile?.full_name??'Kunde',customerEmail:profile?.email??null,customerPhone:profile?.phone??null,
+      customerStreet:profile?.street??null,customerPostalCode:profile?.postal_code??null,customerCity:profile?.city??null,
+      arrivedAt:row.arrived_at??null,
       stage:mapOrderStage(row.stage),
       rawStage:row.stage,
       priority:row.priority,
-      assignee:assignmentMap.get(row.id)?.name??null,
-      assigneeUserId:assignmentMap.get(row.id)?.userId??null,
+      assignee:assignment?.name??null,
+      assigneeUserId:assignment?.userId??null,
+      assignmentType:assignment?.type??null,
+      assignmentClaimedAt:assignment?.claimedAt??null,
       updatedAt:row.updated_at
     } satisfies LiveJob;
   });
@@ -498,9 +573,23 @@ export type CustomerVehicle={
   id:string;make:string;model:string;variant?:string|null;licensePlate:string;mileage?:number|null;
   firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;vin?:string|null;photoPath:string;
 };
+export type CustomerOrderProgress={
+  workOrderId:string;
+  arrivedAt?:string|null;
+  diagnosisStartedAt?:string|null;
+  diagnosisCompletedAt?:string|null;
+  diagnosisStaffName?:string|null;
+  repairStartedAt?:string|null;
+  repairCompletedAt?:string|null;
+  repairStaffName?:string|null;
+  readyForPickupAt?:string|null;
+  closedAt?:string|null;
+};
+
 export type CustomerOrder={
   id:string;orderNumber:string;vehicleId:string;serviceRequestId?:string|null;appointmentId?:string|null;
   stage:LiveStage;rawStage:string;updatedAt:string;workshopId:string;
+  progress?:CustomerOrderProgress|null;
 };
 export type CustomerWorkshop={
   workshopId:string;linkId:string;isPrimary:boolean;name:string;street:string;postalCode:string;city:string;
@@ -535,6 +624,15 @@ export async function loadCustomerWorkspace():Promise<{
   const orderResult=await client.from('work_orders').select('id,order_number,vehicle_id,service_request_id,appointment_id,stage,updated_at,workshop_id')
       .eq('customer_user_id',auth.user.id).neq('stage','cancelled').order('updated_at',{ascending:false});
   if(orderResult.error)throw orderResult.error;
+
+  const {data:progressData,error:progressError}=await client.rpc('get_customer_order_progress');
+  if(progressError)throw progressError;
+  const progressMap=new Map(((progressData??[]) as any[]).map(row=>[row.work_order_id,{
+    workOrderId:row.work_order_id,arrivedAt:row.arrived_at,diagnosisStartedAt:row.diagnosis_started_at,
+    diagnosisCompletedAt:row.diagnosis_completed_at,diagnosisStaffName:row.diagnosis_staff_name,
+    repairStartedAt:row.repair_started_at,repairCompletedAt:row.repair_completed_at,repairStaffName:row.repair_staff_name,
+    readyForPickupAt:row.ready_for_pickup_at,closedAt:row.closed_at
+  } satisfies CustomerOrderProgress]));
 
   const requestResult=await client.from('service_requests')
       .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
@@ -578,7 +676,8 @@ export async function loadCustomerWorkspace():Promise<{
     })),
     orders:((orderResult.data??[]) as any[]).map(o=>({
       id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,serviceRequestId:o.service_request_id,appointmentId:o.appointment_id,
-      stage:mapOrderStage(o.stage),rawStage:o.stage,updatedAt:o.updated_at,workshopId:o.workshop_id
+      stage:mapOrderStage(o.stage),rawStage:o.stage,updatedAt:o.updated_at,workshopId:o.workshop_id,
+      progress:progressMap.get(o.id)??null
     })),
     workshops:((linkResult.data??[]) as any[]).map(link=>{
       const workshop=workshopMap.get(link.workshop_id) as any;
