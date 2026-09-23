@@ -139,7 +139,7 @@ export function VerificationPanel({
     }finally{setBusy(false)}
   };
 
-  return <section className="panel verification-panel">
+  return <section id="verification-panel" className="panel verification-panel">
     <div className="verification-head">
       <div>
         <span className="overline">MOTORATLAS VERIFIZIERUNG</span>
