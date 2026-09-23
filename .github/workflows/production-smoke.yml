@@ -34,13 +34,17 @@ jobs:
           echo "Preview did not become reachable."
           exit 1
 
-      - name: Verify public application shell
+      - name: Verify public application shell and auth routes
         shell: bash
         run: |
           set -e
           grep -q 'id="root"' /tmp/motoratlas.html
           curl --fail --silent --show-error --location "${PREVIEW_URL}manifest.webmanifest" -o /tmp/manifest.json
           node -e "const m=require('/tmp/manifest.json'); if(!m.name || !m.start_url) process.exit(1); console.log('PWA manifest:', m.name)"
+          for route in bestaetigung/ anmelden/ passwort-zuruecksetzen/; do
+            curl --fail --silent --show-error --location "${PREVIEW_URL}${route}" -o "/tmp/${route//\//_}.html"
+            grep -q 'id="root"' "/tmp/${route//\//_}.html"
+          done
 
       - name: Verify Supabase Auth health
         shell: bash
