@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getCurrentWorkshopIdentity,getSignedInUserId,getWorkshopDashboardMetrics,getWorkshopResponseStats,listMyCustomerDocuments,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopChatInbox,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
+  getCurrentWorkshopIdentity,getSignedInUserId,getWorkshopDashboardMetrics,getWorkshopResponseStats,listMyCustomerDocuments,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopChatInbox,listWorkshopJobs,listWorkshopMembers,listWorkshopServiceRequests,loadCustomerWorkspace,
   subscribeCustomerOrders,subscribeWorkshop,
   type AppNotification,type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
-  type LiveJob,type WorkshopAppointment,type WorkshopChatInboxItem,type WorkshopDashboardMetrics,type WorkshopIdentity,type WorkshopResponseStats,type WorkshopServiceRequest
+  type LiveJob,type WorkshopAppointment,type WorkshopChatInboxItem,type WorkshopDashboardMetrics,type WorkshopIdentity,type WorkshopMemberOption,type WorkshopResponseStats,type WorkshopServiceRequest
 } from './api';
 import { applyPalette, backendConfigured, paletteFromStoredColors } from './lib';
 
@@ -15,6 +15,7 @@ export function useWorkshopWorkspace(){
   const [appointments,setAppointments]=useState<WorkshopAppointment[]>([]);
   const [notifications,setNotifications]=useState<AppNotification[]>([]);
   const [chatInbox,setChatInbox]=useState<WorkshopChatInboxItem[]>([]);
+  const [members,setMembers]=useState<WorkshopMemberOption[]>([]);
   const [metrics,setMetrics]=useState<WorkshopDashboardMetrics>({activeCustomerCount:0,primaryCustomerCount:0});
   const [responseStats,setResponseStats]=useState<WorkshopResponseStats>({medianResponseMinutes:null,averageResponseMinutes:null,sampleCount:0});
   const [loading,setLoading]=useState(backendConfigured);
@@ -32,23 +33,24 @@ export function useWorkshopWorkspace(){
         if(palette)applyPalette(palette);
       }
       if(!current){
-        setJobs([]);setServiceRequests([]);setCustomerRequests([]);setAppointments([]);setNotifications([]);setChatInbox([]);
+        setJobs([]);setServiceRequests([]);setCustomerRequests([]);setAppointments([]);setNotifications([]);setChatInbox([]);setMembers([]);
         setMetrics({activeCustomerCount:0,primaryCustomerCount:0});
         setResponseStats({medianResponseMinutes:null,averageResponseMinutes:null,sampleCount:0});
         setLoading(false);return;
       }
-      const [nextJobs,nextServiceRequests,nextCustomerRequests,nextAppointments,nextNotifications,nextChatInbox,nextMetrics,nextResponseStats]=await Promise.all([
+      const [nextJobs,nextServiceRequests,nextCustomerRequests,nextAppointments,nextNotifications,nextChatInbox,nextMembers,nextMetrics,nextResponseStats]=await Promise.all([
         listWorkshopJobs(current.workshopId),
         listWorkshopServiceRequests(current.workshopId),
         listPendingCustomerRequests(current.workshopId),
         listWorkshopAppointments(current.workshopId),
         listMyWorkshopNotifications(current.workshopId),
         listWorkshopChatInbox(current.workshopId).catch(()=>[]),
+        listWorkshopMembers(current.workshopId).catch(()=>[]),
         getWorkshopDashboardMetrics(current.workshopId),
         getWorkshopResponseStats(current.workshopId)
       ]);
       setJobs(nextJobs);setServiceRequests(nextServiceRequests);setCustomerRequests(nextCustomerRequests);
-      setAppointments(nextAppointments);setNotifications(nextNotifications);setChatInbox(nextChatInbox);
+      setAppointments(nextAppointments);setNotifications(nextNotifications);setChatInbox(nextChatInbox);setMembers(nextMembers);
       setMetrics(nextMetrics);setResponseStats(nextResponseStats);
       setError(null);
     }catch(err){
@@ -75,7 +77,7 @@ export function useWorkshopWorkspace(){
     };
   },[reload]);
 
-  return{identity,jobs,serviceRequests,customerRequests,appointments,notifications,chatInbox,metrics,responseStats,loading,error,reload,isLive:Boolean(identity)};
+  return{identity,jobs,serviceRequests,customerRequests,appointments,notifications,chatInbox,members,metrics,responseStats,loading,error,reload,isLive:Boolean(identity)};
 }
 
 export function useCustomerWorkspace(){
