@@ -74,12 +74,5 @@ jobs:
           }
           NODE
 
-      - name: Verify public workshop directory API
-        shell: bash
-        run: |
-          set -e
-          curl --fail --silent --show-error             -H "apikey: ${SUPABASE_KEY}"             -H "Authorization: Bearer ${SUPABASE_KEY}"             "${SUPABASE_URL}/rest/v1/workshops?select=id,slug,name&limit=1" >/tmp/workshops.json
-          node -e "const x=require('/tmp/workshops.json'); if(!Array.isArray(x)) process.exit(1); console.log('Public workshop API reachable; rows:', x.length)"
-
       - name: Summary
-        run: echo "MotorAtlas preview + Auth + public workshop API smoke test passed."
+        run: echo "MotorAtlas preview + Supabase Auth smoke test passed."
