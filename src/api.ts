@@ -629,12 +629,13 @@ export async function uploadWorkshopLogo(input:{workshopId:string;file:File;prim
 
 export async function updateWorkshopProfile(input:{
   workshopId:string;name:string;legalName?:string;street:string;postalCode:string;city:string;
-  description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;
+  description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;services?:string[];
 }){
   const {data,error}=await db().from('workshops').update({
     name:input.name.trim(),legal_name:input.legalName?.trim()||null,street:input.street.trim(),
     postal_code:input.postalCode.trim(),city:input.city.trim(),description:input.description?.trim()||null,
-    operating_mode:input.operatingMode,accepts_new_customers:input.acceptsNewCustomers
+    operating_mode:input.operatingMode,accepts_new_customers:input.acceptsNewCustomers,
+    services:input.services??[]
   }).eq('id',input.workshopId).select().single();
   if(error)throw error;return data;
 }
@@ -674,9 +675,115 @@ export async function listPendingCustomerRequests(workshopId:string){
 
 export async function getWorkshopProfile(workshopId:string){
   const {data,error}=await db().from('workshops')
-    .select('id,name,legal_name,street,postal_code,city,description,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at')
+    .select('id,name,legal_name,street,postal_code,city,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_requested_at,verification_review_note')
     .eq('id',workshopId).single();
   if(error)throw error;return data;
+}
+
+export type WorkshopVerificationDocument={
+  id:string;
+  workshop_id:string;
+  uploaded_by:string;
+  document_type:'business_registration'|'handwerksrolle'|'meisterbrief'|'industriemeister'|'techniker'|'other';
+  storage_path:string;
+  file_name:string;
+  mime_type:string;
+  sha256?:string|null;
+  detected_title?:string|null;
+  detected_field?:string|null;
+  detected_holder_name?:string|null;
+  detected_issuer?:string|null;
+  detected_awarded_at?:string|null;
+  recognition_class:'unreviewed'|'direct_match'|'conditional_match'|'qualification_only'|'not_recognized';
+  recognition_note?:string|null;
+  ocr_confidence?:number|null;
+  analysis_json?:Record<string,unknown>|null;
+  review_status:'pending'|'accepted'|'needs_info'|'rejected';
+  reviewed_at?:string|null;
+  created_at:string;
+};
+
+async function sha256Hex(file:File){
+  const hash=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
+  return Array.from(new Uint8Array(hash)).map(byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+
+export async function uploadWorkshopVerificationDocument(input:{
+  workshopId:string;
+  file:File;
+  documentType:WorkshopVerificationDocument['document_type'];
+  analysis?:{
+    detectedTitle?:string;
+    detectedField?:string;
+    detectedHolderName?:string;
+    detectedIssuer?:string;
+    detectedAwardedAt?:string|null;
+    recognitionClass?:WorkshopVerificationDocument['recognition_class'];
+    note?:string;
+    confidence?:number|null;
+    tradeScopes?:string[];
+  };
+}){
+  const client=db();
+  const {data:auth,error:authError}=await client.auth.getUser();
+  if(authError)throw authError;
+  if(!auth.user)throw new Error('Bitte zuerst anmelden.');
+  if(input.file.size>15*1024*1024)throw new Error('Die Datei darf maximal 15 MB groß sein.');
+  if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(input.file.type)){
+    throw new Error('Erlaubt sind JPG, PNG, WebP oder PDF.');
+  }
+  const safeName=input.file.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
+  const path=`${input.workshopId}/${crypto.randomUUID()}-${safeName}`;
+  const hash=await sha256Hex(input.file);
+  const {error:uploadError}=await client.storage.from('verification-documents').upload(path,input.file,{
+    upsert:false,contentType:input.file.type
+  });
+  if(uploadError)throw uploadError;
+  try{
+    const a=input.analysis;
+    const {data,error}=await client.from('workshop_verification_documents').insert({
+      workshop_id:input.workshopId,
+      uploaded_by:auth.user.id,
+      document_type:input.documentType,
+      storage_path:path,
+      file_name:input.file.name,
+      mime_type:input.file.type,
+      sha256:hash,
+      detected_title:a?.detectedTitle||null,
+      detected_field:a?.detectedField||null,
+      detected_holder_name:a?.detectedHolderName||null,
+      detected_issuer:a?.detectedIssuer||null,
+      detected_awarded_at:a?.detectedAwardedAt||null,
+      recognition_class:a?.recognitionClass??'unreviewed',
+      recognition_note:a?.note||null,
+      ocr_confidence:a?.confidence??null,
+      analysis_json:{tradeScopes:a?.tradeScopes??[]}
+    }).select().single();
+    if(error)throw error;
+    return data as WorkshopVerificationDocument;
+  }catch(error){
+    await client.storage.from('verification-documents').remove([path]);
+    throw error;
+  }
+}
+
+export async function listWorkshopVerificationDocuments(workshopId:string){
+  const {data,error}=await db().from('workshop_verification_documents')
+    .select('*').eq('workshop_id',workshopId).order('created_at',{ascending:false});
+  if(error)throw error;
+  return(data??[]) as WorkshopVerificationDocument[];
+}
+
+export async function getWorkshopVerificationDocumentUrl(storagePath:string,expiresIn=300){
+  const {data,error}=await db().storage.from('verification-documents').createSignedUrl(storagePath,expiresIn);
+  if(error)throw error;
+  return data.signedUrl;
+}
+
+export async function requestWorkshopVerification(workshopId:string){
+  const {data,error}=await db().rpc('request_workshop_verification',{p_workshop_id:workshopId});
+  if(error)throw error;
+  return data;
 }
 
 
