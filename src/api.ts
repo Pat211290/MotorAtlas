@@ -60,16 +60,18 @@ export async function setPrimaryWorkshop(workshopId:string){
   const {data,error}=await db().rpc('set_primary_workshop',{p_workshop_id:workshopId});if(error)throw error;return data;
 }
 
+export type ServiceRequestIntent='direct_work'|'diagnosis_then_quote'|'diagnosis_only'|'diagnosis_then_decide'|'quote_before_work';
+
 export async function createServiceRequestDraft(input:{
   workshopId:string;vehicleId:string;complaint:string;customerNotes?:string;desiredStart?:string;desiredEnd?:string;
-  driveable?:boolean;warningLevel?:'none'|'yellow'|'red'|'unknown';
+  driveable?:boolean;warningLevel?:'none'|'yellow'|'red'|'unknown';requestIntent:ServiceRequestIntent;
 }){
   const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
   const {data,error}=await client.from('service_requests').insert({
     customer_user_id:auth.user.id,workshop_id:input.workshopId,vehicle_id:input.vehicleId,
     complaint:input.complaint.trim()||'Keine Fehlerbeschreibung angegeben.',customer_notes:input.customerNotes?.trim()||null,
     desired_start:input.desiredStart??null,desired_end:input.desiredEnd??null,driveable:input.driveable??null,
-    warning_level:input.warningLevel??null,status:'draft'
+    warning_level:input.warningLevel??null,request_intent:input.requestIntent,status:'draft'
   }).select().single();
   if(error){
     const message=error.message.includes('desired_appointment_in_past')
@@ -220,6 +222,30 @@ export async function claimWork(workOrderId:string,type:'diagnosis'|'repair'){
 export async function completeDiagnosis(workOrderId:string,summary:string,internalNote?:string){
   const {data,error}=await db().rpc('complete_diagnosis',{p_work_order_id:workOrderId,p_summary:summary,p_internal_note:internalNote??null});
   if(error)throw error;return data;
+}
+
+export type WorkNextStepDecision='motoratlas_quote'|'external_approved'|'external_waiting'|'no_repair'|'deferred';
+export type AgreementMethod='customer_order'|'portal'|'email'|'phone'|'in_person'|'other';
+
+export async function resolveWorkOrderNextStep(input:{
+  workOrderId:string;decision:WorkNextStepDecision;method?:AgreementMethod;note?:string;invoiceRequired?:boolean;
+}){
+  const {data,error}=await db().rpc('resolve_work_order_next_step',{
+    p_work_order_id:input.workOrderId,
+    p_decision:input.decision,
+    p_method:input.method??null,
+    p_note:input.note?.trim()||null,
+    p_invoice_required:input.invoiceRequired??true
+  });
+  if(error){
+    const message=error.message.includes('invalid_stage')
+      ?'Dieser nächste Schritt passt nicht mehr zum aktuellen Auftragsstatus.'
+      :error.message.includes('not_authorized')
+        ?'Du darfst diesen Auftragsweg nicht ändern.'
+        :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 export async function recordApproval(input:{
   workOrderId:string;quoteDocumentId:string;decision:'approved'|'declined'|'question_requested';
@@ -441,6 +467,11 @@ export type LiveJob={
   assigneeUserId?:string|null;
   assignmentType?:'diagnosis'|'repair'|null;
   assignmentClaimedAt?:string|null;
+  workflowPath?:ServiceRequestIntent|null;
+  commercialState?:string|null;
+  agreementMethod?:string|null;
+  agreementNote?:string|null;
+  invoiceRequired:boolean;
   updatedAt:string;
 };
 
@@ -463,7 +494,7 @@ export type WorkshopIdentity={
 function mapOrderStage(stage:string):LiveStage{
   if(stage==='waiting_diagnosis'||stage==='appointment_confirmed')return'arrived';
   if(stage==='diagnosing'||stage==='awaiting_quote')return'diagnosis';
-  if(stage==='awaiting_customer_approval')return'approval';
+  if(stage==='awaiting_customer_decision'||stage==='awaiting_customer_approval')return'approval';
   if(stage==='ready_for_repair'||stage==='repairing'||stage==='repair_complete')return'repair';
   return'pickup';
 }
@@ -501,7 +532,7 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
 export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const client=db();
   const {data:orders,error}=await client.from('work_orders')
-    .select('id,order_number,stage,priority,vehicle_id,service_request_id,customer_user_id,arrived_at,updated_at')
+    .select('id,order_number,stage,priority,vehicle_id,service_request_id,customer_user_id,arrived_at,workflow_path,commercial_state,agreement_method,agreement_note,invoice_required,updated_at')
     .eq('workshop_id',workshopId)
     .not('stage','in','("closed","cancelled","appointment_confirmed")')
     .order('updated_at',{ascending:false});
@@ -571,6 +602,9 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
       assigneeUserId:assignment?.userId??null,
       assignmentType:assignment?.type??null,
       assignmentClaimedAt:assignment?.claimedAt??null,
+      workflowPath:row.workflow_path??null,commercialState:row.commercial_state??null,
+      agreementMethod:row.agreement_method??null,agreementNote:row.agreement_note??null,
+      invoiceRequired:row.invoice_required!==false,
       updatedAt:row.updated_at
     } satisfies LiveJob;
   });
@@ -596,6 +630,7 @@ export type CustomerOrderProgress={
 export type CustomerOrder={
   id:string;orderNumber:string;vehicleId:string;serviceRequestId?:string|null;appointmentId?:string|null;
   stage:LiveStage;rawStage:string;updatedAt:string;workshopId:string;
+  workflowPath?:ServiceRequestIntent|null;commercialState?:string|null;agreementMethod?:string|null;agreementNote?:string|null;invoiceRequired:boolean;
   progress?:CustomerOrderProgress|null;
 };
 export type CustomerWorkshop={
@@ -604,8 +639,9 @@ export type CustomerWorkshop={
   logoPath?:string|null;acceptsNewCustomers:boolean;
 };
 export type CustomerServiceRequest={
-  id:string;workshopId:string;vehicleId:string;complaint:string;status:string;desiredStart?:string|null;desiredEnd?:string|null;
-  warningLevel?:string|null;driveable?:boolean|null;declineReason?:string|null;declinedAt?:string|null;createdAt:string;
+  id:string;workshopId:string;vehicleId:string;complaint:string;status:string;requestIntent:ServiceRequestIntent;
+  desiredStart?:string|null;desiredEnd?:string|null;warningLevel?:string|null;driveable?:boolean|null;
+  declineReason?:string|null;declinedAt?:string|null;createdAt:string;
 };
 export type CustomerRelationshipRequest={
   id:string;workshopId:string;workshopName:string;message?:string|null;status:'pending'|'accepted'|'rejected';
@@ -628,7 +664,7 @@ export async function loadCustomerWorkspace():Promise<{
       .eq('owner_user_id',auth.user.id).is('archived_at',null).order('created_at',{ascending:true});
   if(vehicleResult.error)throw vehicleResult.error;
 
-  const orderResult=await client.from('work_orders').select('id,order_number,vehicle_id,service_request_id,appointment_id,stage,updated_at,workshop_id')
+  const orderResult=await client.from('work_orders').select('id,order_number,vehicle_id,service_request_id,appointment_id,stage,workflow_path,commercial_state,agreement_method,agreement_note,invoice_required,updated_at,workshop_id')
       .eq('customer_user_id',auth.user.id).neq('stage','cancelled').order('updated_at',{ascending:false});
   if(orderResult.error)throw orderResult.error;
 
@@ -642,7 +678,7 @@ export async function loadCustomerWorkspace():Promise<{
   } satisfies CustomerOrderProgress]));
 
   const requestResult=await client.from('service_requests')
-      .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
+      .select('id,workshop_id,vehicle_id,complaint,status,request_intent,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
       .eq('customer_user_id',auth.user.id).neq('status','draft').order('created_at',{ascending:false});
   if(requestResult.error)throw requestResult.error;
 
@@ -684,6 +720,8 @@ export async function loadCustomerWorkspace():Promise<{
     orders:((orderResult.data??[]) as any[]).map(o=>({
       id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,serviceRequestId:o.service_request_id,appointmentId:o.appointment_id,
       stage:mapOrderStage(o.stage),rawStage:o.stage,updatedAt:o.updated_at,workshopId:o.workshop_id,
+      workflowPath:o.workflow_path??null,commercialState:o.commercial_state??null,agreementMethod:o.agreement_method??null,
+      agreementNote:o.agreement_note??null,invoiceRequired:o.invoice_required!==false,
       progress:progressMap.get(o.id)??null
     })),
     workshops:((linkResult.data??[]) as any[]).map(link=>{
@@ -694,7 +732,7 @@ export async function loadCustomerWorkspace():Promise<{
         chatEnabled:workshop?.chat_enabled!==false,logoPath:workshop?.logo_path??null,acceptsNewCustomers:Boolean(workshop?.accepts_new_customers)};
     }),
     requests:((requestResult.data??[]) as any[]).map(r=>({
-      id:r.id,workshopId:r.workshop_id,vehicleId:r.vehicle_id,complaint:r.complaint,status:r.status,
+      id:r.id,workshopId:r.workshop_id,vehicleId:r.vehicle_id,complaint:r.complaint,status:r.status,requestIntent:r.request_intent,
       desiredStart:r.desired_start,desiredEnd:r.desired_end,warningLevel:r.warning_level,driveable:r.driveable,
       declineReason:r.decline_reason,declinedAt:r.declined_at,createdAt:r.created_at
     })),
@@ -713,7 +751,7 @@ export type WorkshopServiceRequest={
   id:string;customerUserId:string;customerName:string;customerEmail?:string|null;customerPhone?:string|null;customerStreet?:string|null;
   customerPostalCode?:string|null;customerCity?:string|null;vehicleId:string;vehicle:string;plate:string;
   make?:string|null;model?:string|null;variant?:string|null;firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;
-  vin?:string|null;mileage?:number|null;photoPath?:string|null;complaint:string;status:string;
+  vin?:string|null;mileage?:number|null;photoPath?:string|null;complaint:string;status:string;requestIntent:ServiceRequestIntent;
   desiredStart?:string|null;desiredEnd?:string|null;driveable?:boolean|null;warningLevel?:string|null;createdAt:string;
 };
 
@@ -735,7 +773,7 @@ export type AppNotification={
 export async function listWorkshopServiceRequests(workshopId:string):Promise<WorkshopServiceRequest[]>{
   const client=db();
   const {data:requests,error}=await client.from('service_requests')
-    .select('id,customer_user_id,vehicle_id,complaint,status,desired_start,desired_end,driveable,warning_level,created_at')
+    .select('id,customer_user_id,vehicle_id,complaint,status,request_intent,desired_start,desired_end,driveable,warning_level,created_at')
     .eq('workshop_id',workshopId).in('status',['submitted','accepted','appointment_pending']).order('created_at',{ascending:true});
   if(error)throw error;
   const rows=(requests??[]) as any[];if(!rows.length)return[];
@@ -758,7 +796,7 @@ export async function listWorkshopServiceRequests(workshopId:string):Promise<Wor
       plate:v?.license_plate??'—',make:v?.make??null,model:v?.model??null,variant:v?.variant??null,
       firstRegistration:v?.first_registration??null,hsn:v?.hsn??null,tsn:v?.tsn??null,vin:v?.vin??null,
       mileage:v?.mileage??null,photoPath:v?.photo_path??null,
-      complaint:row.complaint,status:row.status,desiredStart:row.desired_start,desiredEnd:row.desired_end,
+      complaint:row.complaint,status:row.status,requestIntent:row.request_intent,desiredStart:row.desired_start,desiredEnd:row.desired_end,
       driveable:row.driveable,warningLevel:row.warning_level,createdAt:row.created_at
     };
   });
