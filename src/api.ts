@@ -727,6 +727,16 @@ export async function geocodePublicWorkshop(workshop:PublicWorkshop){
       if(Number.isFinite(Number(parsed.latitude))&&Number.isFinite(Number(parsed.longitude)))return parsed;
     }
   }catch{}
+
+  try{
+    const {data,error}=await db().functions.invoke('geocode-workshop',{body:{workshopId:workshop.id}});
+    if(!error&&data&&Number.isFinite(Number(data.latitude))&&Number.isFinite(Number(data.longitude))){
+      const value={latitude:Number(data.latitude),longitude:Number(data.longitude)};
+      try{localStorage.setItem(key,JSON.stringify(value))}catch{}
+      return value;
+    }
+  }catch{}
+
   const endpoint=new URL('https://nominatim.openstreetmap.org/search');
   endpoint.searchParams.set('format','jsonv2');
   endpoint.searchParams.set('limit','1');
