@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Bell, Building2, CalendarDays, Car, FileText, Home, MapPin, MessageCircle,
-  Plus, Search, Settings, ShieldCheck, Sparkles, Users, Wrench
+  AlertTriangle, Bell, Building2, CalendarDays, Car, Clock3, FileText, Home, MapPin, MessageCircle,
+  Phone, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, Wrench
 } from 'lucide-react';
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo } from './api';
+import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markAllWorkshopNotificationsRead, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -16,6 +16,7 @@ import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
 import { TeamManager } from './TeamManager';
 import { VerificationPanel } from './VerificationPanel';
+import { CustomerProfileModal } from './CustomerProfileModal';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente';
