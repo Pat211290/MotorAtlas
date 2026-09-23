@@ -617,166 +617,325 @@ function VehicleCard({name,plate,detail,active,tone,stage='approval',demo=false,
 export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const live=useCustomerWorkspace();
  const [section,setSection]=useState<ShellSection>('Übersicht');
- const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false); const [requestModal,setRequestModal]=useState(false); const [directory,setDirectory]=useState(false); const [profileModal,setProfileModal]=useState(false);
+ const [chatTarget,setChatTarget]=useState<'order'|'workshop'|null>(null);
+ const [vehicleModal,setVehicleModal]=useState(false);
+ const [requestModal,setRequestModal]=useState(false);
+ const [directory,setDirectory]=useState(false);
+ const [profileModal,setProfileModal]=useState(false);
  const [cancelTarget,setCancelTarget]=useState<(typeof live.appointments)[number]|null>(null);
  const [now,setNow]=useState(()=>new Date());
- const [documents,setDocuments]=useState<any[]>([]); const [docError,setDocError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
+ const [actionError,setActionError]=useState<string|null>(null);
+ const [busy,setBusy]=useState(false);
+
  const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
  const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['cancelled','converted'].includes(request.status)):null;
- const requestIsActive=Boolean(activeRequest&&activeRequest.status!=='declined');
- const proposedAppointment=requestIsActive&&activeRequest?live.appointments.find(item=>item.serviceRequestId===activeRequest.id&&item.status==='proposed'):null;
- const activeOrderAppointment=activeOrder?.serviceRequestId?live.appointments.find(item=>item.serviceRequestId===activeOrder.serviceRequestId&&item.status==='confirmed'):null;
- const activeOrderWorkshop=activeOrder?live.workshops.find(item=>item.workshopId===activeOrder.workshopId):null;
- const relationshipNotice=live.isLive?live.relationshipRequests.find(request=>request.status==='pending'||request.status==='rejected')??null:null;
- const activeVehicleId=activeOrder?.vehicleId??(requestIsActive?activeRequest?.vehicleId:undefined);
- const activeVehicle=activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):live.vehicles[0];
+ const activeOrderAppointment=activeOrder?.serviceRequestId
+   ?live.appointments.find(item=>item.serviceRequestId===activeOrder.serviceRequestId&&item.status==='confirmed')
+   :null;
+ const proposedAppointment=activeRequest
+   ?live.appointments.find(item=>item.serviceRequestId===activeRequest.id&&item.status==='proposed')
+   :null;
+ const primaryWorkshop=live.workshops.find(item=>item.isPrimary)??live.workshops[0]??null;
+ const activeWorkshop=activeOrder
+   ?live.workshops.find(item=>item.workshopId===activeOrder.workshopId)??primaryWorkshop
+   :activeRequest
+     ?live.workshops.find(item=>item.workshopId===activeRequest.workshopId)??primaryWorkshop
+     :primaryWorkshop;
+ const activeVehicleId=activeOrder?.vehicleId??activeRequest?.vehicleId??activeOrderAppointment
+   ?activeOrder?.vehicleId??activeRequest?.vehicleId
+   :undefined;
+ const activeVehicle=(activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):null)??live.vehicles[0]??null;
+
  const customerNav:ShellNavItem[]=[
    ['Übersicht',Home,'Status'],
-   ['Termine',CalendarDays,'Anfragen'],
+   ['Termine',CalendarDays,'Termine'],
    ['Fahrzeuge',Car,'Garage'],
-   ['Dokumente',FileText,'Dokumente']
+   ['Dokumente',FileText,'Dokumente'],
+   ['Stammwerkstatt',Building2,'Werkstatt']
  ];
 
  useEffect(()=>{
-   const timer=window.setInterval(()=>setNow(new Date()),60_000);
+   const timer=window.setInterval(()=>setNow(new Date()),30_000);
    return()=>window.clearInterval(timer);
  },[]);
 
- useEffect(()=>{
-   if(!live.isLive||!activeOrder){setDocuments([]);return}
-   let cancelled=false;
-   listWorkOrderDocuments(activeOrder.id).then(data=>{if(!cancelled){setDocuments(data);setDocError(null)}}).catch(err=>{if(!cancelled)setDocError(err instanceof Error?err.message:'Dokumente konnten nicht geladen werden.')});
-   return()=>{cancelled=true};
- },[live.isLive,activeOrder?.id,activeOrder?.updatedAt]);
-
- const quote=documents.find(document=>document.document_type==='quote'&&document.status==='published');
- const invoice=documents.find(document=>document.document_type==='invoice'&&document.status==='published');
+ const activeDocuments=activeOrder?live.documents.filter(document=>document.work_order_id===activeOrder.id):[];
+ const quote=activeDocuments.find(document=>document.document_type==='quote'&&document.status==='published');
+ const invoice=activeDocuments.find(document=>document.document_type==='invoice'&&document.status==='published');
 
  const openDocument=async(document:any)=>{
    const version=document?.versions?.[0];if(!version)return;
    try{const url=await getDocumentVersionUrl(version.storage_path);window.open(url,'_blank','noopener,noreferrer')}
-   catch(err){setDocError(err instanceof Error?err.message:'Dokument konnte nicht geöffnet werden.')}
+   catch(err){setActionError(err instanceof Error?err.message:'Dokument konnte nicht geöffnet werden.')}
  };
 
- const approve=async(decision:'approved'|'question_requested')=>{
+ const approveQuote=async()=>{
    if(!activeOrder||!quote||busy)return;
-   if(decision==='question_requested'){setChat(true);return;}
-   setBusy(true);setDocError(null);
-   try{await recordApproval({workOrderId:activeOrder.id,quoteDocumentId:quote.id,decision:'approved',method:'portal'});await live.reload()}
-   catch(err){setDocError(err instanceof Error?err.message:'Freigabe konnte nicht gespeichert werden.')}
+   setBusy(true);setActionError(null);
+   try{
+     await recordApproval({workOrderId:activeOrder.id,quoteDocumentId:quote.id,decision:'approved',method:'portal'});
+     await live.reload();
+   }catch(err){setActionError(err instanceof Error?err.message:'Freigabe konnte nicht gespeichert werden.')}
    finally{setBusy(false)}
  };
 
- const answerAppointment=async(decision:'confirmed'|'declined')=>{
-   if(!proposedAppointment||busy)return;
-   setBusy(true);setDocError(null);
-   try{await respondAppointment(proposedAppointment.id,decision);await live.reload()}
-   catch(err){setDocError(err instanceof Error?err.message:'Terminantwort konnte nicht gespeichert werden.')}
+ const answerAppointment=async(appointmentId:string,decision:'confirmed'|'declined')=>{
+   if(busy)return;
+   setBusy(true);setActionError(null);
+   try{await respondAppointment(appointmentId,decision);await live.reload()}
+   catch(err){setActionError(err instanceof Error?err.message:'Terminantwort konnte nicht gespeichert werden.')}
    finally{setBusy(false)}
  };
 
- const requestStatusText=(request=activeRequest)=>{
-   if(!request)return'';
+ const requestStatusText=(request:(typeof live.requests)[number])=>{
    if(request.status==='submitted')return'Deine Werkstatt prüft die Anfrage.';
    if(request.status==='accepted')return'Die Werkstatt bereitet die Terminabstimmung vor.';
-   if(request.status==='appointment_pending')return request.id===activeRequest?.id&&proposedAppointment?'Ein neuer Terminvorschlag wartet auf deine Entscheidung.':'Die Terminabstimmung läuft.';
+   if(request.status==='appointment_pending')return'Ein Terminvorschlag wird abgestimmt.';
    if(request.status==='appointment_confirmed')return'Der Termin ist bestätigt.';
    if(request.status==='declined')return request.declineReason||'Die Werkstatt kann diese Anfrage derzeit nicht annehmen.';
-   if(request.status==='cancelled')return'Der Termin wurde storniert.';
-   if(request.status==='converted')return'Aus der Anfrage wurde ein Werkstatttermin.';
+   if(request.status==='cancelled')return'Der Termin bzw. die Anfrage wurde storniert.';
+   if(request.status==='converted')return'Die Anfrage wurde in einen Werkstattauftrag übernommen.';
    return'Anfrage wird bearbeitet.';
  };
 
- const relationshipCard=relationshipNotice&&<div className={'relationship-notice '+relationshipNotice.status}>
-   <div><ShieldCheck/><span><small>{relationshipNotice.status==='rejected'?'KUNDENANFRAGE ABGELEHNT':'KUNDENANFRAGE LÄUFT'}</small><b>{relationshipNotice.workshopName}</b><p>{relationshipNotice.status==='rejected'?'Die Werkstatt hat deine Anfrage zur Kundenaufnahme abgelehnt. Du kannst eine andere Werkstatt auswählen oder später erneut anfragen.':'Deine Anfrage wurde an die Werkstatt übermittelt. Sobald sie antwortet, aktualisiert sich diese Seite automatisch.'}</p></span></div>
-   {relationshipNotice.status==='rejected'&&<button className="btn secondary" onClick={()=>setDirectory(true)}>Andere Werkstatt finden</button>}
- </div>;
+ const sectionTitle=section==='Übersicht'?'Status'
+   :section==='Termine'?'Anfragen & Termine'
+   :section==='Fahrzeuge'?'Meine Garage'
+   :section==='Dokumente'?'Dokumente'
+   :'Stammwerkstatt';
+ const sectionSubtitle=section==='Übersicht'?'Was jetzt als Nächstes wichtig ist.'
+   :section==='Termine'?'Alle Anfragen, Vorschläge und bestätigten Werkstatttermine.'
+   :section==='Fahrzeuge'?'Deine Fahrzeuge – übersichtlich mit den wichtigsten Daten.'
+   :section==='Dokumente'?'Angebote, Rechnungen und weitere Werkstattdokumente.'
+   :'Dein direkter Draht zur Werkstatt.';
 
- const garage=<div className="garage customer-garage-full">{live.vehicles.length?live.vehicles.map((vehicle,index)=><VehicleCard key={vehicle.id} name={[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' ')} plate={vehicle.licensePlate} detail={`${vehicle.firstRegistration?new Date(vehicle.firstRegistration).getFullYear():'—'} · ${vehicle.mileage?.toLocaleString('de-DE')??'—'} km`} active={activeVehicleId===vehicle.id} stage={activeOrder?.vehicleId===vehicle.id?(activeOrder.rawStage==='appointment_confirmed'?undefined:activeOrder.stage):requestIsActive&&activeRequest?.vehicleId===vehicle.id?'arrived':undefined} tone={index} photoPath={vehicle.photoPath}/>):<section className="panel vehicle-card empty-card"><Car size={30}/><h3>Noch kein Fahrzeug hinterlegt.</h3><small>Lege deinen ersten PKW an, um eine Werkstattanfrage zu starten.</small></section>}</div>;
+ const phoneHref=(phone?:string|null)=>phone?'tel:'+phone.replace(/[^+\d]/g,''):undefined;
+ const mailHref=(email?:string|null)=>email?'mailto:'+email:undefined;
+ const websiteHref=(website?:string|null)=>website?(website.startsWith('http://')||website.startsWith('https://')?website:'https://'+website):undefined;
 
- const statusPanel=<section className="panel timeline">
-   <div className="panel-title"><div><span className="overline">{activeOrder?`AUFTRAG #${activeOrder.orderNumber}`:activeRequest?'WERKSTATTANFRAGE':'KEIN AKTIVER VORGANG'}</span><h3>{activeOrder?(activeOrder.rawStage==='appointment_confirmed'?'Bestätigter Termin':'Aktueller Auftrag'):activeRequest?'Deine Anfrage':'Alles erledigt'}</h3></div>{activeOrder&&activeOrder.rawStage!=='appointment_confirmed'&&<Status stage={activeOrder.stage}/>}</div>
-   {activeOrder?<>
-     {activeOrder.rawStage==='appointment_confirmed'?<>
-       <Timeline title="Termin bestätigt" detail={activeOrderAppointment?`${relativeDayLabel(new Date(activeOrderAppointment.startsAt),now)} · ${new Date(activeOrderAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'full',timeStyle:'short'})}`:'Der Termin wurde bestätigt.'} current/>
-       <Timeline title="Fahrzeug wird erwartet" detail="Das Fahrzeug gilt erst als eingetroffen, wenn die Werkstatt es vor Ort eincheckt."/>
-       {activeOrderAppointment&&<div className="customer-cancel-window">
-         {customerCancellationOpen(activeOrderAppointment.startsAt,now)?<>
-           <div><CalendarDays/><span><small>ONLINE-STORNIERUNG</small><b>Bis 12 Stunden vor dem Termin möglich</b><p>Danach muss eine kurzfristige Absage direkt telefonisch mit {activeOrderWorkshop?.name||'der Werkstatt'} geklärt werden.</p></span></div>
-           <button className="btn secondary cancel-appointment" onClick={()=>setCancelTarget(activeOrderAppointment)}>Termin stornieren</button>
+ const relationshipNotice=live.relationshipRequests.find(request=>request.status==='pending'||request.status==='rejected')??null;
+
+ const renderStatus=()=>{
+   if(activeOrder){
+     const workshop=activeWorkshop;
+     const vehicle=live.vehicles.find(item=>item.id===activeOrder.vehicleId)??activeVehicle;
+     const appointment=activeOrderAppointment;
+     const isAppointment=activeOrder.rawStage==='appointment_confirmed'&&appointment;
+     const overdue=isAppointment&&new Date(appointment.startsAt).getTime()<now.getTime()-60_000;
+     return <div className="customer-status-stack">
+       <section className={'panel customer-focus '+(overdue?'overdue':'')}>
+         <div className="customer-focus-media">{vehicle?<VehiclePhoto path={vehicle.photoPath} alt={[vehicle.make,vehicle.model].filter(Boolean).join(' ')}/>:<CarArt large tone={0}/>}</div>
+         <div className="customer-focus-copy">
+           <div className="customer-focus-kicker">
+             <span>{isAppointment?'BEVORSTEHENDER TERMIN':`AUFTRAG #${activeOrder.orderNumber}`}</span>
+             {isAppointment?<b className={overdue?'late':''}>{overdue?'VERSPÄTET':'BESTÄTIGT'}</b>:<Status stage={activeOrder.stage}/>}
+           </div>
+           <h2>{isAppointment&&appointment?appointmentCountdownText(appointment.startsAt,now):customerOrderTitle(activeOrder.rawStage)}</h2>
+           {isAppointment&&appointment?<>
+             <p className="customer-focus-date">{relativeDayLabel(new Date(appointment.startsAt),now)} · {new Date(appointment.startsAt).toLocaleString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})} Uhr</p>
+             <p>{workshop?.name??'Werkstatt'} erwartet dein Fahrzeug. Erst der Check-in vor Ort setzt den Status auf „eingetroffen“.</p>
+           </>:<p>{customerOrderDetail(activeOrder.rawStage)}</p>}
+           <div className="customer-focus-vehicle">
+             <Car/><span><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}</b><small>{vehicle?.licensePlate??'—'}{activeOrder.orderNumber?` · Auftrag #${activeOrder.orderNumber}`:''}</small></span>
+           </div>
+           <div className="customer-focus-actions">
+             {workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}><Phone size={16}/> Werkstatt anrufen</a>}
+             <button className="btn secondary" onClick={()=>setChatTarget('order')}><MessageCircle size={16}/> Chat</button>
+             {isAppointment&&<button className="btn primary" onClick={()=>setSection('Termine')}><CalendarDays size={16}/> Termin ansehen</button>}
+           </div>
+         </div>
+       </section>
+
+       {isAppointment&&appointment&&<section className="panel customer-action-strip">
+         {customerCancellationOpen(appointment.startsAt,now)?<>
+           <div><CalendarDays/><span><b>Terminänderung?</b><small>Online-Stornierung ist bis 12 Stunden vor dem Termin möglich.</small></span></div>
+           <button className="btn secondary cancel-appointment" onClick={()=>setCancelTarget(appointment)}>Termin stornieren</button>
          </>:<>
-           <div><Phone/><span><small>KURZFRISTIGE ÄNDERUNG</small><b>Online-Stornierung nicht mehr möglich</b><p>Der Termin ist in weniger als 12 Stunden bzw. bereits fällig. Bitte kontaktiere {activeOrderWorkshop?.name||'die Werkstatt'} telefonisch. Die Werkstatt kann den Termin jederzeit stornieren.</p></span></div>
+           <div><Phone/><span><b>Kurzfristige Änderung</b><small>Weniger als 12 Stunden: Bitte telefonisch mit {workshop?.name??'der Werkstatt'} klären.</small></span></div>
+           {workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}>Jetzt anrufen</a>}
          </>}
-       </div>}
-     </>:<>
-       <Timeline title="Auftrag aktiv" detail={`Zuletzt aktualisiert: ${new Date(activeOrder.updatedAt).toLocaleString('de-DE')}`} current/>
-       {quote&&<div className="customer-document-card"><div><FileText/><span><small>KOSTENVORANSCHLAG</small><b>{quote.document_number||'Dokument'}</b></span><strong>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):''}</strong></div><div><button className="btn secondary" onClick={()=>void openDocument(quote)}>PDF öffnen</button>{activeOrder.rawStage==='awaiting_customer_approval'&&<button className="btn primary" disabled={busy} onClick={()=>void approve('approved')}>{busy?'Wird gespeichert …':'Reparatur freigeben'}</button>}<button className="btn secondary" onClick={()=>void approve('question_requested')}>Rückfrage</button></div></div>}
-       {invoice&&<div className="customer-document-card invoice-card"><div><FileText/><span><small>RECHNUNG</small><b>{invoice.document_number||'Dokument'}</b></span><strong>{invoice.amount_total!=null?Number(invoice.amount_total).toLocaleString('de-DE',{style:'currency',currency:invoice.currency||'EUR'}):''}</strong></div><div><button className="btn primary" onClick={()=>void openDocument(invoice)}>Rechnung öffnen</button></div></div>}
-       <Timeline title="Nächster Schritt" detail={activeOrder.stage==='approval'?'Kostenvoranschlag prüfen und freigeben.':activeOrder.stage==='repair'?'Die Werkstatt bearbeitet den freigegebenen Auftrag.':activeOrder.stage==='pickup'?'Fahrzeug ist abholbereit. Rechnung steht im Dokumentbereich bereit.':'Status wird automatisch mit der Werkstatt synchronisiert.'}/>
-     </>}
-   </>:activeRequest?<>
-     <Timeline title="Anfrage gesendet" detail={`${new Date(activeRequest.createdAt).toLocaleString('de-DE')} · ${activeRequest.complaint}`} current={requestIsActive&&!proposedAppointment}/>
-     {activeRequest.desiredStart&&<Timeline title="Dein Wunschtermin" detail={new Date(activeRequest.desiredStart).toLocaleString('de-DE')}/>}
-     {activeRequest.status==='declined'?<div className="request-declined-card"><ShieldCheck/><div><small>ANFRAGE ABGELEHNT</small><b>Die Werkstatt kann diese Anfrage nicht annehmen.</b><p>{requestStatusText()}</p>{activeRequest.declinedAt&&<span>{new Date(activeRequest.declinedAt).toLocaleString('de-DE')}</span>}</div><button className="btn secondary" onClick={()=>setRequestModal(true)}>Neue Anfrage</button></div>:<>
-       {proposedAppointment&&<div className="appointment-card"><div><CalendarDays/><span><small>TERMINVORSCHLAG DER WERKSTATT</small><b>{new Date(proposedAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b>{proposedAppointment.note&&<p>{proposedAppointment.note}</p>}</span></div><div><button className="btn secondary" disabled={busy} onClick={()=>void answerAppointment('declined')}>Passt nicht</button><button className="btn primary" disabled={busy} onClick={()=>void answerAppointment('confirmed')}>{busy?'Speichert …':'Termin bestätigen'}</button></div></div>}
-       <Timeline title="Aktueller Stand" detail={requestStatusText()} current={Boolean(proposedAppointment)}/>
-     </>}
-   </>:<div className="timeline-empty"><b>Kein laufender Werkstattvorgang.</b><span>Mit „Anfrage starten“ meldest du einen Wunsch oder ein Problem für eines deiner Fahrzeuge.</span></div>}
- </section>;
+       </section>}
 
- const title=section==='Übersicht'?'Status':section==='Termine'?'Anfragen & Termine':section==='Fahrzeuge'?'Meine Garage':'Dokumente';
- const subtitle=section==='Übersicht'?'Aktueller Stand zwischen dir und deiner Werkstatt.'
-   :section==='Termine'?'Werkstattanfragen, Entscheidungen und Terminvorschläge.'
-   :section==='Fahrzeuge'?'Deine hinterlegten Fahrzeuge und Fahrzeugdaten.'
-   :'Kostenvoranschläge und Rechnungen zu deinem aktuellen Auftrag.';
+       {quote&&activeOrder.rawStage==='awaiting_customer_approval'&&<section className="panel customer-priority-card">
+         <div><FileText/><span><small>DEINE ENTSCHEIDUNG</small><b>Kostenvoranschlag liegt vor</b><p>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):'Betrag im Dokument'}</p></span></div>
+         <div><button className="btn secondary" onClick={()=>void openDocument(quote)}>Angebot öffnen</button><button className="btn secondary" onClick={()=>setChatTarget('order')}>Rückfrage</button><button className="btn primary" disabled={busy} onClick={()=>void approveQuote()}>{busy?'Speichert …':'Reparatur freigeben'}</button></div>
+       </section>}
+
+       {invoice&&<section className="panel customer-priority-card invoice">
+         <div><FileText/><span><small>RECHNUNG</small><b>{invoice.document_number||'Rechnung verfügbar'}</b><p>{invoice.amount_total!=null?Number(invoice.amount_total).toLocaleString('de-DE',{style:'currency',currency:invoice.currency||'EUR'}):'Dokument liegt bereit'}</p></span></div>
+         <button className="btn primary" onClick={()=>void openDocument(invoice)}>Rechnung öffnen</button>
+       </section>}
+     </div>;
+   }
+
+   if(activeRequest){
+     const vehicle=live.vehicles.find(item=>item.id===activeRequest.vehicleId);
+     const workshop=live.workshops.find(item=>item.workshopId===activeRequest.workshopId)??primaryWorkshop;
+     return <section className={'panel customer-focus request '+(activeRequest.status==='declined'?'declined':'')}>
+       <div className="customer-focus-media">{vehicle?<VehiclePhoto path={vehicle.photoPath} alt={[vehicle.make,vehicle.model].filter(Boolean).join(' ')}/>:<CarArt large tone={1}/>}</div>
+       <div className="customer-focus-copy">
+         <div className="customer-focus-kicker"><span>WERKSTATTANFRAGE</span><b>{requestStatusLabel(activeRequest.status)}</b></div>
+         <h2>{activeRequest.status==='declined'?'Die Werkstatt hat deine Anfrage abgelehnt.':'Deine Anfrage läuft.'}</h2>
+         <p>{requestStatusText(activeRequest)}</p>
+         <div className="customer-focus-vehicle"><Car/><span><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}</b><small>{vehicle?.licensePlate??'—'} · {workshop?.name??'Werkstatt'}</small></span></div>
+         <div className="customer-focus-actions"><button className="btn primary" onClick={()=>setSection('Termine')}><CalendarDays size={16}/> Anfrage ansehen</button>{workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}><Phone size={16}/> Werkstatt anrufen</a>}</div>
+       </div>
+     </section>;
+   }
+
+   return <section className="panel customer-empty-status">
+     <ShieldCheck/><div><span className="overline">ALLES IM BLICK</span><h2>Aktuell ist kein Werkstattvorgang offen.</h2><p>Wenn du etwas prüfen oder erledigen lassen möchtest, kannst du direkt eine Anfrage für eines deiner Fahrzeuge starten.</p><button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Anfrage starten</button></div>
+   </section>;
+ };
+
+ const renderAppointments=()=>{
+   const sortedAppointments=[...live.appointments].sort((a,b)=>{
+     const aCancelled=a.status==='cancelled'?1:0,bCancelled=b.status==='cancelled'?1:0;
+     if(aCancelled!==bCancelled)return aCancelled-bCancelled;
+     return new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime();
+   });
+   const requestIdsWithAppointment=new Set(sortedAppointments.map(item=>item.serviceRequestId));
+
+   return <div className="customer-appointments-view">
+     {sortedAppointments.map(appointment=>{
+       const request=live.requests.find(item=>item.id===appointment.serviceRequestId);
+       const vehicle=request?live.vehicles.find(item=>item.id===request.vehicleId):null;
+       const workshop=live.workshops.find(item=>item.workshopId===appointment.workshopId)??primaryWorkshop;
+       const start=new Date(appointment.startsAt);
+       const confirmed=appointment.status==='confirmed';
+       const proposed=appointment.status==='proposed';
+       const cancelled=appointment.status==='cancelled';
+       return <article className={'panel customer-appointment-card '+appointment.status} key={appointment.id}>
+         <div className="customer-appointment-date">
+           <span>{relativeDayLabel(start,now)}</span><b>{start.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</b><small>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</small>
+         </div>
+         <div className="customer-appointment-main">
+           <div className="customer-appointment-title"><div><small>{proposed?'TERMINVORSCHLAG':cancelled?'STORNIERT':'BESTÄTIGTER TERMIN'}</small><h3>{request?.complaint&&request.complaint!=='Keine Fehlerbeschreibung angegeben.'?request.complaint:'Werkstatttermin'}</h3></div><span>{proposed?'Antwort nötig':cancelled?'Storniert':'Bestätigt'}</span></div>
+           <p>{confirmed
+             ?<>Dein Termin ist am <b>{start.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</b> um <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</b> mit deinem KFZ <b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b>.</>
+             :proposed
+               ?<>Die Werkstatt schlägt dir <b>{start.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})}</b> um <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</b> für <b>{vehicle?[vehicle.make,vehicle.model].filter(Boolean).join(' '):'dein Fahrzeug'}</b> vor.</>
+               :<>Dieser Termin wurde storniert.{appointment.cancellationReason?' Grund: '+appointment.cancellationReason:''}</>}</p>
+           <div className="customer-appointment-meta"><span><Car/> {vehicle?.licensePlate??'—'}</span><span><Building2/> {workshop?.name??'Werkstatt'}</span></div>
+           {confirmed&&<strong className={start.getTime()<now.getTime()-60_000?'late':''}>{appointmentCountdownText(appointment.startsAt,now)}</strong>}
+         </div>
+         <div className="customer-appointment-actions">
+           {proposed&&<><button className="btn secondary" disabled={busy} onClick={()=>void answerAppointment(appointment.id,'declined')}>Passt nicht</button><button className="btn primary" disabled={busy} onClick={()=>void answerAppointment(appointment.id,'confirmed')}>{busy?'Speichert …':'Termin bestätigen'}</button></>}
+           {confirmed&&customerCancellationOpen(appointment.startsAt,now)&&<button className="btn secondary cancel-appointment" onClick={()=>setCancelTarget(appointment)}>Stornieren</button>}
+           {confirmed&&!customerCancellationOpen(appointment.startsAt,now)&&workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}><Phone size={15}/> Anrufen</a>}
+         </div>
+       </article>;
+     })}
+
+     {live.requests.filter(request=>!requestIdsWithAppointment.has(request.id)).map(request=>{
+       const vehicle=live.vehicles.find(item=>item.id===request.vehicleId);
+       const workshop=live.workshops.find(item=>item.workshopId===request.workshopId)??primaryWorkshop;
+       return <article className={'panel customer-request-clean '+request.status} key={request.id}>
+         <div className="customer-request-icon"><Car/></div>
+         <div><small>{requestStatusLabel(request.status).toUpperCase()}</small><h3>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</h3><p>{request.complaint==='Keine Fehlerbeschreibung angegeben.'?'Keine zusätzliche Beschreibung angegeben.':request.complaint}</p><span>{requestStatusText(request)} · {workshop?.name??'Werkstatt'}</span></div>
+       </article>;
+     })}
+
+     {relationshipNotice&&<article className={'panel customer-request-clean relationship '+relationshipNotice.status}><div className="customer-request-icon"><Building2/></div><div><small>{relationshipNotice.status==='pending'?'WERKSTATTANFRAGE OFFEN':'WERKSTATTANFRAGE ABGELEHNT'}</small><h3>{relationshipNotice.workshopName}</h3><p>{relationshipNotice.status==='pending'?'Die Werkstatt prüft deine Aufnahme als Kunde.':'Die Werkstatt hat die Kundenaufnahme abgelehnt.'}</p></div></article>}
+
+     {!sortedAppointments.length&&!live.requests.length&&!relationshipNotice&&<section className="panel customer-simple-empty"><CalendarDays/><h3>Noch keine Anfragen oder Termine.</h3><p>Starte eine Anfrage für eines deiner Fahrzeuge.</p></section>}
+   </div>;
+ };
+
+ const renderGarage=()=>live.vehicles.length?<div className="customer-garage-deck">{live.vehicles.map(vehicle=><article className="panel customer-garage-card" key={vehicle.id}>
+   <div className="garage-card-image"><VehiclePhoto path={vehicle.photoPath} alt={[vehicle.make,vehicle.model].filter(Boolean).join(' ')}/><span className="plate">{vehicle.licensePlate}</span></div>
+   <div className="garage-card-head"><small>MEIN FAHRZEUG</small><h3>{[vehicle.make,vehicle.model].filter(Boolean).join(' ')}</h3>{vehicle.variant&&<p>{vehicle.variant}</p>}</div>
+   <div className="garage-specs">
+     <span><small>ERSTZULASSUNG</small><b>{vehicle.firstRegistration?new Date(vehicle.firstRegistration).toLocaleDateString('de-DE',{month:'2-digit',year:'numeric'}):'—'}</b></span>
+     <span><small>KILOMETER</small><b>{vehicle.mileage!=null?vehicle.mileage.toLocaleString('de-DE')+' km':'—'}</b></span>
+     <span><small>HSN</small><b>{vehicle.hsn||'—'}</b></span>
+     <span><small>TSN</small><b>{vehicle.tsn||'—'}</b></span>
+     <span className="wide"><small>FIN / VIN</small><b>{vehicle.vin||'Nicht hinterlegt'}</b></span>
+   </div>
+ </article>)}</div>:<section className="panel customer-simple-empty"><Car/><h3>Noch kein Fahrzeug in deiner Garage.</h3><p>Lege deinen ersten PKW an.</p><button className="btn primary" onClick={()=>setVehicleModal(true)}>Fahrzeug hinzufügen</button></section>;
+
+ const renderDocuments=()=>live.documents.length?<div className="customer-document-list">{live.documents.map(document=>{
+   const order=live.orders.find(item=>item.id===document.work_order_id);
+   const vehicle=order?live.vehicles.find(item=>item.id===order.vehicleId):null;
+   return <article className={'panel customer-document-row '+document.document_type} key={document.id}>
+     <div className="customer-document-type"><FileText/><span><small>{documentTypeLabel(document.document_type).toUpperCase()}</small><b>{document.document_number||document.title||documentTypeLabel(document.document_type)}</b></span></div>
+     <div className="customer-document-context"><span>{vehicle?[vehicle.make,vehicle.model].filter(Boolean).join(' ')+' · '+vehicle.licensePlate:'Werkstattdokument'}</span><small>{new Date(document.published_at||document.created_at).toLocaleDateString('de-DE')}</small></div>
+     <strong>{document.amount_total!=null?Number(document.amount_total).toLocaleString('de-DE',{style:'currency',currency:document.currency||'EUR'}):''}</strong>
+     <button className="btn secondary" onClick={()=>void openDocument(document)}>Öffnen</button>
+   </article>;
+ })}</div>:<section className="panel customer-simple-empty"><FileText/><h3>Noch keine Dokumente vorhanden.</h3><p>Angebote, Rechnungen, Gutschriften und weitere Werkstattdokumente erscheinen automatisch hier.</p></section>;
+
+ const renderWorkshop=()=>{
+   const workshop=primaryWorkshop;
+   if(!workshop)return <section className="panel customer-simple-empty"><Building2/><h3>Noch keine Stammwerkstatt.</h3><p>Wähle eine Werkstatt aus der MotorAtlas-Karte und sende eine Kundenanfrage.</p><button className="btn primary" onClick={()=>setDirectory(true)}>Werkstatt finden</button></section>;
+   const logo=workshop.logoPath?getWorkshopLogoPublicUrl(workshop.logoPath):null;
+   return <div className="customer-workshop-view">
+     <section className="panel customer-workshop-hero">
+       <div className="customer-workshop-logo">{logo?<img src={logo} alt={workshop.name}/>:<Building2/>}</div>
+       <div><span className="overline">DEINE STAMMWERKSTATT</span><h2>{workshop.name}</h2><p>{workshop.description||'Direkt mit deiner Werkstatt verbunden.'}</p><div className="customer-workshop-address"><MapPin/>{workshop.street}, {workshop.postalCode} {workshop.city}</div></div>
+     </section>
+     <section className="customer-workshop-contact-grid">
+       <article className="panel"><Phone/><small>TELEFON</small><b>{workshop.phone||'Nicht hinterlegt'}</b>{workshop.phone&&<a className="btn primary" href={phoneHref(workshop.phone)}>Anrufen</a>}</article>
+       <article className="panel"><Mail/><small>E-MAIL</small><b>{workshop.email||'Nicht hinterlegt'}</b>{workshop.email&&<a className="btn secondary" href={mailHref(workshop.email)}>E-Mail schreiben</a>}</article>
+       <article className="panel"><MessageCircle/><small>CHAT</small><b>Direkt in MotorAtlas</b><button className="btn secondary" disabled={!live.vehicles.length} onClick={()=>setChatTarget('workshop')}>Chat öffnen</button></article>
+       <article className="panel"><Building2/><small>WEBSITE</small><b>{workshop.website||'Nicht hinterlegt'}</b>{workshop.website&&<a className="btn secondary" href={websiteHref(workshop.website)} target="_blank" rel="noreferrer">Website öffnen</a>}</article>
+     </section>
+   </div>;
+ };
+
+ const headerActions=section==='Termine'
+   ?<button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Neue Anfrage</button>
+   :section==='Fahrzeuge'
+     ?<div className="head-actions"><button className="btn secondary" onClick={()=>setProfileModal(true)}><UserRound size={16}/> Meine Daten</button><button className="btn primary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug hinzufügen</button></div>
+     :section==='Stammwerkstatt'
+       ?<button className="btn secondary" onClick={()=>setDirectory(true)}><MapPin size={16}/> Andere Werkstatt finden</button>
+       :undefined;
 
  return <Shell
    onHome={()=>setView('home')}
    onNavigate={next=>{setSection(next);window.scrollTo({top:0,behavior:'auto'})}}
    navItems={customerNav}
    notifications={live.notifications}
-   onNotificationOpen={notification=>{if(notification.kind==='appointment'||notification.kind==='request')setSection('Termine');else if(notification.kind==='document')setSection('Dokumente');else setSection('Übersicht')}}
+   onNotificationOpen={notification=>{
+     if(notification.kind==='appointment'||notification.kind==='request')setSection('Termine');
+     else if(notification.kind==='document')setSection('Dokumente');
+     else if(notification.kind==='customer_request')setSection('Stammwerkstatt');
+     else setSection('Übersicht');
+   }}
    onNotificationsChanged={live.reload}
    title="Mein MotorAtlas"
    mode="Kundenportal"
    active={section}
- ><div className="page">
-   <PageHead title={title} subtitle={live.isLive?subtitle:'Produktdemo des Kundenportals.'}>
-     <div className="head-actions">
-       <button className="btn secondary" onClick={()=>setDirectory(true)}><MapPin size={16}/> Werkstatt finden</button>
-       {section==='Fahrzeuge'&&<><button className="btn secondary" onClick={()=>setProfileModal(true)}><UserRound size={16}/> Meine Daten</button><button className="btn secondary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug</button></>}
-       <button className="btn secondary" onClick={()=>setChat(true)} disabled={live.isLive&&!activeOrder}><MessageCircle size={16}/> Chat</button>
-       <button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Anfrage starten</button>
-     </div>
-   </PageHead>
-
-   {(live.error||docError)&&<div className="workspace-alert">{live.error??docError}</div>}
-   {section!=='Dokumente'&&relationshipCard}
+ ><div className="page customer-app-page">
+   <PageHead title={sectionTitle} subtitle={sectionSubtitle}>{headerActions}</PageHead>
+   {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
 
    {live.isLive?<>
-     {section==='Übersicht'&&<div className="customer-layout">{garage}{statusPanel}</div>}
-     {section==='Fahrzeuge'&&garage}
-     {section==='Termine'&&<div className="customer-request-list">
-       {live.relationshipRequests.length===0&&live.requests.length===0&&live.appointments.length===0?<section className="panel timeline-empty"><b>Noch keine Anfragen.</b><span>Starte eine Anfrage und wähle dabei das Fahrzeug aus, um das es geht.</span></section>:<>
-         {live.relationshipRequests.map(request=><article className={'panel customer-request-row '+request.status} key={'relationship-'+request.id}><ShieldCheck/><div><small>KUNDENAUFNAHME · {request.status==='pending'?'OFFEN':request.status==='accepted'?'ANGENOMMEN':'ABGELEHNT'}</small><b>{request.workshopName}</b><p>{request.status==='pending'?'Die Werkstatt prüft deine Kundenanfrage.':request.status==='accepted'?'Du bist als Kunde dieser Werkstatt freigeschaltet.':'Die Werkstatt hat deine Kundenaufnahme abgelehnt.'}</p></div></article>)}
-         {live.requests.map(request=>{
-           const vehicle=live.vehicles.find(item=>item.id===request.vehicleId);
-           const appointment=live.appointments.find(item=>item.serviceRequestId===request.id);
-           return <article className={'panel customer-request-row '+request.status} key={request.id}><Car/><div><small>WERKSTATTANFRAGE · {requestStatusLabel(request.status).toUpperCase()}</small><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b><p>{request.complaint}</p><span>{requestStatusText(request)}{appointment?` · Termin: ${relativeDayLabel(new Date(appointment.startsAt),now)}, ${new Date(appointment.startsAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}`:''}{appointment?.status==='cancelled'&&appointment.cancellationReason?` · ${appointment.cancellationReason}`:''}</span></div></article>
-         })}
-       </>}
-     </div>}
-     {section==='Dokumente'&&<section className="panel customer-documents-panel">
-       <div className="panel-title"><div><span className="overline">DOKUMENTE</span><h3>{documents.length?documents.length+' Dokumente':'Noch keine Dokumente'}</h3></div></div>
-       {documents.length?documents.map(document=><div className={'customer-document-card '+(document.document_type==='invoice'?'invoice-card':'')} key={document.id}><div><FileText/><span><small>{document.document_type==='quote'?'KOSTENVORANSCHLAG':document.document_type==='invoice'?'RECHNUNG':'DOKUMENT'}</small><b>{document.document_number||document.title||'Dokument'}</b></span><strong>{document.amount_total!=null?Number(document.amount_total).toLocaleString('de-DE',{style:'currency',currency:document.currency||'EUR'}):''}</strong></div><div><button className="btn primary" onClick={()=>void openDocument(document)}>Dokument öffnen</button></div></div>):<div className="timeline-empty"><FileText size={28}/><b>Noch keine Dokumente vorhanden.</b><span>Kostenvoranschläge und Rechnungen erscheinen hier automatisch.</span></div>}
-     </section>}
-   </>:<div className="customer-layout"><div className="garage"><VehicleCard name="BMW X3 3.0i" plate="SAD XX 123" detail="2005 · 247.318 km" active tone={0} demo/><VehicleCard name="VW Golf VII" plate="SAD VW 407" detail="2016 · 128.140 km" tone={1} demo/></div><section className="panel timeline"><div className="panel-title"><div><span className="overline">BMW X3 · AUFTRAG #184</span><h3>Aktueller Auftrag</h3></div><Status stage={approved?'repair':'approval'}/></div><Timeline title="Fahrzeug eingetroffen" detail="08:41 · Carplus Service Center"/><Timeline title="Diagnose abgeschlossen" detail="09:12 · Lambdasonde Bank 1 vor Kat"/><Timeline current title={approved?'Reparatur freigegeben':'Deine Freigabe ist erforderlich'} detail={approved?'09:31 · an Werkstatt übermittelt':'09:26 · Kostenvoranschlag bereitgestellt'}/></section></div>}
+     {section==='Übersicht'&&<>
+       {relationshipNotice&&<div className={'relationship-notice '+relationshipNotice.status}><div><ShieldCheck/><span><small>{relationshipNotice.status==='rejected'?'WERKSTATTANFRAGE ABGELEHNT':'WERKSTATTANFRAGE LÄUFT'}</small><b>{relationshipNotice.workshopName}</b><p>{relationshipNotice.status==='rejected'?'Die Werkstatt hat deine Kundenaufnahme abgelehnt.':'Die Werkstatt prüft deine Aufnahme als Kunde.'}</p></span></div></div>}
+       {renderStatus()}
+     </>}
+     {section==='Termine'&&renderAppointments()}
+     {section==='Fahrzeuge'&&renderGarage()}
+     {section==='Dokumente'&&renderDocuments()}
+     {section==='Stammwerkstatt'&&renderWorkshop()}
+   </>:<section className="panel customer-empty-status"><Car/><div><span className="overline">PRODUKTDEMO</span><h2>Dein MotorAtlas-Kundenportal</h2><p>Nach der Anmeldung erscheinen hier echte Termine, Fahrzeuge, Dokumente und deine Stammwerkstatt.</p></div></section>}
  </div>
  <CustomerProfileModal open={profileModal} onClose={()=>setProfileModal(false)} onSaved={live.reload}/>
  <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
  <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
  <ServiceRequestModal open={requestModal} onClose={()=>setRequestModal(false)} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops}/>
- <VehicleChat open={chat} onClose={()=>setChat(false)} audience="customer" workOrderId={live.isLive?activeOrder?.id:null} vehicleLabel={live.isLive&&activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'BMW X3 3.0i'} plate={live.isLive&&activeVehicle?activeVehicle.licensePlate:'SAD XX 123'} orderNumber={live.isLive&&activeOrder?activeOrder.orderNumber:'184'}/>
+ <VehicleChat
+   open={chatTarget!==null}
+   onClose={()=>setChatTarget(null)}
+   audience="customer"
+   workOrderId={chatTarget==='order'?activeOrder?.id:null}
+   workshopId={chatTarget==='workshop'?primaryWorkshop?.workshopId:null}
+   vehicleId={chatTarget==='workshop'?(activeVehicle?.id??live.vehicles[0]?.id):null}
+   vehicleLabel={activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}
+   plate={activeVehicle?.licensePlate??'—'}
+   orderNumber={activeOrder?.orderNumber??''}
+ />
  <AppointmentCancelModal open={Boolean(cancelTarget)} onClose={()=>setCancelTarget(null)} onDone={live.reload} appointmentId={cancelTarget?.id} startsAt={cancelTarget?.startsAt} mode="customer" vehicle={activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}/>
  </Shell>;
 }
