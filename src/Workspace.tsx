@@ -275,6 +275,12 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [actionError,setActionError]=useState<string|null>(null);
  const [documents,setDocuments]=useState<any[]>([]);
  const [documentsBusy,setDocumentsBusy]=useState(false);
+ const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
+ const [pendingNotification,setPendingNotification]=useState<AppNotification|null>(()=>{
+   const raw=sessionStorage.getItem('motoratlas_pending_notification');
+   if(!raw)return null;
+   try{return JSON.parse(raw) as AppNotification}catch{sessionStorage.removeItem('motoratlas_pending_notification');return null}
+ });
  const selected=displayJobs.find(job=>job.id===selectedId)??displayJobs[0];
  const inWorkshopJobs=useMemo(()=>displayJobs
    .filter(job=>!live.isLive||Boolean(job.arrivedAt))
@@ -438,11 +444,74 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  },[live.serviceRequests,live.appointments,live.customerRequests]);
 
  const openNotification=(notification:AppNotification)=>{
-   if(notification.kind==='customer_request'){openSection('Kunden');return}
-   if(notification.kind==='request'||notification.kind==='appointment'){openSection('Termine');return}
-   if(notification.kind==='chat'){openSection('Übersicht');return}
+   if(notification.kind==='customer_request'){
+     openSection('Kunden');
+     if(notification.targetType==='customer_request'&&notification.targetId){
+       const target=live.customerRequests.find(item=>item.id===notification.targetId);
+       if(target)setCustomerRequest(target);
+     }
+     return true;
+   }
+   if(notification.kind==='request'){
+     openSection('Termine');
+     if(notification.targetType==='service_request'&&notification.targetId){
+       const target=live.serviceRequests.find(item=>item.id===notification.targetId);
+       if(target)setServiceRequest(target);
+     }
+     return true;
+   }
+   if(notification.kind==='appointment'){
+     openSection('Termine');
+     setScheduleRange('month');
+     if(notification.targetType==='appointment'&&notification.targetId)setNotificationScrollId('appointment-'+notification.targetId);
+     return true;
+   }
+   if(notification.kind==='chat'){
+     openSection('Übersicht');
+     if(notification.targetType==='chat_thread'&&notification.targetId){
+       const target=live.chatInbox.find(item=>item.threadId===notification.targetId);
+       if(target){setChatInboxTarget(target);return true}
+       if(!notification.workOrderId)return false;
+     }
+     if(notification.workOrderId){
+       setSelectedId(notification.workOrderId);
+       setChat(true);
+     }
+     return true;
+   }
+   if(notification.kind==='document'){
+     openSection('Dokumente');
+     if(notification.targetType==='document'&&notification.targetId)setNotificationScrollId('office-document-'+notification.targetId);
+     return true;
+   }
+   if(notification.workOrderId){
+     setSelectedId(notification.workOrderId);
+     openSection('Übersicht');
+     return true;
+   }
    openSection('Übersicht');
+   return true;
  };
+
+ useEffect(()=>{
+   if(!pendingNotification)return;
+   if(!openNotification(pendingNotification))return;
+   sessionStorage.removeItem('motoratlas_pending_notification');
+   setPendingNotification(null);
+ },[pendingNotification,live.chatInbox,live.serviceRequests,live.customerRequests,live.jobs]);
+
+ useEffect(()=>{
+   if(!notificationScrollId)return;
+   const timer=window.setTimeout(()=>{
+     const node=document.getElementById(notificationScrollId);
+     if(!node)return;
+     node.scrollIntoView({behavior:'smooth',block:'center'});
+     node.classList.add('notification-target');
+     window.setTimeout(()=>node.classList.remove('notification-target'),1800);
+     setNotificationScrollId(null);
+   },100);
+   return()=>window.clearTimeout(timer);
+ },[notificationScrollId,section,visibleAppointments.length,documents.length]);
 
  const appointmentCard=(item:WorkshopAppointment)=>{
    const phase=appointmentPhase(item,now);
@@ -450,7 +519,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    const dayLabel=relativeDayLabel(start,now);
    const canArrive=item.status==='confirmed'&&!item.arrivedAt&&item.rawOrderStage==='appointment_confirmed'&&Boolean(item.workOrderId);
    const canCancel=!item.arrivedAt&&(item.status==='confirmed'||item.status==='proposed')&&(!item.rawOrderStage||item.rawOrderStage==='appointment_confirmed');
-   return <article key={item.id} className={'schedule-card '+phase}>
+   return <article id={'appointment-'+item.id} key={item.id} className={'schedule-card '+phase}>
      <div className="schedule-photo"><VehiclePhoto path={item.photoPath} alt={item.vehicle}/></div>
      <div className="schedule-time">
        <span className="relative-day">{dayLabel}</span>
@@ -638,7 +707,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      <PageHead title="Dokumente" subtitle="Kostenvoranschläge, Rechnungen und weitere Dokumente aus deinen Aufträgen."/>
      <section className="panel office-inbox">
        <header><div><span className="overline">DOKUMENTE</span><h3>{documentsBusy?'Dokumente werden geladen …':`${documents.length} Dokumente`}</h3></div></header>
-       {!documentsBusy&&documents.length?documents.map(document=><button key={document.id} className="inbox-row" onClick={()=>void openDocument(document)}>
+       {!documentsBusy&&documents.length?documents.map(document=><button id={'office-document-'+document.id} key={document.id} className="inbox-row" onClick={()=>void openDocument(document)}>
          <span className="inbox-icon"><FileText/></span>
          <span><b>{document.title||document.document_number||'Dokument'}</b><small>{document.job?.vehicle} · {document.job?.plate}</small><p>{document.document_type==='quote'?'Kostenvoranschlag':document.document_type==='invoice'?'Rechnung':'Dokument'} · {document.status}</p></span>
          <strong>{document.amount_total!=null?Number(document.amount_total).toLocaleString('de-DE',{style:'currency',currency:document.currency||'EUR'}):'Öffnen'}</strong>
@@ -646,8 +715,8 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      </section>
    </>}
  </div>
- {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
- <VehicleChat open={Boolean(chatInboxTarget)} onClose={()=>setChatInboxTarget(null)} audience="workshop" workshopId={live.identity?.workshopId} vehicleId={chatInboxTarget?.vehicleId} vehicleLabel={chatInboxTarget?.vehicleName??'Fahrzeug'} plate={chatInboxTarget?.plate??'—'} chatEnabled={live.identity?.chatEnabled}/>
+ {selected&&<VehicleChat open={chat} onClose={()=>{setChat(false);setNotificationChatThreadId(null)}} audience="workshop" chatThreadId={notificationChatThreadId} workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
+ <VehicleChat open={Boolean(chatInboxTarget)} onClose={()=>setChatInboxTarget(null)} audience="workshop" chatThreadId={chatInboxTarget?.threadId} workshopId={live.identity?.workshopId} vehicleId={chatInboxTarget?.vehicleId} vehicleLabel={chatInboxTarget?.vehicleName??'Fahrzeug'} plate={chatInboxTarget?.plate??'—'} chatEnabled={live.identity?.chatEnabled}/>
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  {selected&&<WorkDecisionModal open={Boolean(workDecision)} onClose={()=>setWorkDecision(null)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle} decision={workDecision}/>}
  {selected&&noCostConfirm&&<div className="modal-backdrop" onMouseDown={()=>{if(!busy)setNoCostConfirm(false)}}>
@@ -689,6 +758,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  const [selectedId,setSelectedId]=useState<string>(()=>sessionStorage.getItem('motoratlas_workshop_selected_order')??queue[0]?.id??'');
  const selected=queue.find(job=>job.id===selectedId)??queue[0];
  const [chat,setChat]=useState(false);
+ const [notificationChatThreadId,setNotificationChatThreadId]=useState<string|null>(null);
  const [diagnosis,setDiagnosis]=useState(false);
  const [busy,setBusy]=useState(false);
  const [actionError,setActionError]=useState<string|null>(null);
@@ -764,12 +834,35 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    ?new Date(selected.arrivedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})
    :'—';
 
+ const openWorkshopNotification=(notification:AppNotification)=>{
+   if(notification.kind==='chat'&&notification.workOrderId&&queue.some(job=>job.id===notification.workOrderId)){
+     setSelectedId(notification.workOrderId);
+     setNotificationChatThreadId(notification.targetType==='chat_thread'?notification.targetId??null:null);
+     setChat(true);
+     return;
+   }
+   if(notification.kind==='order'&&notification.workOrderId&&queue.some(job=>job.id===notification.workOrderId)){
+     setSelectedId(notification.workOrderId);
+     return;
+   }
+   const targetSection:ShellSection=notification.kind==='customer_request'
+     ?'Kunden'
+     :notification.kind==='document'
+       ?'Dokumente'
+       :notification.kind==='request'||notification.kind==='appointment'
+         ?'Termine'
+         :'Übersicht';
+   sessionStorage.setItem('motoratlas_pending_notification',JSON.stringify(notification));
+   sessionStorage.setItem('motoratlas_office_section',targetSection);
+   setView('office');
+ };
+
  return <Shell
    onHome={()=>setView('home')}
    onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined}
    onNavigate={next=>{if(next==='Werkstatt')return;sessionStorage.setItem('motoratlas_office_section',next);setView('office')}}
    notifications={live.notifications}
-   onNotificationOpen={()=>{sessionStorage.setItem('motoratlas_office_section','Termine');setView('office')}}
+   onNotificationOpen={openWorkshopNotification}
    onNotificationsChanged={live.reload}
    logoUrl={live.identity?.logoPath?getWorkshopLogoPublicUrl(live.identity.logoPath):undefined}
    title={title}
@@ -860,7 +953,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
          </div>}
 
          <div className="work-detail-actions">
-           <button className="btn secondary" onClick={()=>setChat(true)} disabled={live.identity?.chatEnabled===false}><MessageCircle size={17}/> Fahrzeugchat</button>
+           <button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}} disabled={live.identity?.chatEnabled===false}><MessageCircle size={17}/> Fahrzeugchat</button>
          </div>
        </>:<div className="work-empty"><Car size={34}/><b>Kein Fahrzeug ausgewählt.</b><span>Klicke links auf ein eingetroffenes Fahrzeug, um alle Daten und den Auftrag zu öffnen.</span></div>}
      </section>
@@ -877,6 +970,9 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const live=useCustomerWorkspace();
  const [section,setSection]=useState<ShellSection>('Übersicht');
  const [chatTarget,setChatTarget]=useState<'order'|'workshop'|null>(null);
+ const [notificationChatThreadId,setNotificationChatThreadId]=useState<string|null>(null);
+ const [notificationOrderId,setNotificationOrderId]=useState<string|null>(null);
+ const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
  const [vehicleModal,setVehicleModal]=useState(false);
  const [requestModal,setRequestModal]=useState(false);
  const [directory,setDirectory]=useState(false);
@@ -886,7 +982,11 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [actionError,setActionError]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);
 
- const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
+ const activeOrder=live.isLive
+   ?(notificationOrderId?live.orders.find(order=>order.id===notificationOrderId):null)
+     ??live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled')
+     ??null
+   :null;
  const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>['submitted','accepted','appointment_pending'].includes(request.status)):null;
  const activeOrderAppointment=activeOrder?.serviceRequestId
    ?live.appointments.find(item=>item.serviceRequestId===activeOrder.serviceRequestId&&item.status==='confirmed')
@@ -915,6 +1015,19 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    const timer=window.setInterval(()=>setNow(new Date()),30_000);
    return()=>window.clearInterval(timer);
  },[]);
+
+ useEffect(()=>{
+   if(!notificationScrollId)return;
+   const timer=window.setTimeout(()=>{
+     const node=document.getElementById(notificationScrollId);
+     if(!node)return;
+     node.scrollIntoView({behavior:'smooth',block:'center'});
+     node.classList.add('notification-target');
+     window.setTimeout(()=>node.classList.remove('notification-target'),1800);
+     setNotificationScrollId(null);
+   },100);
+   return()=>window.clearTimeout(timer);
+ },[notificationScrollId,section,live.appointments.length,live.requests.length,live.documents.length]);
 
  const activeDocuments=activeOrder?live.documents.filter(document=>document.work_order_id===activeOrder.id):[];
  const quote=activeDocuments.find(document=>document.document_type==='quote'&&document.status==='published');
@@ -1007,7 +1120,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
            </div>
            <div className="customer-focus-actions">
              {workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}><Phone size={16}/> Werkstatt anrufen</a>}
-             {workshop?.chatEnabled!==false&&<button className="btn secondary" onClick={()=>setChatTarget('order')}><MessageCircle size={16}/> Chat</button>}
+             {workshop?.chatEnabled!==false&&<button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChatTarget('order')}}><MessageCircle size={16}/> Chat</button>}
              {isAppointment&&<button className="btn primary" onClick={()=>setSection('Termine')}><CalendarDays size={16}/> Termin ansehen</button>}
            </div>
          </div>
@@ -1117,7 +1230,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        const proposed=appointment.status==='proposed'&&!arrived;
        const cancelled=appointment.status==='cancelled';
        const displayState=arrived?'arrived':appointment.status;
-       return <article className={'panel customer-appointment-card '+displayState} key={appointment.id}>
+       return <article id={'customer-appointment-'+appointment.id} className={'panel customer-appointment-card '+displayState} key={appointment.id}>
          <div className="customer-appointment-date">
            <span>{relativeDayLabel(start,now)}</span><b>{start.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</b><small>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</small>
          </div>
@@ -1145,13 +1258,13 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
      {live.requests.filter(request=>!requestIdsWithAppointment.has(request.id)).map(request=>{
        const vehicle=live.vehicles.find(item=>item.id===request.vehicleId);
        const workshop=live.workshops.find(item=>item.workshopId===request.workshopId)??primaryWorkshop;
-       return <article className={'panel customer-request-clean '+request.status} key={request.id}>
+       return <article id={'customer-request-'+request.id} className={'panel customer-request-clean '+request.status} key={request.id}>
          <div className="customer-request-icon"><Car/></div>
          <div><small>{requestStatusLabel(request.status).toUpperCase()}</small><h3>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</h3><p>{request.complaint==='Keine Fehlerbeschreibung angegeben.'?'Keine zusätzliche Beschreibung angegeben.':request.complaint}</p><span>{requestStatusText(request)} · {requestIntentLabel(request.requestIntent)} · {workshop?.name??'Werkstatt'}</span></div>
        </article>;
      })}
 
-     {relationshipNotice&&<article className={'panel customer-request-clean relationship '+relationshipNotice.status}><div className="customer-request-icon"><Building2/></div><div><small>{relationshipNotice.status==='pending'?'WERKSTATTANFRAGE OFFEN':'WERKSTATTANFRAGE ABGELEHNT'}</small><h3>{relationshipNotice.workshopName}</h3><p>{relationshipNotice.status==='pending'?'Die Werkstatt prüft deine Aufnahme als Kunde.':'Die Werkstatt hat die Kundenaufnahme abgelehnt.'}</p></div></article>}
+     {relationshipNotice&&<article id={'customer-relationship-'+relationshipNotice.id} className={'panel customer-request-clean relationship '+relationshipNotice.status}><div className="customer-request-icon"><Building2/></div><div><small>{relationshipNotice.status==='pending'?'WERKSTATTANFRAGE OFFEN':'WERKSTATTANFRAGE ABGELEHNT'}</small><h3>{relationshipNotice.workshopName}</h3><p>{relationshipNotice.status==='pending'?'Die Werkstatt prüft deine Aufnahme als Kunde.':'Die Werkstatt hat die Kundenaufnahme abgelehnt.'}</p></div></article>}
 
      {!sortedAppointments.length&&!live.requests.length&&!relationshipNotice&&<section className="panel customer-simple-empty"><CalendarDays/><h3>Noch keine Anfragen oder Termine.</h3><p>Starte eine Anfrage für eines deiner Fahrzeuge.</p></section>}
    </div>;
@@ -1172,7 +1285,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const renderDocuments=()=>live.documents.length?<div className="customer-document-list">{live.documents.map(document=>{
    const order=live.orders.find(item=>item.id===document.work_order_id);
    const vehicle=order?live.vehicles.find(item=>item.id===order.vehicleId):null;
-   return <article className={'panel customer-document-row '+document.document_type} key={document.id}>
+   return <article id={'customer-document-'+document.id} className={'panel customer-document-row '+document.document_type} key={document.id}>
      <div className="customer-document-type"><FileText/><span><small>{documentTypeLabel(document.document_type).toUpperCase()}</small><b>{document.document_number||document.title||documentTypeLabel(document.document_type)}</b></span></div>
      <div className="customer-document-context"><span>{vehicle?[vehicle.make,vehicle.model].filter(Boolean).join(' ')+' · '+vehicle.licensePlate:'Werkstattdokument'}</span><small>{new Date(document.published_at||document.created_at).toLocaleDateString('de-DE')}</small></div>
      <strong>{document.amount_total!=null?Number(document.amount_total).toLocaleString('de-DE',{style:'currency',currency:document.currency||'EUR'}):''}</strong>
@@ -1201,7 +1314,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
      <section className="customer-workshop-contact-grid">
        <article className="panel"><Phone/><small>TELEFON</small><b>{workshop.phone||'Nicht hinterlegt'}</b>{workshop.phone&&<a className="btn primary" href={phoneHref(workshop.phone)}>Anrufen</a>}</article>
        <article className="panel"><Mail/><small>E-MAIL</small><b>{workshop.email||'Nicht hinterlegt'}</b>{workshop.email&&<a className="btn secondary" href={mailHref(workshop.email)}>E-Mail schreiben</a>}</article>
-       <article className="panel"><MessageCircle/><small>CHAT</small><b>{workshop.chatEnabled?'Direkt in MotorAtlas':'Von der Werkstatt deaktiviert'}</b>{workshop.chatEnabled?<button className="btn secondary" disabled={!live.vehicles.length} onClick={()=>setChatTarget('workshop')}>Chat öffnen</button>:<span className="contact-muted">Telefon oder E-Mail verwenden</span>}</article>
+       <article className="panel"><MessageCircle/><small>CHAT</small><b>{workshop.chatEnabled?'Direkt in MotorAtlas':'Von der Werkstatt deaktiviert'}</b>{workshop.chatEnabled?<button className="btn secondary" disabled={!live.vehicles.length} onClick={()=>{setNotificationChatThreadId(null);setChatTarget('workshop')}}>Chat öffnen</button>:<span className="contact-muted">Telefon oder E-Mail verwenden</span>}</article>
        <article className="panel"><Clock3/><small>ANTWORTZEIT</small><b>{responseText}</b><span className="contact-muted">{stats?.sampleCount??0} ausgewertete Antwort{(stats?.sampleCount??0)===1?'':'en'}</span></article>
        <article className="panel"><Building2/><small>WEBSITE</small><b>{workshop.website||'Nicht hinterlegt'}</b>{workshop.website&&<a className="btn secondary" href={websiteHref(workshop.website)} target="_blank" rel="noreferrer">Website öffnen</a>}</article>
      </section>
@@ -1218,14 +1331,45 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
 
  return <Shell
    onHome={()=>setView('home')}
-   onNavigate={next=>{setSection(next);window.scrollTo({top:0,behavior:'auto'})}}
+   onNavigate={next=>{setNotificationOrderId(null);setNotificationScrollId(null);setSection(next);window.scrollTo({top:0,behavior:'auto'})}}
    navItems={customerNav}
    notifications={live.notifications}
    onNotificationOpen={notification=>{
-     if(notification.kind==='appointment'||notification.kind==='request')setSection('Termine');
-     else if(notification.kind==='document')setSection('Dokumente');
-     else if(notification.kind==='customer_request')setSection('Stammwerkstatt');
-     else setSection('Übersicht');
+     if(notification.kind==='chat'){
+       setNotificationOrderId(notification.workOrderId??null);
+       setNotificationChatThreadId(notification.targetType==='chat_thread'?notification.targetId??null:null);
+       setSection('Übersicht');
+       setChatTarget(notification.workOrderId?'order':'workshop');
+       return;
+     }
+     setNotificationChatThreadId(null);
+     if(notification.kind==='order'){
+       setNotificationOrderId(notification.workOrderId??null);
+       setSection('Übersicht');
+       return;
+     }
+     setNotificationOrderId(null);
+     if(notification.kind==='appointment'){
+       setSection('Termine');
+       if(notification.targetType==='appointment'&&notification.targetId)setNotificationScrollId('customer-appointment-'+notification.targetId);
+       return;
+     }
+     if(notification.kind==='request'){
+       setSection('Termine');
+       if(notification.targetType==='service_request'&&notification.targetId)setNotificationScrollId('customer-request-'+notification.targetId);
+       return;
+     }
+     if(notification.kind==='document'){
+       setSection('Dokumente');
+       if(notification.targetType==='document'&&notification.targetId)setNotificationScrollId('customer-document-'+notification.targetId);
+       return;
+     }
+     if(notification.kind==='customer_request'){
+       setSection('Stammwerkstatt');
+       if(notification.targetType==='customer_request'&&notification.targetId)setNotificationScrollId('customer-relationship-'+notification.targetId);
+       return;
+     }
+     setSection('Übersicht');
    }}
    onNotificationsChanged={live.reload}
    title="Mein MotorAtlas"
@@ -1252,8 +1396,9 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  <ServiceRequestModal open={requestModal} onClose={()=>setRequestModal(false)} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops}/>
  <VehicleChat
    open={chatTarget!==null}
-   onClose={()=>setChatTarget(null)}
+   onClose={()=>{setChatTarget(null);setNotificationChatThreadId(null)}}
    audience="customer"
+   chatThreadId={notificationChatThreadId}
    workOrderId={chatTarget==='order'?activeOrder?.id:null}
    workshopId={chatTarget==='workshop'?primaryWorkshop?.workshopId:null}
    vehicleId={chatTarget==='workshop'?(activeVehicle?.id??live.vehicles[0]?.id):null}
