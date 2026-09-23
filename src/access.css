@@ -13,3 +13,11 @@
 @media(max-width:950px){.access-layout{grid-template-columns:1fr;gap:28px}.access-story{padding-top:0}.access-story h1{max-width:850px}.access-card{max-width:680px;width:100%;margin:auto}}
 @media(max-width:800px){.access-page{min-height:calc(100vh - 68px);padding:42px 0 60px}}
 @media(max-width:520px){.access-page{padding-top:30px}.access-story h1{font-size:40px;letter-spacing:-2px}.access-card{padding:19px;border-radius:20px}.access-tabs button{font-size:9px}.access-address>div{grid-template-columns:1fr}.access-shared{display:grid}.access-demo>div{grid-template-columns:1fr 1fr 1fr}}
+
+.access-choice{display:grid;gap:11px;margin:18px 0 14px}
+.access-choice>button{width:100%;display:grid;grid-template-columns:50px 1fr 22px;gap:13px;align-items:center;text-align:left;border:1px solid #dce6e9;background:#fff;border-radius:16px;padding:15px;transition:.2s ease}
+.access-choice>button:hover{transform:translateY(-2px);border-color:rgba(var(--brand-rgb),.42);box-shadow:0 12px 28px rgba(20,50,63,.08)}
+.access-choice>button>i{width:48px;height:48px;border-radius:13px;background:var(--brand-soft);display:grid;place-items:center;color:var(--brand)}
+.access-choice>button>i svg{width:23px}.access-choice>button>span small{display:block;font-size:7px;letter-spacing:1px;color:#8b989e;font-weight:900}
+.access-choice>button>span b{display:block;font:800 14px Manrope;margin:3px 0}.access-choice>button>span p{font-size:8px;line-height:1.45;color:#71828b;margin:0}
+.access-choice>button>svg{width:18px;color:var(--brand)}.access-existing{width:100%;border:0;background:none;color:#73858e;font-size:9px;padding:9px}.access-existing b{color:var(--brand)}
