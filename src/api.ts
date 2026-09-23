@@ -66,7 +66,7 @@ export async function createServiceRequestDraft(input:{
   const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
   const {data,error}=await client.from('service_requests').insert({
     customer_user_id:auth.user.id,workshop_id:input.workshopId,vehicle_id:input.vehicleId,
-    complaint:input.complaint.trim(),customer_notes:input.customerNotes?.trim()||null,
+    complaint:input.complaint.trim()||'Keine Fehlerbeschreibung angegeben.',customer_notes:input.customerNotes?.trim()||null,
     desired_start:input.desiredStart??null,desired_end:input.desiredEnd??null,driveable:input.driveable??null,
     warning_level:input.warningLevel??null,status:'draft'
   }).select().single();if(error)throw error;return data;
@@ -680,13 +680,16 @@ export async function updateWorkshopProfile(input:{
   workshopId:string;name:string;legalName?:string;street:string;postalCode:string;city:string;
   description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;services?:string[];
 }){
-  const {data,error}=await db().from('workshops').update({
+  const client=db();
+  const {data,error}=await client.from('workshops').update({
     name:input.name.trim(),legal_name:input.legalName?.trim()||null,street:input.street.trim(),
     postal_code:input.postalCode.trim(),city:input.city.trim(),description:input.description?.trim()||null,
     operating_mode:input.operatingMode,accepts_new_customers:input.acceptsNewCustomers,
     services:input.services??[]
   }).eq('id',input.workshopId).select().single();
-  if(error)throw error;return data;
+  if(error)throw error;
+  try{await client.functions.invoke('geocode-workshop',{body:{workshopId:input.workshopId}})}catch{}
+  return data;
 }
 
 export type PublicWorkshop={
@@ -705,6 +708,33 @@ export async function listPublicWorkshops(){
 
 export function getWorkshopLogoPublicUrl(path:string){
   return db().storage.from('workshop-branding').getPublicUrl(path).data.publicUrl;
+}
+
+export async function geocodePublicWorkshop(workshop:PublicWorkshop){
+  const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
+  if(Number.isFinite(lat)&&Number.isFinite(lng))return{latitude:lat,longitude:lng};
+  const address=[workshop.street,workshop.postal_code,workshop.city,'Deutschland'].filter(Boolean).join(', ');
+  const key='motoratlas_geocode:'+address.toLowerCase();
+  try{
+    const cached=localStorage.getItem(key);
+    if(cached){
+      const parsed=JSON.parse(cached);
+      if(Number.isFinite(Number(parsed.latitude))&&Number.isFinite(Number(parsed.longitude)))return parsed;
+    }
+  }catch{}
+  const endpoint=new URL('https://nominatim.openstreetmap.org/search');
+  endpoint.searchParams.set('format','jsonv2');
+  endpoint.searchParams.set('limit','1');
+  endpoint.searchParams.set('countrycodes','de');
+  endpoint.searchParams.set('q',address);
+  const response=await fetch(endpoint.toString(),{headers:{'Accept':'application/json','Accept-Language':'de'}});
+  if(!response.ok)throw new Error('Adresse konnte nicht geocodiert werden.');
+  const result=(await response.json()) as Array<{lat?:string;lon?:string}>;
+  const latitude=Number(result[0]?.lat),longitude=Number(result[0]?.lon);
+  if(!Number.isFinite(latitude)||!Number.isFinite(longitude))throw new Error('Adresse wurde nicht gefunden.');
+  const value={latitude,longitude};
+  try{localStorage.setItem(key,JSON.stringify(value))}catch{}
+  return value;
 }
 
 export async function listPendingCustomerRequests(workshopId:string){
