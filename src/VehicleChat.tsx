@@ -11,6 +11,7 @@ type Props={
   onClose:()=>void;
   audience:'customer'|'workshop';
   workOrderId?:string|null;
+  chatThreadId?:string|null;
   workshopId?:string|null;
   vehicleId?:string|null;
   vehicleLabel?:string;
@@ -32,7 +33,7 @@ function formatTime(value:string){
 }
 
 export function VehicleChat({
-  open,onClose,audience,workOrderId,workshopId,vehicleId,vehicleLabel='BMW X3 3.0i',plate='SAD XX 123',orderNumber='184',chatEnabled=true
+  open,onClose,audience,workOrderId,chatThreadId,workshopId,vehicleId,vehicleLabel='BMW X3 3.0i',plate='SAD XX 123',orderNumber='184',chatEnabled=true
 }:Props){
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [threadId,setThreadId]=useState<string|null>(null);
@@ -43,6 +44,7 @@ export function VehicleChat({
   const fileRef=useRef<HTMLInputElement>(null);
   const messagesRef=useRef<HTMLDivElement>(null);
   const isLive=backendConfigured&&Boolean(
+    (chatThreadId&&uuid.test(chatThreadId))||
     (workOrderId&&uuid.test(workOrderId))||
     (workshopId&&vehicleId&&uuid.test(workshopId)&&uuid.test(vehicleId))
   );
@@ -59,16 +61,18 @@ export function VehicleChat({
         setMessages([]);setThreadId(null);setError(null);
         const uid=await getSignedInUserId();
         if(!uid)throw new Error('Bitte zuerst anmelden.');
-        const thread=workOrderId&&uuid.test(workOrderId)
-          ?await ensureWorkOrderChat(workOrderId)
-          :await ensureVehicleChat(workshopId!,vehicleId!);
-        const initial=await listChatMessages(thread.id);
+        const resolvedThreadId=chatThreadId&&uuid.test(chatThreadId)
+          ?chatThreadId
+          :workOrderId&&uuid.test(workOrderId)
+            ?(await ensureWorkOrderChat(workOrderId)).id
+            :(await ensureVehicleChat(workshopId!,vehicleId!)).id;
+        const initial=await listChatMessages(resolvedThreadId);
         if(cancelled)return;
-        setUserId(uid);setThreadId(thread.id);setMessages(initial);setError(null);
-        await markChatRead(thread.id);
-        unsubscribe=subscribeChat(thread.id,message=>{
+        setUserId(uid);setThreadId(resolvedThreadId);setMessages(initial);setError(null);
+        await markChatRead(resolvedThreadId);
+        unsubscribe=subscribeChat(resolvedThreadId,message=>{
           setMessages(current=>current.some(item=>item.id===message.id)?current:[...current,message]);
-          void markChatRead(thread.id);
+          void markChatRead(resolvedThreadId);
         });
       }catch(err){
         if(!cancelled)setError(err instanceof Error?err.message:'Chat konnte nicht geladen werden.');
@@ -76,7 +80,7 @@ export function VehicleChat({
     };
     void run();
     return()=>{cancelled=true;unsubscribe?.()};
-  },[open,isLive,workOrderId,workshopId,vehicleId]);
+  },[open,isLive,workOrderId,chatThreadId,workshopId,vehicleId]);
 
   useEffect(()=>{
     if(!open)return;
