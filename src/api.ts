@@ -224,6 +224,7 @@ export type WorkshopIdentity={
   workshopName:string;
   brandPrimary?:string|null;
   brandSecondary?:string|null;
+  operatingMode?:'solo'|'team';
 };
 
 function mapOrderStage(stage:string):LiveStage{
@@ -244,7 +245,7 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
   if(error)throw error;
   if(!member)return null;
   const {data:workshop,error:workshopError}=await client.from('workshops')
-    .select('id,name,brand_primary,brand_secondary')
+    .select('id,name,brand_primary,brand_secondary,operating_mode')
     .eq('id',member.workshop_id).single();
   if(workshopError)throw workshopError;
   return{
@@ -255,7 +256,8 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
     permissions:(member.permissions??{}) as Record<string,unknown>,
     workshopName:workshop.name,
     brandPrimary:workshop.brand_primary,
-    brandSecondary:workshop.brand_secondary
+    brandSecondary:workshop.brand_secondary,
+    operatingMode:(workshop.operating_mode??'solo') as 'solo'|'team'
   };
 }
 
@@ -468,4 +470,88 @@ export async function uploadOfficialDocument(input:{
   }catch(error){
     throw error;
   }
+}
+
+
+export async function updateMyProfile(input:{fullName:string;street:string;postalCode:string;city:string}){
+  const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
+  const {data,error}=await client.from('profiles').update({
+    full_name:input.fullName.trim(),street:input.street.trim(),postal_code:input.postalCode.trim(),city:input.city.trim()
+  }).eq('id',auth.user.id).select().single();
+  if(error)throw error;return data;
+}
+
+export async function createVehicleWithPhoto(input:{
+  make:string;model:string;variant?:string;firstRegistration?:string;licensePlate:string;
+  hsn?:string;tsn?:string;vin?:string;mileage?:number;photo:File;
+}){
+  if(!input.photo.type.startsWith('image/'))throw new Error('Ein Fahrzeugbild ist erforderlich.');
+  const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
+  const vehicleId=crypto.randomUUID(),safeName=input.photo.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
+  const path=auth.user.id+'/'+vehicleId+'/'+safeName;
+  const {error:uploadError}=await client.storage.from('vehicle-images').upload(path,input.photo,{upsert:false,contentType:input.photo.type});
+  if(uploadError)throw uploadError;
+  try{
+    const {data,error}=await client.from('vehicles').insert({
+      id:vehicleId,owner_user_id:auth.user.id,make:input.make.trim(),model:input.model.trim(),
+      variant:input.variant?.trim()||null,first_registration:input.firstRegistration||null,
+      license_plate:input.licensePlate.trim().toUpperCase(),hsn:input.hsn?.trim()||null,tsn:input.tsn?.trim()||null,
+      vin:input.vin?.trim().toUpperCase()||null,mileage:input.mileage??null,photo_path:path
+    }).select().single();
+    if(error)throw error;return data;
+  }catch(error){await client.storage.from('vehicle-images').remove([path]);throw error}
+}
+
+export async function getVehicleImageUrl(path:string,expiresIn=900){
+  const {data,error}=await db().storage.from('vehicle-images').createSignedUrl(path,expiresIn);
+  if(error)throw error;return data.signedUrl;
+}
+
+export async function uploadWorkshopLogo(input:{workshopId:string;file:File;primary:string;secondary:string}){
+  if(!input.file.type.startsWith('image/'))throw new Error('Bitte eine Bilddatei auswählen.');
+  const client=db(),safeName=input.file.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
+  const path=input.workshopId+'/logo/'+crypto.randomUUID()+'-'+safeName;
+  const {error:uploadError}=await client.storage.from('workshop-branding').upload(path,input.file,{upsert:false,contentType:input.file.type});
+  if(uploadError)throw uploadError;
+  const {data,error}=await client.from('workshops').update({
+    logo_path:path,brand_primary:input.primary,brand_secondary:input.secondary
+  }).eq('id',input.workshopId).select().single();
+  if(error){await client.storage.from('workshop-branding').remove([path]);throw error}
+  return data;
+}
+
+export async function updateWorkshopProfile(input:{
+  workshopId:string;name:string;legalName?:string;street:string;postalCode:string;city:string;
+  description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;
+}){
+  const {data,error}=await db().from('workshops').update({
+    name:input.name.trim(),legal_name:input.legalName?.trim()||null,street:input.street.trim(),
+    postal_code:input.postalCode.trim(),city:input.city.trim(),description:input.description?.trim()||null,
+    operating_mode:input.operatingMode,accepts_new_customers:input.acceptsNewCustomers
+  }).eq('id',input.workshopId).select().single();
+  if(error)throw error;return data;
+}
+
+export type PublicWorkshop={
+  id:string;slug:string;name:string;street:string;postal_code:string;city:string;description?:string|null;
+  services?:unknown;opening_hours?:unknown;logo_path?:string|null;brand_primary?:string|null;
+  accepts_new_customers:boolean;latitude?:number|null;longitude?:number|null;verified_at:string;
+};
+
+export async function listPublicWorkshops(){
+  const {data,error}=await db().from('workshops')
+    .select('id,slug,name,street,postal_code,city,description,services,opening_hours,logo_path,brand_primary,accepts_new_customers,latitude,longitude,verified_at')
+    .eq('listed_publicly',true).not('verified_at','is',null).order('name',{ascending:true});
+  if(error)throw error;return(data??[]) as PublicWorkshop[];
+}
+
+export function getWorkshopLogoPublicUrl(path:string){
+  return db().storage.from('workshop-branding').getPublicUrl(path).data.publicUrl;
+}
+
+export async function listPendingCustomerRequests(workshopId:string){
+  const {data,error}=await db().from('workshop_customer_requests')
+    .select('id,customer_user_id,message,status,created_at')
+    .eq('workshop_id',workshopId).eq('status','pending').order('created_at',{ascending:true});
+  if(error)throw error;return data??[];
 }
