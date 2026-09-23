@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          curl --fail --silent --show-error             -H "apikey: ${SUPABASE_KEY}"             "${SUPABASE_URL}/rest/v1/workshops?select=id,slug,name&limit=1" >/tmp/workshops.json
+          curl --fail --silent --show-error             -H "apikey: ${SUPABASE_KEY}"             -H "Authorization: Bearer ${SUPABASE_KEY}"             "${SUPABASE_URL}/rest/v1/workshops?select=id,slug,name&limit=1" >/tmp/workshops.json
           node -e "const x=require('/tmp/workshops.json'); if(!Array.isArray(x)) process.exit(1); console.log('Public workshop API reachable; rows:', x.length)"
 
       - name: Summary
