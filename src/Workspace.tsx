@@ -4,7 +4,7 @@ import {
   Phone, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, Wrench
 } from 'lucide-react';
 import { jobs, type Job, type Stage } from './demo';
-import { applyPalette, paletteFromLogo } from './lib';
+import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
 import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
@@ -24,18 +24,20 @@ type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokum
 type ShellNavItem=[ShellSection,typeof Home,string?];
 
 function Shell({
-  children,title,mode,active,onHome,onSettings,onNavigate,navItems,notifications=[],onNotificationOpen,onNotificationsChanged
+  children,title,mode,active,onHome,onSettings,onNavigate,navItems,notifications=[],onNotificationOpen,onNotificationsChanged,logoUrl
 }:{
   children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void;
   onSettings?:()=>void;onNavigate?:(section:ShellSection)=>void;navItems?:ShellNavItem[];
   notifications?:AppNotification[];onNotificationOpen?:(notification:AppNotification)=>void;
   onNotificationsChanged?:()=>Promise<void>|void;
+  logoUrl?:string|null;
 }){
   const items:ShellNavItem[]=navItems??[
     ['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText]
   ];
   const [notificationOpen,setNotificationOpen]=useState(false);
   const unread=notifications.filter(item=>!item.readAt).length;
+  const initials=title.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')||'MA';
 
   const openNotification=async(notification:AppNotification)=>{
     if(!notification.readAt){
@@ -63,7 +65,7 @@ function Shell({
       {onSettings&&<button className="mobile-settings" onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}</nav>
       <div className="side-bottom">
         {onSettings&&<button onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}
-        <button className="profile"><span>PW</span><div><b>{title}</b><small>{mode}</small></div></button>
+        <button className="profile"><span className="identity-logo">{logoUrl?<img src={logoUrl} alt="Werkstattlogo"/>:initials}</span><div><b>{title}</b><small>{mode}</small></div></button>
       </div>
     </aside>
     <main className="app-main">
@@ -80,7 +82,7 @@ function Shell({
             </button>):<div className="notification-empty"><Bell/><b>Keine neuen Meldungen.</b><span>Neue Anfragen und Terminantworten erscheinen hier automatisch.</span></div>}</div>
           </div>}
         </div>
-        <div className="top-identity"><span>CS</span><div><b>{title}</b><small>{mode}</small></div></div>
+        <div className="top-identity"><span className="top-workshop-logo">{logoUrl?<img src={logoUrl} alt="Werkstattlogo"/>:initials}</span><div><b>{title}</b><small>{mode}</small></div></div>
       </div>
       {children}
     </main>
@@ -436,6 +438,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    notifications={live.notifications}
    onNotificationOpen={openNotification}
    onNotificationsChanged={live.reload}
+   logoUrl={live.identity?.logoPath?getWorkshopLogoPublicUrl(live.identity.logoPath):undefined}
    title={title}
    mode="Büro"
    active={section}
@@ -621,7 +624,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    return'Öffnen';
  };
 
- return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} onNavigate={next=>{if(next==='Werkstatt')return;sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} notifications={live.notifications} onNotificationOpen={()=>{sessionStorage.setItem('motoratlas_office_section','Termine');setView('office')}} onNotificationsChanged={live.reload} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
+ return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} onNavigate={next=>{if(next==='Werkstatt')return;sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} notifications={live.notifications} onNotificationOpen={()=>{sessionStorage.setItem('motoratlas_office_section','Termine');setView('office')}} onNotificationsChanged={live.reload} logoUrl={live.identity?.logoPath?getWorkshopLogoPublicUrl(live.identity.logoPath):undefined} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
  {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
  <div className="workshop-grid"><section className="panel queue"><div className="panel-title"><div><span className="overline">OFFENE ARBEITEN</span><h3>{queue.length} Fahrzeuge in der Werkstatt</h3></div><b>{queue.length}</b></div>
  {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Sobald das Büro ein Fahrzeug als eingetroffen markiert oder eine Reparatur freigegeben wird, erscheint es hier.</span></div>}
@@ -1004,10 +1007,10 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
      setVerificationMode(profile.verification_mode??'standard');
      setVerificationReviewNote(profile.verification_review_note??null);
      if(profile.logo_path)setUrl(getWorkshopLogoPublicUrl(profile.logo_path));
-     if(profile.brand_primary){
-       const primary=profile.brand_primary as string,secondary=(profile.brand_secondary as string|null)??primary;
-       applyPalette({primary,dark:secondary,soft:'#f1f8f9',rgb:'12,102,122'});
-     }
+     const storedPalette=paletteFromStoredColors({
+       primary:profile.brand_primary,dark:profile.brand_secondary,soft:profile.brand_soft,rgb:profile.brand_rgb
+     });
+     if(storedPalette){setPalette(storedPalette);applyPalette(storedPalette)}
    }).catch(err=>{if(!cancelled)setError(err instanceof Error?err.message:'Werkstattprofil konnte nicht geladen werden.')});
    return()=>{cancelled=true};
  },[live.identity?.workshopId]);
@@ -1031,7 +1034,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
      workshopId:resolvedWorkshopId,name,legalName,street,postalCode,city,phone,email,website,chatEnabled,description,
      operatingMode:mode,acceptsNewCustomers:accepts,services
    });
-   if(logoFile&&palette)await uploadWorkshopLogo({workshopId:resolvedWorkshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
+   if(logoFile&&palette)await uploadWorkshopLogo({workshopId:resolvedWorkshopId,file:logoFile,primary:palette.primary,secondary:palette.dark,soft:palette.soft,rgb:palette.rgb});
    await live.reload();
    if(navigateAfter)setView('office');
    return resolvedWorkshopId;
@@ -1062,7 +1065,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  const title=name.trim()||'Deine Werkstatt';
  const openVerification=()=>document.getElementById('verification-panel')?.scrollIntoView({behavior:'smooth',block:'start'});
 
- return <Shell onHome={()=>setView('home')} onSettings={()=>setView('branding')} onNavigate={next=>{if(next==='Werkstatt'){setView('workshop');return}sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><div className="head-actions">
+ return <Shell onHome={()=>setView('home')} onSettings={()=>setView('branding')} onNavigate={next=>{if(next==='Werkstatt'){setView('workshop');return}sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} logoUrl={url??(live.identity?.logoPath?getWorkshopLogoPublicUrl(live.identity.logoPath):undefined)} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><div className="head-actions">
    {live.identity?.role==='owner'&&<button className="btn secondary" onClick={openVerification}>{verificationStatus==='verified'?'Verifizierung ansehen':'Verifizierung starten'}</button>}
    <button className="btn primary" disabled={busy} onClick={()=>void save()}>{busy?'Speichert …':live.identity?'Änderungen speichern':'Werkstatt anlegen'}</button>
  </div></PageHead>
@@ -1075,7 +1078,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  <div className="branding-fields">
   <section className="panel profile-form"><span className="overline">STAMMDATEN</span><h3>Die Werkstatt hinter dem Profil.</h3><div className="form-two"><label><span>Werkstattname</span><input value={name} onChange={e=>setName(e.target.value)} placeholder="z. B. Carplus Service Center"/></label><label><span>Rechtlicher Firmenname</span><input value={legalName} onChange={e=>setLegalName(e.target.value)} placeholder="optional"/></label></div><label><span>Straße & Hausnummer</span><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Musterstraße 12"/></label><div className="address-grid"><label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value)} inputMode="numeric" placeholder="92421"/></label><label><span>Ort</span><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Schwandorf"/></label></div><div className="form-two"><label><span>Telefon</span><input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+49 …"/></label><label><span>E-Mail</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="service@werkstatt.de"/></label></div><label><span>Website</span><input value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://www.meine-werkstatt.de"/></label><label><span>Beschreibung</span><textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Leistungen, Spezialisierung und das, was deine Werkstatt besonders macht."/></label><label className="toggle-row"><input type="checkbox" checked={accepts} onChange={e=>setAccepts(e.target.checked)}/><span><b>Neue Kunden annehmen</b><small>Kann jederzeit deaktiviert werden, wenn die Werkstatt ausgelastet ist.</small></span></label><label className="toggle-row"><input type="checkbox" checked={chatEnabled} onChange={e=>setChatEnabled(e.target.checked)}/><span><b>MotorAtlas-Chat anbieten</b><small>Wenn deaktiviert, bleiben vorhandene Verläufe lesbar. Kunden sehen stattdessen Telefon und E-Mail als Kontaktweg.</small></span></label></section>
   <div className="branding-stack"><section className="panel"><span className="overline">ADAPTIVES BRANDING</span><h3>Logo rein. Premium-Farbsystem raus.</h3><p>MotorAtlas analysiert die dominante Markenfarbe und erzeugt daraus kontraststarke, dezente UI-Akzente.</p><label className="logo-upload"><Sparkles/><b>{url?'Logo ändern':'Werkstattlogo hochladen'}</b><span>PNG, JPG oder WebP</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void logo(e.target.files?.[0])}/></label><div className="swatches"><i/><i/><i/></div></section>
-  <section className="panel preview"><span className="overline">LIVE-VORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>{title.slice(0,2).toUpperCase()}</span>}</div><div><b>{title}</b><small className={verified?'verified-copy':'pending-copy'}><ShieldCheck size={14}/> {verified?'Verifizierte Werkstatt':'Verifizierung ausstehend'}</small></div></div><div className="preview-order"><Status stage="repair"/><h3>BMW X3 3.0i</h3><small>Auftrag #184 · Reparatur freigegeben</small><button className="btn primary full">Auftrag öffnen</button></div></section></div>
+  <section className="panel preview"><span className="overline">MARKENVORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>{title.slice(0,2).toUpperCase()}</span>}</div><div><b>{title}</b><small className={verified?'verified-copy':'pending-copy'}><ShieldCheck size={14}/> {verified?'Verifizierte Werkstatt':'Verifizierung ausstehend'}</small></div></div></section></div>
  </div>
  <section className="panel service-selection">
    <span className="overline">LEISTUNGSUMFANG</span>
