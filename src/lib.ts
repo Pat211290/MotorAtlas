@@ -31,6 +31,31 @@ export async function paletteFromLogo(file:File):Promise<BrandPalette>{
   return {primary:hex(normalized[0],normalized[1],normalized[2]),dark:hex(dark[0],dark[1],dark[2]),soft:hex(soft[0],soft[1],soft[2]),rgb:normalized.map(Math.round).join(',')};
 }
 
+export function paletteFromStoredColors(input:{primary?:string|null;dark?:string|null;soft?:string|null;rgb?:string|null}):BrandPalette|null{
+  const primary=input.primary?.trim();
+  if(!primary||!/^#[0-9a-f]{6}$/i.test(primary))return null;
+  const parse=(value:string)=>[
+    Number.parseInt(value.slice(1,3),16),
+    Number.parseInt(value.slice(3,5),16),
+    Number.parseInt(value.slice(5,7),16)
+  ];
+  const [r,g,b]=parse(primary);
+  const dark=input.dark&&/^#[0-9a-f]{6}$/i.test(input.dark)
+    ?input.dark
+    :hex(r*.72,g*.72,b*.72);
+  const soft=input.soft&&/^#[0-9a-f]{6}$/i.test(input.soft)
+    ?input.soft
+    :hex(
+      Math.round(248-(248-r)*.08),
+      Math.round(248-(248-g)*.08),
+      Math.round(248-(248-b)*.08)
+    );
+  const rgb=input.rgb&&/^\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*$/.test(input.rgb)
+    ?input.rgb
+    :[r,g,b].join(',');
+  return{primary,dark,soft,rgb};
+}
+
 export function applyPalette(palette:BrandPalette){
   const root=document.documentElement;
   root.style.setProperty('--brand',palette.primary);
