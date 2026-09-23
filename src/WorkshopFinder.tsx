@@ -5,7 +5,7 @@ import {
   ArrowLeft, ArrowRight, Building2, CheckCircle2, MapPin, Search, ShieldCheck, Sparkles
 } from 'lucide-react';
 import { Brand, type AppView } from './components';
-import { geocodePublicWorkshop, getWorkshopLogoPublicUrl, listPublicWorkshops, type PublicWorkshop } from './api';
+import { geocodePublicWorkshop, getWorkshopLogoPublicUrl, hasWorkshopCoordinates, listPublicWorkshops, type PublicWorkshop } from './api';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 function serviceLabel(code:string){
@@ -49,10 +49,7 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
   },[]);
 
   useEffect(()=>{
-    const missing=workshops.filter(workshop=>{
-      const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
-      return!Number.isFinite(lat)||!Number.isFinite(lng);
-    });
+    const missing=workshops.filter(workshop=>!hasWorkshopCoordinates(workshop));
     if(!missing.length)return;
     let cancelled=false;
     void(async()=>{
@@ -99,8 +96,8 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
     markersRef.current.clear();
 
     filtered.forEach(workshop=>{
+      if(!hasWorkshopCoordinates(workshop))return;
       const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
-      if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
       const active=workshop.id===selected?.id;
       const marker=L.marker([lat,lng],{
         icon:L.divIcon({
@@ -116,8 +113,10 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
     });
 
     if(selected){
-      const lat=Number(selected.latitude),lng=Number(selected.longitude);
-      if(Number.isFinite(lat)&&Number.isFinite(lng))map.flyTo([lat,lng],Math.max(map.getZoom(),11),{duration:.65});
+      if(hasWorkshopCoordinates(selected)){
+        const lat=Number(selected.latitude),lng=Number(selected.longitude);
+        map.flyTo([lat,lng],Math.max(map.getZoom(),11),{duration:.65});
+      }
     }
     setTimeout(()=>map.invalidateSize(),80);
   },[filtered,selected?.id]);
