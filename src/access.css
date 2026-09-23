@@ -28,3 +28,26 @@
 .access-privacy-note button,.access-legal-links button{border:0;background:none;color:var(--brand);font-size:inherit;font-weight:800;padding:0}
 .access-privacy-note button:hover,.access-legal-links button:hover{text-decoration:underline}
 .access-legal-links{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:14px;color:#9aa5aa;font-size:8px}
+
+.access-verify{text-align:center;padding:4px 0 2px}
+.access-verify-icon{width:78px;height:78px;margin:0 auto 16px;border-radius:24px;background:linear-gradient(145deg,#e6f5f4,#f4fbfb);border:1px solid #cde5e5;display:grid;place-items:center;box-shadow:0 14px 34px rgba(17,92,104,.12)}
+.access-verify-icon svg{width:38px;height:38px;color:var(--brand)}
+.access-verify-kicker{display:block;font-size:9px;letter-spacing:1.6px;color:#257b66;font-weight:900;margin-bottom:8px}
+.access-verify h2{font:800 31px/1.08 Manrope;letter-spacing:-1.1px;margin:0 0 10px;color:var(--ink)}
+.access-verify-lead{font-size:12px;line-height:1.65;color:#647983;margin:0 auto 18px;max-width:430px}
+.access-verify-email{display:flex;align-items:center;justify-content:center;gap:8px;background:#f1f7f7;border:1px solid #d8e8ea;border-radius:13px;padding:12px 14px;margin:0 auto 16px;font-size:11px;font-weight:800;color:#36545f;word-break:break-all}
+.access-verify-email svg{width:17px;flex:0 0 auto;color:var(--brand)}
+.access-verify-notice{text-align:left;background:#fff9ed;border:1px solid #f0deb9;border-radius:15px;padding:15px 16px;margin:0 0 16px}
+.access-verify-notice b{display:block;font-size:10px;color:#72571f;margin-bottom:4px}
+.access-verify-notice p{font-size:9px;line-height:1.6;color:#806d47;margin:0}
+.access-verify-steps{display:grid;gap:8px;text-align:left;margin:18px 0}
+.access-verify-steps span{display:flex;align-items:center;gap:9px;font-size:10px;font-weight:700;color:#526b75}
+.access-verify-steps span b{width:25px;height:25px;border-radius:8px;background:var(--brand-soft);display:grid;place-items:center;color:var(--brand);font-size:9px;flex:0 0 auto}
+.access-resend{margin-top:5px}
+.access-resend svg{width:16px}
+.access-resend-status{margin-top:10px;padding:11px 12px;border-radius:11px;background:#f3f8f8;border:1px solid #dce9eb;font-size:9px;line-height:1.55;color:#5c737d}
+.access-verify-actions{display:grid;gap:5px;margin-top:15px}
+.access-verify-actions button{border:0;background:none;color:#74858d;font-size:9px;padding:5px}
+.access-verify-actions button b{color:var(--brand)}
+.access-verify-actions button:hover b{text-decoration:underline}
+@media(max-width:520px){.access-verify-icon{width:68px;height:68px;border-radius:20px}.access-verify h2{font-size:27px}.access-verify-lead{font-size:11px}}

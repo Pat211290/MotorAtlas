@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRight, Building2, Car, CheckCircle2, Clock3, Eye, EyeOff, Gauge, LockKeyhole,
-  Mail, MapPin, MessageCircle, ShieldCheck, Sparkles, UserRound, Users, WalletCards
+  Mail, MailCheck, MapPin, MessageCircle, RefreshCw, ShieldCheck, Sparkles, UserRound, Users, WalletCards
 } from 'lucide-react';
 import { backendConfigured, supabase } from './lib';
 import { claimMyWorkshopInvites, signUpCustomer } from './api';
@@ -19,7 +19,7 @@ async function resolveSignedInView():Promise<AppView>{
   return'customer';
 }
 
-type Tab='start'|'login'|'customer'|'workshop'|'reset'|'password';
+type Tab='start'|'login'|'customer'|'workshop'|'verify'|'reset'|'password';
 
 const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{icon:any;title:string;text:string}>}>={
   start:{
@@ -60,6 +60,16 @@ const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{i
       {icon:Users,title:'Personal entlasten',text:'Weniger Telefon, weniger Zettel, weniger doppelte Rückfragen zwischen Büro, Werkstatt und Kunde.'},
       {icon:Building2,title:'Professioneller auftreten',text:'Öffentliches Werkstattprofil, klare Kundenkommunikation und ein durchgängiger digitaler Ablauf.'},
       {icon:Sparkles,title:'Mehr Chancen auf Umsatz',text:'24/7 auffindbar, weniger verpasste Anfragen und schnellere Kundenfreigaben für laufende Aufträge.'}
+    ]
+  },
+  verify:{
+    kicker:'E-MAIL BESTÄTIGEN',
+    title:'Nur noch ein Schritt bis zu deinem MotorAtlas-Konto.',
+    text:'Die E-Mail-Bestätigung schützt dein Konto und stellt sicher, dass nur du diese Adresse für MotorAtlas verwenden kannst.',
+    items:[
+      {icon:MailCheck,title:'Postfach prüfen',text:'Öffne die Bestätigungsmail von MotorAtlas und tippe auf „E-Mail-Adresse bestätigen“.'},
+      {icon:ShieldCheck,title:'Sicherer Zugang',text:'Erst nach der Bestätigung wird die E-Mail-Adresse als verifiziert behandelt.'},
+      {icon:RefreshCw,title:'Mail erneut anfordern',text:'Falls nichts ankommt, kannst du den Versand direkt noch einmal anstoßen.'}
     ]
   },
   reset:{
@@ -104,8 +114,11 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [newPassword2,setNewPassword2]=useState('');
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
+  const [pendingEmail,setPendingEmail]=useState('');
+  const [resendBusy,setResendBusy]=useState(false);
+  const [resendStatus,setResendStatus]=useState('');
 
-  const setTab=(next:Tab)=>{setMessage('');setTabState(next)};
+  const setTab=(next:Tab)=>{setMessage('');setResendStatus('');setTabState(next)};
   const benefit=benefits[tab];
 
   useEffect(()=>{
@@ -115,6 +128,33 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     });
     return()=>data.subscription.unsubscribe();
   },[]);
+
+  const resendConfirmation=async()=>{
+    if(!backendConfigured||!supabase||!pendingEmail)return;
+    setResendBusy(true);
+    setResendStatus('');
+    try{
+      const base=new URL('./',document.baseURI);
+      base.search='app=1';
+      base.hash='';
+      const {error}=await supabase.auth.resend({
+        type:'signup',
+        email:pendingEmail,
+        options:{emailRedirectTo:base.toString()}
+      });
+      if(error){
+        if(error.status===429){
+          setResendStatus('Bitte warte kurz, bevor du eine weitere Bestätigungsmail anforderst.');
+        }else{
+          setResendStatus('Der erneute Versand konnte gerade nicht gestartet werden. Prüfe die Adresse oder nutze die Anmeldung beziehungsweise „Passwort vergessen“.');
+        }
+      }else{
+        setResendStatus('Wenn die Adresse noch bestätigt werden muss, wurde eine neue Bestätigungsmail angefordert.');
+      }
+    }finally{
+      setResendBusy(false);
+    }
+  };
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();
@@ -165,7 +205,10 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
         if(result.session){
           setView(tab==='workshop'?'branding':'customer');
         }else{
-          setMessage('Konto erstellt. Bitte bestätige zuerst deine E-Mail-Adresse.');
+          setPendingEmail(email.trim());
+          setMessage('');
+          setResendStatus('');
+          setTabState('verify');
         }
       }
     }catch(error){
@@ -226,6 +269,36 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           </div>
 
           <button className="access-existing" onClick={()=>setTab('login')}>Schon registriert? <b>Jetzt anmelden</b></button>
+        </>:tab==='verify'?<>
+          <div className="access-verify">
+            <div className="access-verify-icon"><MailCheck/></div>
+            <span className="access-verify-kicker">BESTÄTIGUNG ERFORDERLICH</span>
+            <h2>Prüfe jetzt dein E-Mail-Postfach</h2>
+            <p className="access-verify-lead">Für die Registrierung ist eine bestätigte E-Mail-Adresse erforderlich.</p>
+
+            <div className="access-verify-email"><Mail/><span>{pendingEmail||email}</span></div>
+
+            <div className="access-verify-notice">
+              <b>Wichtig</b>
+              <p>Wenn diese Adresse noch nicht bei MotorAtlas registriert war, wurde eine Bestätigungsmail versendet. Aus Sicherheitsgründen zeigt MotorAtlas nicht an, ob eine Adresse bereits zu einem bestehenden Konto gehört.</p>
+            </div>
+
+            <div className="access-verify-steps">
+              <span><b>1</b> Posteingang und Spam-Ordner prüfen</span>
+              <span><b>2</b> MotorAtlas-Mail öffnen</span>
+              <span><b>3</b> „E-Mail-Adresse bestätigen“ antippen</span>
+            </div>
+
+            <button className="btn primary xl full access-resend" disabled={resendBusy} onClick={resendConfirmation}>
+              {resendBusy?'Mail wird angefordert …':'Bestätigungsmail erneut senden'} <RefreshCw/>
+            </button>
+            {resendStatus&&<div className="access-resend-status">{resendStatus}</div>}
+
+            <div className="access-verify-actions">
+              <button onClick={()=>setTab('login')}>Schon bestätigt? <b>Anmelden</b></button>
+              <button onClick={()=>setTab('reset')}>Keine Mail und Konto vorhanden? <b>Passwort vergessen</b></button>
+            </div>
+          </div>
         </>:tab==='reset'?<>
           <div className="access-card-head">
             <span>PASSWORT VERGESSEN</span>
