@@ -5,7 +5,7 @@ import {
   type AppNotification,type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
   type LiveJob,type WorkshopAppointment,type WorkshopChatInboxItem,type WorkshopDashboardMetrics,type WorkshopIdentity,type WorkshopResponseStats,type WorkshopServiceRequest
 } from './api';
-import { backendConfigured } from './lib';
+import { applyPalette, backendConfigured, paletteFromStoredColors } from './lib';
 
 export function useWorkshopWorkspace(){
   const [identity,setIdentity]=useState<WorkshopIdentity|null>(null);
@@ -25,6 +25,12 @@ export function useWorkshopWorkspace(){
     try{
       const current=await getCurrentWorkshopIdentity();
       setIdentity(current);
+      if(current){
+        const palette=paletteFromStoredColors({
+          primary:current.brandPrimary,dark:current.brandSecondary,soft:current.brandSoft,rgb:current.brandRgb
+        });
+        if(palette)applyPalette(palette);
+      }
       if(!current){
         setJobs([]);setServiceRequests([]);setCustomerRequests([]);setAppointments([]);setNotifications([]);setChatInbox([]);
         setMetrics({activeCustomerCount:0,primaryCustomerCount:0});
