@@ -120,7 +120,7 @@ function viewFromHash(hash:string):AppView|null{
 }
 
 export default function App(){
-  const [view,setView]=useState<AppView>(()=>viewFromHash(location.hash)??'home');
+  const [view,setView]=useState<AppView>(()=>new URLSearchParams(location.search).get('recovery')==='1'?'login':(viewFromHash(location.hash)??'home'));
 
   const navigate=(next:AppView)=>{
     setView(next);
