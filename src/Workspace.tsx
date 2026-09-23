@@ -14,10 +14,11 @@ import { ServiceRequestModal } from './ServiceRequestModal';
 import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeRequestModals';
 import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
+import { TeamManager } from './TeamManager';
 
-function Shell({children,title,mode,active,onHome}:{children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void}){
+function Shell({children,title,mode,active,onHome,onSettings}:{children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void;onSettings?:()=>void}){
   const items=[['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText]] as const;
-  return <div className="app-shell"><aside className="sidebar"><button className="side-brand" onClick={onHome}><Brand compact/></button><nav>{items.map(([name,Icon])=><button key={name} className={active===name?'active':''}><Icon size={18}/><span>{name}</span></button>)}</nav><div className="side-bottom"><button><Settings size={18}/><span>Einstellungen</span></button><button className="profile"><span>PW</span><div><b>{title}</b><small>{mode}</small></div></button></div></aside><main className="app-main"><div className="app-top"><div className="app-search"><Search size={17}/><span>Fahrzeug, Kunde oder Auftrag suchen …</span></div><button className="icon-button"><Bell size={18}/><i/></button><div className="top-identity"><span>CS</span><div><b>{title}</b><small>{mode}</small></div></div></div>{children}</main></div>;
+  return <div className="app-shell"><aside className="sidebar"><button className="side-brand" onClick={onHome}><Brand compact/></button><nav>{items.map(([name,Icon])=><button key={name} className={active===name?'active':''}><Icon size={18}/><span>{name}</span></button>)}</nav><div className="side-bottom">{onSettings&&<button onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}<button className="profile"><span>PW</span><div><b>{title}</b><small>{mode}</small></div></button></div></aside><main className="app-main"><div className="app-top"><div className="app-search"><Search size={17}/><span>Fahrzeug, Kunde oder Auftrag suchen …</span></div><button className="icon-button"><Bell size={18}/><i/></button><div className="top-identity"><span>CS</span><div><b>{title}</b><small>{mode}</small></div></div></div>{children}</main></div>;
 }
 
 function PageHead({title,subtitle,children}:{title:string;subtitle:string;children?:React.ReactNode}){return <div className="page-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
@@ -73,7 +74,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    await live.reload();
  };
 
- return <Shell onHome={()=>setView('home')} title={title} mode="Büro" active="Übersicht"><div className="page">
+ return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} title={title} mode="Büro" active="Übersicht"><div className="page">
  <PageHead title="Werkstattübersicht" subtitle={live.isLive?'Live-Daten deiner Werkstatt – Änderungen erscheinen auf allen Geräten.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}><div className="head-actions"><span className="realtime"><i/> {live.isLive?'Echtzeit verbunden':'Demo-Modus'}</span><button className="btn primary"><Plus size={16}/> Neue Annahme</button></div></PageHead>
  {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
  <div className="metrics"><article><small>AKTIVE VORGÄNGE</small><b>{displayJobs.length}</b><span>gesamt</span></article><article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>Termin prüfen</span></article><article><small>KUNDENAUFNAHME</small><b>{live.isLive?live.customerRequests.length:1}</b><span>offen</span></article><article><small>FREIGABEN</small><b>{counts.approval??0}</b><span>beim Kunden</span></article></div>
@@ -145,7 +146,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    return'Öffnen';
  };
 
- return <Shell onHome={()=>setView('home')} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
+ return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
  {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
  <div className="workshop-grid"><section className="panel queue"><div className="panel-title"><div><span className="overline">OFFENE ARBEITEN</span><h3>{queue.length} Fahrzeuge in der Werkstatt</h3></div><b>{queue.length}</b></div>
  {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Sobald das Büro ein Fahrzeug als eingetroffen markiert oder eine Reparatur freigegeben wird, erscheint es hier.</span></div>}
@@ -300,7 +301,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  };
 
  const title=name.trim()||'Deine Werkstatt';
- return <Shell onHome={()=>setView('home')} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><button className="btn primary" disabled={busy} onClick={()=>void save()}>{busy?'Speichert …':live.identity?'Änderungen speichern':'Werkstatt anlegen'}</button></PageHead>
+ return <Shell onHome={()=>setView('home')} onSettings={()=>setView('branding')} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><button className="btn primary" disabled={busy} onClick={()=>void save()}>{busy?'Speichert …':live.identity?'Änderungen speichern':'Werkstatt anlegen'}</button></PageHead>
  {error&&<div className="workspace-alert">{error}</div>}
  {!live.identity&&<div className="onboarding-note"><ShieldCheck/><div><b>Neue Werkstatt</b><span>Dein Profil wird angelegt, ist aber erst nach MotorAtlas-Verifizierung öffentlich auf der Deutschlandkarte sichtbar.</span></div></div>}
  <div className="branding-fields">
@@ -309,5 +310,6 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
   <section className="panel preview"><span className="overline">LIVE-VORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>{title.slice(0,2).toUpperCase()}</span>}</div><div><b>{title}</b><small className={verified?'verified-copy':'pending-copy'}><ShieldCheck size={14}/> {verified?'Verifizierte Werkstatt':'Verifizierung ausstehend'}</small></div></div><div className="preview-order"><Status stage="repair"/><h3>BMW X3 3.0i</h3><small>Auftrag #184 · Reparatur freigegeben</small><button className="btn primary full">Auftrag öffnen</button></div></section></div>
  </div>
  <section className="panel org-mode"><span className="overline">ORGANISATION</span><h3>Die Oberfläche passt sich an deinen Betrieb an.</h3><div><button className={mode==='solo'?'selected':''} onClick={()=>setMode('solo')}><Building2/><b>Einzelbetrieb</b><span>Eine Person sieht Büro und Werkstatt in einem flüssigen Ablauf.</span></button><button className={mode==='team'?'selected':''} onClick={()=>setMode('team')}><Users/><b>Team-Betrieb</b><span>Büro, Mechaniker und individuelle Berechtigungen arbeiten synchron.</span></button></div></section>
+ {live.identity?.role==='owner'&&mode==='team'&&<TeamManager workshopId={live.identity.workshopId} currentUserId={live.identity.userId}/>}
  </div></Shell>;
 }
