@@ -4,7 +4,7 @@ import {
   Mail, MailCheck, MapPin, MessageCircle, RefreshCw, ShieldCheck, Sparkles, UserRound, Users, WalletCards
 } from 'lucide-react';
 import { backendConfigured, supabase } from './lib';
-import { claimMyWorkshopInvites, signUpCustomer } from './api';
+import { authReturnUrl, claimMyWorkshopInvites, signUpCustomer } from './api';
 import type { AppView } from './components';
 
 async function resolveSignedInView():Promise<AppView>{
@@ -19,7 +19,7 @@ async function resolveSignedInView():Promise<AppView>{
   return'customer';
 }
 
-type Tab='start'|'login'|'customer'|'workshop'|'verify'|'reset'|'password';
+type Tab='start'|'login'|'customer'|'workshop'|'verify'|'confirmed'|'reset'|'password';
 
 const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{icon:any;title:string;text:string}>}>={
   start:{
@@ -72,6 +72,16 @@ const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{i
       {icon:RefreshCw,title:'Mail erneut anfordern',text:'Falls nichts ankommt, kannst du den Versand direkt noch einmal anstoßen.'}
     ]
   },
+  confirmed:{
+    kicker:'WILLKOMMEN BEI MOTORATLAS',
+    title:'Deine E-Mail-Adresse ist erfolgreich bestätigt.',
+    text:'Dein MotorAtlas-Konto ist jetzt aktiviert. Melde dich anschließend mit deiner E-Mail-Adresse und deinem Passwort an.',
+    items:[
+      {icon:CheckCircle2,title:'E-Mail bestätigt',text:'Deine E-Mail-Adresse wurde erfolgreich verifiziert und deinem Konto zugeordnet.'},
+      {icon:ShieldCheck,title:'Konto aktiviert',text:'Die Registrierung ist abgeschlossen und dein Zugang kann jetzt sicher verwendet werden.'},
+      {icon:ArrowRight,title:'Weiter zur Anmeldung',text:'Melde dich jetzt an. MotorAtlas öffnet danach automatisch den Bereich, der zu deinem Konto gehört.'}
+    ]
+  },
   reset:{
     kicker:'PASSWORT ZURÜCKSETZEN',
     title:'Zugang verloren? Wir schicken dir einen sicheren Rücksetz-Link.',
@@ -95,7 +105,9 @@ const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{i
 };
 
 function initialTab():Tab{
-  if(new URLSearchParams(location.search).get('recovery')==='1')return'password';
+  const params=new URLSearchParams(location.search);
+  if(params.get('confirmed')==='1')return'confirmed';
+  if(params.get('recovery')==='1')return'password';
   const mode=sessionStorage.getItem('motoratlas_access_mode');
   sessionStorage.removeItem('motoratlas_access_mode');
   return mode==='login'||mode==='customer'||mode==='workshop'||mode==='start'?mode:'start';
@@ -129,18 +141,27 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     return()=>data.subscription.unsubscribe();
   },[]);
 
+  const continueAfterConfirmation=async()=>{
+    if(supabase){
+      try{await supabase.auth.signOut()}catch{}
+    }
+    history.replaceState({},'',location.pathname+'#/anmelden');
+    setEmail('');
+    setPassword('');
+    setMessage('');
+    setResendStatus('');
+    setTabState('login');
+  };
+
   const resendConfirmation=async()=>{
     if(!backendConfigured||!supabase||!pendingEmail)return;
     setResendBusy(true);
     setResendStatus('');
     try{
-      const base=new URL('./',document.baseURI);
-      base.search='app=1';
-      base.hash='';
       const {error}=await supabase.auth.resend({
         type:'signup',
         email:pendingEmail,
-        options:{emailRedirectTo:base.toString()}
+        options:{emailRedirectTo:authReturnUrl('confirmed=1')}
       });
       if(error){
         if(error.status===429){
@@ -167,10 +188,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     setBusy(true);
     try{
       if(tab==='reset'){
-        const base=new URL('./',document.baseURI);
-        base.search='recovery=1';
-        base.hash='';
-        const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:base.toString()});
+        const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:authReturnUrl('recovery=1')});
         if(error)throw error;
         setMessage('Wenn zu dieser E-Mail ein Konto existiert, wurde ein Link zum Zurücksetzen des Passworts versendet.');
         return;
@@ -269,6 +287,36 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           </div>
 
           <button className="access-existing" onClick={()=>setTab('login')}>Schon registriert? <b>Jetzt anmelden</b></button>
+        </>:tab==='confirmed'?<>
+          <div className="access-verify">
+            <div className="access-verify-icon"><CheckCircle2/></div>
+            <span className="access-verify-kicker">E-MAIL ERFOLGREICH BESTÄTIGT</span>
+            <h2>Herzlich willkommen bei MotorAtlas</h2>
+            <p className="access-verify-lead">Deine E-Mail-Adresse wurde bestätigt und dein MotorAtlas-Konto ist jetzt aktiviert.</p>
+
+            <div className="access-verify-paths">
+              <article>
+                <span>REGISTRIERUNG ABGESCHLOSSEN</span>
+                <b>Dein Konto ist bereit</b>
+                <p>Du kannst dich jetzt mit deiner bestätigten E-Mail-Adresse und deinem Passwort anmelden.</p>
+              </article>
+              <article className="existing">
+                <span>NÄCHSTER SCHRITT</span>
+                <b>Jetzt bei MotorAtlas anmelden</b>
+                <p>Nach der Anmeldung erkennt MotorAtlas automatisch, ob du als Autofahrer oder Werkstatt startest, und öffnet den passenden Bereich.</p>
+              </article>
+            </div>
+
+            <div className="access-verify-steps">
+              <span><b>✓</b> E-Mail-Adresse bestätigt</span>
+              <span><b>✓</b> Konto aktiviert</span>
+              <span><b>3</b> Jetzt sicher anmelden</span>
+            </div>
+
+            <button className="btn primary xl full access-submit" onClick={continueAfterConfirmation}>
+              Zur Anmeldung <ArrowRight/>
+            </button>
+          </div>
         </>:tab==='verify'?<>
           <div className="access-verify">
             <div className="access-verify-icon"><MailCheck/></div>
