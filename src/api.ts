@@ -388,7 +388,8 @@ export type CustomerVehicle={
   firstRegistration?:string|null;photoPath:string;
 };
 export type CustomerOrder={
-  id:string;orderNumber:string;vehicleId:string;stage:LiveStage;rawStage:string;updatedAt:string;workshopId:string;
+  id:string;orderNumber:string;vehicleId:string;serviceRequestId?:string|null;appointmentId?:string|null;
+  stage:LiveStage;rawStage:string;updatedAt:string;workshopId:string;
 };
 export type CustomerWorkshop={
   workshopId:string;linkId:string;isPrimary:boolean;name:string;street:string;postalCode:string;city:string;
@@ -418,13 +419,13 @@ export async function loadCustomerWorkspace():Promise<{
       .eq('owner_user_id',auth.user.id).is('archived_at',null).order('created_at',{ascending:true});
   if(vehicleResult.error)throw vehicleResult.error;
 
-  const orderResult=await client.from('work_orders').select('id,order_number,vehicle_id,stage,updated_at,workshop_id')
+  const orderResult=await client.from('work_orders').select('id,order_number,vehicle_id,service_request_id,appointment_id,stage,updated_at,workshop_id')
       .eq('customer_user_id',auth.user.id).neq('stage','cancelled').order('updated_at',{ascending:false});
   if(orderResult.error)throw orderResult.error;
 
   const requestResult=await client.from('service_requests')
       .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
-      .eq('customer_user_id',auth.user.id).not('status','in','("draft","cancelled","converted")').order('created_at',{ascending:false});
+      .eq('customer_user_id',auth.user.id).not('status','in','("draft","cancelled")').order('created_at',{ascending:false});
   if(requestResult.error)throw requestResult.error;
 
   const relationshipRequestResult=await client.from('workshop_customer_requests')
@@ -447,7 +448,10 @@ export async function loadCustomerWorkspace():Promise<{
     :{data:[],error:null} as any;
   if(workshopResult.error)throw workshopResult.error;
 
-  const requestIds=((requestResult.data??[]) as any[]).map(request=>request.id);
+  const requestIds=[...new Set([
+    ...((requestResult.data??[]) as any[]).map(request=>request.id),
+    ...((orderResult.data??[]) as any[]).map(order=>order.service_request_id).filter(Boolean)
+  ])];
   const appointmentResult=requestIds.length
     ?await client.from('appointments').select('id,service_request_id,workshop_id,starts_at,ends_at,status,note').in('service_request_id',requestIds).not('status','eq','cancelled').order('created_at',{ascending:false})
     :{data:[],error:null} as any;
@@ -460,8 +464,8 @@ export async function loadCustomerWorkspace():Promise<{
       firstRegistration:v.first_registration,photoPath:v.photo_path
     })),
     orders:((orderResult.data??[]) as any[]).map(o=>({
-      id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,stage:mapOrderStage(o.stage),rawStage:o.stage,
-      updatedAt:o.updated_at,workshopId:o.workshop_id
+      id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,serviceRequestId:o.service_request_id,appointmentId:o.appointment_id,
+      stage:mapOrderStage(o.stage),rawStage:o.stage,updatedAt:o.updated_at,workshopId:o.workshop_id
     })),
     workshops:((linkResult.data??[]) as any[]).map(link=>{
       const workshop=workshopMap.get(link.workshop_id) as any;
