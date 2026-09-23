@@ -171,6 +171,7 @@ export async function markVehicleArrived(workOrderId:string){
 }
 export type WorkshopMemberOption={
   userId:string;displayName:string;role:string;permissions:Record<string,unknown>;
+  canDiagnosis:boolean;canRepair:boolean;
 };
 
 export async function listAssignableWorkshopMembers(workshopId:string):Promise<WorkshopMemberOption[]>{
@@ -178,16 +179,22 @@ export async function listAssignableWorkshopMembers(workshopId:string):Promise<W
     .select('user_id,display_name,role,permissions')
     .eq('workshop_id',workshopId).eq('active',true).order('created_at',{ascending:true});
   if(error)throw error;
-  return((data??[]) as any[]).map(member=>({
-    userId:member.user_id,
-    displayName:member.display_name||(
-      member.role==='owner'?'Inhaber':
-      member.role==='office'?'Büro':
-      member.role==='mechanic'?'Mechaniker':'Mitarbeiter'
-    ),
-    role:member.role,
-    permissions:(member.permissions??{}) as Record<string,unknown>
-  }));
+  return((data??[]) as any[]).map(member=>{
+    const permissions=(member.permissions??{}) as Record<string,unknown>;
+    const role=member.role as string;
+    return{
+      userId:member.user_id,
+      displayName:member.display_name||(
+        role==='owner'?'Inhaber':
+        role==='office'?'Büro':
+        role==='mechanic'?'Mechaniker':'Mitarbeiter'
+      ),
+      role,
+      permissions,
+      canDiagnosis:role==='owner'||role==='mechanic'||(role==='custom'&&permissions.diagnosis===true),
+      canRepair:role==='owner'||role==='mechanic'||(role==='custom'&&permissions.repair===true)
+    };
+  });
 }
 
 export async function assignWorkToMember(workOrderId:string,type:'diagnosis'|'repair',memberUserId:string){
