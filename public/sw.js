@@ -1,4 +1,4 @@
-const CACHE='motoratlas-shell-v5';
+const CACHE='motoratlas-shell-v6';
 const ROOT=self.registration.scope;
 const CORE=[
   ROOT,
