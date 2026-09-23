@@ -598,8 +598,8 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  const live=useWorkshopWorkspace();
  const allJobs=(live.isLive?live.jobs:jobs) as DisplayJob[];
  const queue=live.isLive
-   ?allJobs.filter(job=>['waiting_diagnosis','diagnosing','ready_for_repair','repairing'].includes(job.rawStage??''))
-   :allJobs.filter(job=>job.stage==='arrived'||job.stage==='repair');
+   ?allJobs.filter(job=>Boolean(job.arrivedAt)&&!['closed','cancelled'].includes(job.rawStage??''))
+   :allJobs.filter(job=>job.stage==='arrived'||job.stage==='diagnosis'||job.stage==='approval'||job.stage==='repair'||job.stage==='pickup');
  const [selectedId,setSelectedId]=useState<string>(()=>sessionStorage.getItem('motoratlas_workshop_selected_order')??queue[0]?.id??'');
  const selected=queue.find(job=>job.id===selectedId)??queue[0];
  const [chat,setChat]=useState(false);
@@ -630,6 +630,19 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  const workType=(job:DisplayJob):'diagnosis'|'repair'=>job.rawStage==='ready_for_repair'||job.rawStage==='repairing'?'repair':'diagnosis';
  const canAssign=(job:DisplayJob)=>job.rawStage==='waiting_diagnosis'||job.rawStage==='ready_for_repair';
  const assignmentLabel=(job:DisplayJob)=>workType(job)==='diagnosis'?'Diagnose':'Reparatur';
+ const workshopState=(job:DisplayJob)=>{
+   switch(job.rawStage){
+     case'waiting_diagnosis':return{label:'Eingetroffen',detail:'Wartet auf Diagnose-Zuordnung',tone:'waiting'};
+     case'diagnosing':return{label:'Diagnose läuft',detail:job.assignee?'Bei '+job.assignee:'In Arbeit',tone:'active'};
+     case'awaiting_quote':return{label:'Diagnose fertig',detail:'Kostenvoranschlag wird vorbereitet',tone:'office'};
+     case'awaiting_customer_approval':return{label:'Freigabe offen',detail:'Wartet auf Kundenentscheidung',tone:'office'};
+     case'ready_for_repair':return{label:'Reparatur bereit',detail:'Wartet auf Reparatur-Zuordnung',tone:'waiting'};
+     case'repairing':return{label:'Reparatur läuft',detail:job.assignee?'Bei '+job.assignee:'In Arbeit',tone:'active'};
+     case'repair_complete':return{label:'Arbeit fertig',detail:'Rechnung / Abholung vorbereiten',tone:'done'};
+     case'ready_for_pickup':return{label:'Abholbereit',detail:'Fahrzeug wartet auf Abholung',tone:'done'};
+     default:return{label:'In der Werkstatt',detail:'Vorgang öffnen',tone:'office'};
+   }
+ };
 
  const assign=async()=>{
    if(!selected||!memberId||busy||!canAssign(selected))return;
@@ -686,17 +699,15 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
        <div className="panel-title"><div><span className="overline">FAHRZEUGE IN DER WERKSTATT</span><h3>{queue.length} offene Arbeiten</h3></div><b>{queue.length}</b></div>
        {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Nach dem Check-in erscheint das Fahrzeug hier automatisch.</span></div>}
        {queue.map((job,index)=>{
-         const inProgress=job.rawStage==='diagnosing'||job.rawStage==='repairing';
+         const state=workshopState(job);
          return <button key={job.id} className={selected?.id===job.id?'workshop-queue-card selected':'workshop-queue-card'} onClick={()=>setSelectedId(job.id)}>
-           <span className={'queue-index '+(workType(job)==='repair'?'repair':'')}>{workType(job)==='repair'?'R':index+1}</span>
+           <span className={'queue-index '+(workType(job)==='repair'?'repair':'')}>{job.rawStage==='ready_for_repair'||job.rawStage==='repairing'?'R':index+1}</span>
            <span className="queue-copy">
              <b>{job.vehicle}</b>
              <small>{job.plate} · Auftrag #{job.orderNumber??job.id.slice(-6)}</small>
-             <p>{inProgress
-               ?assignmentLabel(job)+' läuft'+(job.assignee?' · '+job.assignee:'')
-               :assignmentLabel(job)+' wartet auf Zuordnung'}</p>
+             <p>{state.detail}</p>
            </span>
-           <span className={'queue-state '+(inProgress?'active':'waiting')}>{inProgress?'In Arbeit':'Eingetroffen'}</span>
+           <span className={'queue-state '+state.tone}>{state.label}</span>
          </button>;
        })}
      </section>
@@ -745,10 +756,13 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
              {live.members.filter(member=>workType(selected)==='diagnosis'?member.canDiagnosis:member.canRepair).map(member=><option key={member.userId} value={member.userId}>{member.displayName} · {roleLabel(member.role)}{member.userId===live.identity?.userId?' · Ich':''}</option>)}
            </select></label>
            <button className="btn primary xl full" disabled={busy||!memberId} onClick={()=>void assign()}>{busy?'Wird zugeordnet …':memberId===live.identity?.userId?(workType(selected)==='diagnosis'?'Auftrag annehmen & Diagnose starten':'Reparatur übernehmen & starten'):(workType(selected)==='diagnosis'?'Zuordnen & Diagnose starten':'Zuordnen & Reparatur starten')}</button>
-         </div>:<div className="work-assignment-active">
+         </div>:selected.rawStage==='diagnosing'||selected.rawStage==='repairing'?<div className="work-assignment-active">
            <UserRound/>
            <div><small>{assignmentLabel(selected).toUpperCase()} IN ARBEIT</small><b>{selected.assignee??'Werkstattteam'}</b><span>{selected.assignmentClaimedAt?new Date(selected.assignmentClaimedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Startzeit wird synchronisiert'}</span></div>
            {owned(selected)?<button className="btn primary" disabled={busy} onClick={()=>void runOwnedAction()}>{selected.rawStage==='diagnosing'?'Diagnose eintragen':busy?'Bitte warten …':'Reparatur abschließen'}</button>:<span className="assigned-other">Zugeordnet</span>}
+         </div>:<div className="work-stage-handoff">
+           <div><span className="overline">AKTUELLER STATUS</span><h3>{workshopState(selected).label}</h3><p>{workshopState(selected).detail}. Das Fahrzeug bleibt in der Übersicht „In der Werkstatt“, bis es abgeholt und der Auftrag geschlossen wurde.</p></div>
+           <button className="btn secondary" onClick={()=>{sessionStorage.setItem('motoratlas_office_section','Übersicht');setView('office')}}>Zum Büro-Vorgang</button>
          </div>}
 
          <div className="work-detail-actions">
@@ -972,25 +986,32 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    return <div className="customer-appointments-view">
      {sortedAppointments.map(appointment=>{
        const request=live.requests.find(item=>item.id===appointment.serviceRequestId);
-       const vehicle=request?live.vehicles.find(item=>item.id===request.vehicleId):null;
+       const relatedOrder=live.orders.find(item=>item.serviceRequestId===appointment.serviceRequestId);
+       const arrivedAt=relatedOrder?.progress?.arrivedAt??null;
+       const arrived=Boolean(arrivedAt);
+       const vehicle=request?live.vehicles.find(item=>item.id===request.vehicleId):relatedOrder?live.vehicles.find(item=>item.id===relatedOrder.vehicleId):null;
        const workshop=live.workshops.find(item=>item.workshopId===appointment.workshopId)??primaryWorkshop;
        const start=new Date(appointment.startsAt);
-       const confirmed=appointment.status==='confirmed';
-       const proposed=appointment.status==='proposed';
+       const confirmed=appointment.status==='confirmed'&&!arrived;
+       const proposed=appointment.status==='proposed'&&!arrived;
        const cancelled=appointment.status==='cancelled';
-       return <article className={'panel customer-appointment-card '+appointment.status} key={appointment.id}>
+       const displayState=arrived?'arrived':appointment.status;
+       return <article className={'panel customer-appointment-card '+displayState} key={appointment.id}>
          <div className="customer-appointment-date">
            <span>{relativeDayLabel(start,now)}</span><b>{start.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</b><small>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</small>
          </div>
          <div className="customer-appointment-main">
-           <div className="customer-appointment-title"><div><small>{proposed?'TERMINVORSCHLAG':cancelled?'STORNIERT':'BESTÄTIGTER TERMIN'}</small><h3>{request?.complaint&&request.complaint!=='Keine Fehlerbeschreibung angegeben.'?request.complaint:'Werkstatttermin'}</h3></div><span>{proposed?'Antwort nötig':cancelled?'Storniert':'Bestätigt'}</span></div>
-           <p>{confirmed
-             ?<>Dein Termin ist am <b>{start.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</b> um <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</b> mit deinem KFZ <b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b>.</>
-             :proposed
-               ?<>Die Werkstatt schlägt dir <b>{start.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})}</b> um <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</b> für <b>{vehicle?[vehicle.make,vehicle.model].filter(Boolean).join(' '):'dein Fahrzeug'}</b> vor.</>
-               :<>Dieser Termin wurde storniert.{appointment.cancellationReason?' Grund: '+appointment.cancellationReason:''}</>}</p>
+           <div className="customer-appointment-title"><div><small>{arrived?'FAHRZEUG EINGETROFFEN':proposed?'TERMINVORSCHLAG':cancelled?'STORNIERT':'BESTÄTIGTER TERMIN'}</small><h3>{request?.complaint&&request.complaint!=='Keine Fehlerbeschreibung angegeben.'?request.complaint:'Werkstatttermin'}</h3></div><span>{arrived?'Eingetroffen':proposed?'Antwort nötig':cancelled?'Storniert':'Bestätigt'}</span></div>
+           <p>{arrived
+             ?<>Dein Fahrzeug <b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b> wurde am <b>{new Date(arrivedAt!).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b> von der Werkstatt als eingetroffen erfasst. Der Termin ist damit abgeschlossen; der weitere Fortschritt läuft über den Auftrag.</>
+             :confirmed
+               ?<>Dein Termin ist am <b>{start.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</b> um <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</b> mit deinem KFZ <b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b>.</>
+               :proposed
+                 ?<>Die Werkstatt schlägt dir <b>{start.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})}</b> um <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</b> für <b>{vehicle?[vehicle.make,vehicle.model].filter(Boolean).join(' '):'dein Fahrzeug'}</b> vor.</>
+                 :<>Dieser Termin wurde storniert.{appointment.cancellationReason?' Grund: '+appointment.cancellationReason:''}</>}</p>
            <div className="customer-appointment-meta"><span><Car/> {vehicle?.licensePlate??'—'}</span><span><Building2/> {workshop?.name??'Werkstatt'}</span></div>
            {confirmed&&<strong className={start.getTime()<now.getTime()-60_000?'late':''}>{appointmentCountdownText(appointment.startsAt,now)}</strong>}
+           {arrived&&<strong className="arrived">Check-in abgeschlossen · kein Terminüberzug mehr</strong>}
          </div>
          <div className="customer-appointment-actions">
            {proposed&&<><button className="btn secondary" disabled={busy} onClick={()=>void answerAppointment(appointment.id,'declined')}>Passt nicht</button><button className="btn primary" disabled={busy} onClick={()=>void answerAppointment(appointment.id,'confirmed')}>{busy?'Speichert …':'Termin bestätigen'}</button></>}
