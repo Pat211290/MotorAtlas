@@ -3,6 +3,7 @@ import {
   ArrowLeft,ArrowRight,Building2,Car,Eye,EyeOff,LockKeyhole,Mail,MapPin,ShieldCheck,UserRound
 } from 'lucide-react';
 import { Marketing } from './Marketing';
+import { WorkshopFinder } from './WorkshopFinder';
 import { BrandingPage, CustomerPortal, OfficeDashboard, WorkshopBoard } from './Workspace';
 import { Brand, type AppView } from './components';
 import { backendConfigured, supabase } from './lib';
@@ -99,6 +100,7 @@ export default function App(){
   return <div className="site">
     <Splash/>
     {view==='home'&&<Marketing setView={setView}/>}
+    {view==='finder'&&<WorkshopFinder setView={setView}/>}
     {view==='login'&&<Login setView={setView}/>}
     {view==='office'&&<OfficeDashboard setView={setView}/>}
     {view==='workshop'&&<WorkshopBoard setView={setView}/>}
