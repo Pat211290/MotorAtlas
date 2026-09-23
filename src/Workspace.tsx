@@ -19,25 +19,26 @@ import { VerificationPanel } from './VerificationPanel';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente';
+type ShellNavItem=[ShellSection,typeof Home,string?];
 
 function Shell({
-  children,title,mode,active,onHome,onSettings,onNavigate
+  children,title,mode,active,onHome,onSettings,onNavigate,navItems
 }:{
   children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void;
-  onSettings?:()=>void;onNavigate?:(section:ShellSection)=>void;
+  onSettings?:()=>void;onNavigate?:(section:ShellSection)=>void;navItems?:ShellNavItem[];
 }){
-  const items:Array<[ShellSection,typeof Home]>=[
+  const items:ShellNavItem[]=navItems??[
     ['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText]
   ];
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="side-brand" onClick={onHome}><Brand compact/></button>
-      <nav>{items.map(([name,Icon])=><button
+      <nav>{items.map(([name,Icon,label])=><button
         key={name}
         className={active===name?'active':''}
         onClick={()=>onNavigate?.(name)}
         aria-current={active===name?'page':undefined}
-      ><Icon size={18}/><span>{name}</span></button>)}
+      ><Icon size={18}/><span>{label??name}</span></button>)}
       {onSettings&&<button className="mobile-settings" onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}</nav>
       <div className="side-bottom">
         {onSettings&&<button onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}
