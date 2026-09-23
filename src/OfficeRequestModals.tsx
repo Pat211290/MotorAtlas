@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { CalendarDays, Car, UserRound, X } from 'lucide-react';
+import { CalendarDays, Car, MapPin, Phone, UserRound, X } from 'lucide-react';
 import { decideCustomerRequest, declineServiceRequest, proposeAppointment, type WorkshopServiceRequest } from './api';
 import { QuarterHourDateTime } from './QuarterHourDateTime';
+import { VehiclePhoto } from './VehicleModal';
 
 export function CustomerAdmissionModal({
   open,onClose,onDone,request
@@ -20,7 +21,7 @@ export function CustomerAdmissionModal({
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="workflow-modal admission-modal" onMouseDown={e=>e.stopPropagation()}>
     <header><div className="modal-icon"><UserRound/></div><div><span>NEUE KUNDENANFRAGE</span><h2>{profile?.full_name||'Neuer Kunde'}</h2></div><button onClick={onClose}><X/></button></header>
     <div className="admission-body">
-      <div className="admission-person"><UserRound/><div><b>{profile?.full_name||'Name wird nach Freigabe sichtbar'}</b>{profile&&<span>{profile.street}<br/>{profile.postal_code} {profile.city}</span>}</div></div>
+      <div className="admission-person"><UserRound/><div><b>{profile?.full_name||'Name wird nach Freigabe sichtbar'}</b>{profile&&<span>{profile.phone&&<><Phone size={13}/> {profile.phone}<br/></>}{profile.street}<br/>{profile.postal_code} {profile.city}</span>}</div></div>
       {request.message&&<div className="customer-message"><small>NACHRICHT DES KUNDEN</small><p>{request.message}</p></div>}
       <div className="legal-note">Die Aufnahme bestätigt nur die Werkstattbeziehung. Einen Reparaturauftrag kann der Kunde erst danach für ein hinterlegtes Fahrzeug erstellen.</div>
       {error&&<div className="modal-error">{error}</div>}
@@ -67,7 +68,25 @@ export function ServiceRequestOfficeModal({
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="workflow-modal service-office-modal" onMouseDown={e=>e.stopPropagation()}>
     <header><div className="modal-icon"><CalendarDays/></div><div><span>WERKSTATTANFRAGE</span><h2>{request.vehicle}</h2><small>{request.plate} · {request.customerName}</small></div><button onClick={onClose}><X/></button></header>
     <form onSubmit={propose}>
-      <div className="service-request-summary"><Car/><div><small>KUNDENBEANSTANDUNG</small><b>{request.complaint}</b><span>{request.driveable===false?'Nicht fahrbereit':request.driveable===true?'Fahrbereit':'Fahrbereitschaft unklar'} · Warnleuchte: {request.warningLevel==='red'?'rot':request.warningLevel==='yellow'?'gelb':request.warningLevel==='none'?'keine':'unklar'}</span></div></div>
+      <div className="service-request-vehicle">
+        <VehiclePhoto path={request.photoPath} alt={request.vehicle}/>
+        <div className="service-request-vehicle-copy">
+          <small>FAHRZEUG</small><h3>{request.vehicle}</h3><b>{request.plate}</b>
+          <div className="vehicle-data-grid">
+            <span><small>Erstzulassung</small><b>{request.firstRegistration?new Date(request.firstRegistration).toLocaleDateString('de-DE'):'—'}</b></span>
+            <span><small>Kilometer</small><b>{request.mileage!=null?request.mileage.toLocaleString('de-DE')+' km':'—'}</b></span>
+            <span><small>HSN / TSN</small><b>{[request.hsn,request.tsn].filter(Boolean).join(' / ')||'—'}</b></span>
+            <span><small>FIN / VIN</small><b>{request.vin||'—'}</b></span>
+          </div>
+        </div>
+      </div>
+      <div className="service-customer-card">
+        <UserRound/><div><small>KUNDE</small><b>{request.customerName}</b>
+          <span>{request.customerPhone?<><Phone size={13}/> {request.customerPhone}</>:<>Keine Telefonnummer hinterlegt</>}</span>
+          <span><MapPin size={13}/> {[request.customerStreet,request.customerPostalCode,request.customerCity].filter(Boolean).join(', ')||'Keine Anschrift hinterlegt'}</span>
+        </div>
+      </div>
+      <div className="service-request-summary"><Car/><div><small>KUNDENWUNSCH / BEANSTANDUNG</small><b>{request.complaint}</b><span>{request.driveable===false?'Nicht fahrbereit':request.driveable===true?'Fahrbereit':'Fahrbereitschaft unklar'} · Warnleuchte: {request.warningLevel==='red'?'rot':request.warningLevel==='yellow'?'gelb':request.warningLevel==='none'?'keine':'unklar'}</span></div></div>
       {request.desiredStart&&<div className="desired-slot"><small>WUNSCH DES KUNDEN</small><b>{new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b></div>}
       <div className="form-two">
         <label><span>Terminvorschlag <small>15-Minuten-Takt</small></span><QuarterHourDateTime value={startsAt} onChange={setStartsAt} required/></label>
