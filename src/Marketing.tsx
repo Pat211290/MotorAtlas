@@ -90,7 +90,7 @@ export function Marketing({setView}:{setView:(v:AppView)=>void}){
 
   <section className="section wrap device-section"><SectionIntro kicker="AUF JEDEM GERÄT" title={<>Ein Designsystem. <em>Drei Arbeitswelten.</em></>} text="Am Büro-PC viel Überblick, auf dem Werkstatt-Tablet große Aktionen, auf dem Kundenhandy nur das Wesentliche."/><div className="devices"><article><MonitorSmartphone/><b>PC</b><span>Dashboard, Termine, Dokumente, Kunden</span></article><article><Smartphone/><b>Smartphone</b><span>Anfrage, Freigabe, Chat, Werkstattkarte</span></article><article><Car/><b>Werkstatt</b><span>Diagnose- und Reparaturqueue ohne Bürokratie</span></article></div></section>
 
-  <section className="cta"><div className="wrap"><div><span>MOTORATLAS</span><h2>Bereit für eine Werkstattbeziehung, die endlich digital zusammenpasst?</h2></div><button className="btn white xl" onClick={()=>setView('login')}>Jetzt starten <ArrowRight/></button></div></section>
+  <section className="cta"><div className="wrap"><div><span>MOTORATLAS</span><h2>Bereit für eine Werkstattbeziehung, die endlich digital zusammenpasst?</h2></div><button className="btn white xl" onClick={()=>{sessionStorage.setItem('motoratlas_access_mode','start');setView('login')}}>Kostenlos starten <ArrowRight/></button></div></section>
  </main><Footer setView={setView}/></>;
 }
 
