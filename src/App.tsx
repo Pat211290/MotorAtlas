@@ -139,6 +139,7 @@ function normalizeSignupCallback(){
   if(!raw)return;
   const params=new URLSearchParams(raw);
   if(params.get('type')!=='signup')return;
+  sessionStorage.setItem('motoratlas_signup_confirmed','1');
   history.replaceState({},'',authPath('bestaetigung'));
 }
 
