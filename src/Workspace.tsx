@@ -37,7 +37,8 @@ function Shell({
         className={active===name?'active':''}
         onClick={()=>onNavigate?.(name)}
         aria-current={active===name?'page':undefined}
-      ><Icon size={18}/><span>{name}</span></button>)}</nav>
+      ><Icon size={18}/><span>{name}</span></button>)}
+      {onSettings&&<button className="mobile-settings" onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}</nav>
       <div className="side-bottom">
         {onSettings&&<button onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}
         <button className="profile"><span>PW</span><div><b>{title}</b><small>{mode}</small></div></button>
@@ -326,9 +327,11 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false); const [requestModal,setRequestModal]=useState(false); const [directory,setDirectory]=useState(false);
  const [documents,setDocuments]=useState<any[]>([]); const [docError,setDocError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
  const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
- const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['declined','cancelled','converted'].includes(request.status)):null;
- const proposedAppointment=activeRequest?live.appointments.find(item=>item.serviceRequestId===activeRequest.id&&item.status==='proposed'):null;
- const activeVehicleId=activeOrder?.vehicleId??activeRequest?.vehicleId;
+ const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['cancelled','converted'].includes(request.status)):null;
+ const requestIsActive=Boolean(activeRequest&&activeRequest.status!=='declined');
+ const proposedAppointment=requestIsActive&&activeRequest?live.appointments.find(item=>item.serviceRequestId===activeRequest.id&&item.status==='proposed'):null;
+ const relationshipNotice=live.isLive?live.relationshipRequests.find(request=>request.status==='pending'||request.status==='rejected')??null:null;
+ const activeVehicleId=activeOrder?.vehicleId??(requestIsActive?activeRequest?.vehicleId:undefined);
  const activeVehicle=activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):live.vehicles[0];
 
  useEffect(()=>{
@@ -370,6 +373,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    if(activeRequest.status==='accepted')return'Die Werkstatt bereitet die Terminabstimmung vor.';
    if(activeRequest.status==='appointment_pending')return proposedAppointment?'Ein neuer Terminvorschlag wartet auf deine Entscheidung.':'Die Terminabstimmung läuft.';
    if(activeRequest.status==='appointment_confirmed')return'Der Termin ist bestätigt.';
+   if(activeRequest.status==='declined')return activeRequest.declineReason||'Die Werkstatt kann diese Anfrage derzeit nicht annehmen.';
    return'Anfrage wird bearbeitet.';
  };
 
@@ -378,6 +382,10 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    <div className="head-actions"><button className="btn secondary" onClick={()=>setDirectory(true)}><MapPin size={16}/> Werkstatt finden</button><button className="btn secondary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug</button><button className="btn secondary" onClick={()=>setChat(true)} disabled={live.isLive&&!activeOrder}><MessageCircle size={16}/> Chat {!live.isLive&&<span className="badge">1</span>}</button><button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Anfrage starten</button></div>
  </PageHead>
  {(live.error||docError)&&<div className="workspace-alert">{live.error??docError}</div>}
+ {relationshipNotice&&<div className={'relationship-notice '+relationshipNotice.status}>
+   <div><ShieldCheck/><span><small>{relationshipNotice.status==='rejected'?'KUNDENANFRAGE ABGELEHNT':'KUNDENANFRAGE LÄUFT'}</small><b>{relationshipNotice.workshopName}</b><p>{relationshipNotice.status==='rejected'?'Die Werkstatt hat deine Anfrage zur Kundenaufnahme abgelehnt. Du kannst eine andere Werkstatt auswählen oder später erneut anfragen.':'Deine Anfrage wurde an die Werkstatt übermittelt. Sobald sie antwortet, aktualisiert sich diese Seite automatisch.'}</p></span></div>
+   {relationshipNotice.status==='rejected'&&<button className="btn secondary" onClick={()=>setDirectory(true)}>Andere Werkstatt finden</button>}
+ </div>}
  {live.isLive?<div className="customer-layout">
    <div className="garage">{live.vehicles.length?live.vehicles.map((vehicle,index)=><VehicleCard key={vehicle.id} name={[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' ')} plate={vehicle.licensePlate} detail={`${vehicle.firstRegistration?new Date(vehicle.firstRegistration).getFullYear():'—'} · ${vehicle.mileage?.toLocaleString('de-DE')??'—'} km`} active={activeVehicleId===vehicle.id} stage={activeOrder?.vehicleId===vehicle.id?activeOrder.stage:activeRequest?.vehicleId===vehicle.id?'arrived':undefined} tone={index} photoPath={vehicle.photoPath}/>):<section className="panel vehicle-card empty-card"><Car size={30}/><h3>Noch kein Fahrzeug hinterlegt.</h3><small>Lege deinen ersten PKW an, um eine Werkstattanfrage zu starten.</small></section>}</div>
    <section className="panel timeline">
@@ -388,10 +396,12 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        {invoice&&<div className="customer-document-card invoice-card"><div><FileText/><span><small>RECHNUNG</small><b>{invoice.document_number||'Dokument'}</b></span><strong>{invoice.amount_total!=null?Number(invoice.amount_total).toLocaleString('de-DE',{style:'currency',currency:invoice.currency||'EUR'}):''}</strong></div><div><button className="btn primary" onClick={()=>void openDocument(invoice)}>Rechnung öffnen</button></div></div>}
        <Timeline title="Nächster Schritt" detail={activeOrder.stage==='approval'?'Kostenvoranschlag prüfen und freigeben.':activeOrder.stage==='repair'?'Die Werkstatt bearbeitet den freigegebenen Auftrag.':activeOrder.stage==='pickup'?'Fahrzeug ist abholbereit. Rechnung steht im Dokumentbereich bereit.':'Status wird automatisch mit der Werkstatt synchronisiert.'}/>
      </>:activeRequest?<>
-       <Timeline title="Anfrage gesendet" detail={`${new Date(activeRequest.createdAt).toLocaleString('de-DE')} · ${activeRequest.complaint}`} current={!proposedAppointment}/>
+       <Timeline title="Anfrage gesendet" detail={`${new Date(activeRequest.createdAt).toLocaleString('de-DE')} · ${activeRequest.complaint}`} current={requestIsActive&&!proposedAppointment}/>
        {activeRequest.desiredStart&&<Timeline title="Dein Wunschtermin" detail={new Date(activeRequest.desiredStart).toLocaleString('de-DE')}/>}
-       {proposedAppointment&&<div className="appointment-card"><div><CalendarDays/><span><small>TERMINVORSCHLAG DER WERKSTATT</small><b>{new Date(proposedAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b>{proposedAppointment.note&&<p>{proposedAppointment.note}</p>}</span></div><div><button className="btn secondary" disabled={busy} onClick={()=>void answerAppointment('declined')}>Passt nicht</button><button className="btn primary" disabled={busy} onClick={()=>void answerAppointment('confirmed')}>{busy?'Speichert …':'Termin bestätigen'}</button></div></div>}
-       <Timeline title="Aktueller Stand" detail={requestStatusText()} current={Boolean(proposedAppointment)}/>
+       {activeRequest.status==='declined'?<div className="request-declined-card"><ShieldCheck/><div><small>ANFRAGE ABGELEHNT</small><b>Die Werkstatt kann diese Anfrage nicht annehmen.</b><p>{requestStatusText()}</p>{activeRequest.declinedAt&&<span>{new Date(activeRequest.declinedAt).toLocaleString('de-DE')}</span>}</div><button className="btn secondary" onClick={()=>setRequestModal(true)}>Neue Anfrage</button></div>:<>
+         {proposedAppointment&&<div className="appointment-card"><div><CalendarDays/><span><small>TERMINVORSCHLAG DER WERKSTATT</small><b>{new Date(proposedAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b>{proposedAppointment.note&&<p>{proposedAppointment.note}</p>}</span></div><div><button className="btn secondary" disabled={busy} onClick={()=>void answerAppointment('declined')}>Passt nicht</button><button className="btn primary" disabled={busy} onClick={()=>void answerAppointment('confirmed')}>{busy?'Speichert …':'Termin bestätigen'}</button></div></div>}
+         <Timeline title="Aktueller Stand" detail={requestStatusText()} current={Boolean(proposedAppointment)}/>
+       </>}
      </>:<div className="timeline-empty"><b>Kein laufender Werkstattvorgang.</b><span>Mit „Anfrage starten“ meldest du ein Problem direkt für eines deiner Fahrzeuge.</span></div>}
    </section>
  </div>:
