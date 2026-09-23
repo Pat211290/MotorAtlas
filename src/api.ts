@@ -710,9 +710,14 @@ export function getWorkshopLogoPublicUrl(path:string){
   return db().storage.from('workshop-branding').getPublicUrl(path).data.publicUrl;
 }
 
-export async function geocodePublicWorkshop(workshop:PublicWorkshop){
+export function hasWorkshopCoordinates(workshop:Pick<PublicWorkshop,'latitude'|'longitude'>){
+  if(workshop.latitude==null||workshop.longitude==null)return false;
   const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
-  if(Number.isFinite(lat)&&Number.isFinite(lng))return{latitude:lat,longitude:lng};
+  return Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=47&&lat<=56&&lng>=5&&lng<=16;
+}
+
+export async function geocodePublicWorkshop(workshop:PublicWorkshop){
+  if(hasWorkshopCoordinates(workshop))return{latitude:Number(workshop.latitude),longitude:Number(workshop.longitude)};
   const address=[workshop.street,workshop.postal_code,workshop.city,'Deutschland'].filter(Boolean).join(', ');
   const key='motoratlas_geocode:'+address.toLowerCase();
   try{
