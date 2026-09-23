@@ -119,24 +119,41 @@ function viewFromHash(hash:string):AppView|null{
   return entry?.[0]??null;
 }
 
+function appBasePath(){
+  const path=new URL(import.meta.env.BASE_URL,location.origin).pathname;
+  return path.endsWith('/')?path:path+'/';
+}
+
+function authPath(segment:string){
+  return appBasePath()+segment.replace(/^\/+|\/+$/g,'');
+}
+
+function viewFromLocation():AppView|null{
+  const path=location.pathname.replace(/\/+$/,'');
+  if(path.endsWith('/anmelden')||path.endsWith('/bestaetigung')||path.endsWith('/passwort-zuruecksetzen'))return'login';
+  return viewFromHash(location.hash);
+}
+
 export default function App(){
-  const [view,setView]=useState<AppView>(()=>{
-    const params=new URLSearchParams(location.search);
-    if(params.get('recovery')==='1'||params.get('confirmed')==='1')return'login';
-    return viewFromHash(location.hash)??'home';
-  });
+  const [view,setView]=useState<AppView>(()=>viewFromLocation()??'home');
 
   const navigate=(next:AppView)=>{
     setView(next);
     const profileSlug=next==='workshop-profile'?sessionStorage.getItem('motoratlas_selected_workshop_slug'):null;
-    const target=next==='workshop-profile'&&profileSlug?'#/werkstatt/'+encodeURIComponent(profileSlug):viewHashes[next];
-    if(location.hash!==target)history.pushState({motorAtlasView:next},'',target);
+    let target:string;
+    if(next==='login'){
+      target=authPath('anmelden');
+    }else{
+      const hash=next==='workshop-profile'&&profileSlug?'#/werkstatt/'+encodeURIComponent(profileSlug):viewHashes[next];
+      target=appBasePath()+hash;
+    }
+    if(location.pathname+location.search+location.hash!==target)history.pushState({motorAtlasView:next},'',target);
     window.scrollTo({top:0,behavior:'auto'});
   };
 
   useEffect(()=>{
     const syncFromLocation=()=>{
-      const next=viewFromHash(location.hash);
+      const next=viewFromLocation();
       if(next)setView(next);
     };
     window.addEventListener('popstate',syncFromLocation);
@@ -164,7 +181,11 @@ export default function App(){
       'security-info':'MotorAtlas – Sicherheit & Transparenz',
       finder:'MotorAtlas – Werkstatt finden',
       'workshop-profile':'MotorAtlas – Werkstattprofil',
-      login:'MotorAtlas – Anmelden',
+      login:location.pathname.replace(/\/+$/,'').endsWith('/bestaetigung')
+        ?'MotorAtlas – E-Mail bestätigt'
+        :location.pathname.replace(/\/+$/,'').endsWith('/passwort-zuruecksetzen')
+          ?'MotorAtlas – Passwort zurücksetzen'
+          :'MotorAtlas – Anmelden',
       privacy:'MotorAtlas – Datenschutz',
       imprint:'MotorAtlas – Impressum'
     };
