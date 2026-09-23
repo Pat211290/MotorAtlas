@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Clock3, MapPin, MessageCircle, ShieldCheck, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Clock3, MapPin, MessageCircle, ShieldCheck, Sparkles, Wrench } from 'lucide-react';
 import { getWorkshopLogoPublicUrl, listPublicWorkshops, type PublicWorkshop } from './api';
 import type { AppView } from './components';
+import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
+function serviceLabel(code:string){
+  return WORKSHOP_SERVICE_OPTIONS.find(item=>item.code===code)?.label??code;
+}
 function servicesOf(value:unknown){
-  if(Array.isArray(value))return value.filter(item=>typeof item==='string') as string[];
-  if(value&&typeof value==='object')return Object.entries(value as Record<string,unknown>).filter(([,enabled])=>Boolean(enabled)).map(([name])=>name);
+  if(Array.isArray(value))return value.filter(item=>typeof item==='string').map(item=>serviceLabel(item as string)) as string[];
+  if(value&&typeof value==='object')return Object.entries(value as Record<string,unknown>).filter(([,enabled])=>Boolean(enabled)).map(([name])=>serviceLabel(name));
   return [];
 }
 function hoursOf(value:unknown){
@@ -50,7 +54,7 @@ export function PublicWorkshopProfile({setView}:{setView:(view:AppView)=>void}){
         <div className="wp-identity">
           <div className="wp-logo">{workshop.logo_path?<img src={getWorkshopLogoPublicUrl(workshop.logo_path)} alt={workshop.name+' Logo'}/>:<Building2/>}</div>
           <div className="wp-title">
-            <span><ShieldCheck/> Verifizierte MotorAtlas-Werkstatt</span>
+            <div className="wp-badges"><span><ShieldCheck/> Verifizierte MotorAtlas-Werkstatt</span>{workshop.master_workshop_verified_at&&<span className="master"><Sparkles/> Meisterwerkstatt</span>}</div>
             <h1>{workshop.name}</h1>
             <p><MapPin/> {workshop.street}, {workshop.postal_code} {workshop.city}</p>
           </div>
@@ -88,7 +92,7 @@ export function PublicWorkshopProfile({setView}:{setView:(view:AppView)=>void}){
         <article className="wp-contact-card">
           <span>WERKSTATT AUF EINEN BLICK</span>
           <div><MapPin/><p><b>Adresse</b>{workshop.street}<br/>{workshop.postal_code} {workshop.city}</p></div>
-          <div><ShieldCheck/><p><b>Status</b>Von MotorAtlas öffentlich verifiziert</p></div>
+          <div><ShieldCheck/><p><b>Status</b>Von MotorAtlas öffentlich verifiziert{workshop.master_workshop_verified_at&&<><br/><strong className="wp-master-copy">Meisterwerkstatt · {workshop.master_workshop_title||'Meisterqualifikation geprüft'}</strong></>}</p></div>
           <div><Clock3/><p><b>Öffnungszeiten</b>{hours.length?'Siehe unten':'Noch nicht veröffentlicht'}</p></div>
           <button className="btn primary full" disabled={!workshop.accepts_new_customers} onClick={request}>{workshop.accepts_new_customers?'Als Kunde anfragen':'Keine Neukundenaufnahme'}</button>
         </article>
