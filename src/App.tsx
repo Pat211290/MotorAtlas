@@ -5,6 +5,7 @@ import {
 import { Marketing } from './Marketing';
 import { WorkshopFinder } from './WorkshopFinder';
 import { PublicHeader } from './PublicHeader';
+import { AccessPage } from './AccessPage';
 import { CustomerMarketingPage, SecurityMarketingPage, WorkshopMarketingPage } from './MarketingPages';
 import { BrandingPage, CustomerPortal, OfficeDashboard, WorkshopBoard } from './Workspace';
 import { Brand, type AppView } from './components';
@@ -162,7 +163,7 @@ export default function App(){
     {view==='workshop-info'&&<WorkshopMarketingPage setView={navigate}/>}
     {view==='security-info'&&<SecurityMarketingPage setView={navigate}/>}
     {view==='finder'&&<WorkshopFinder setView={navigate}/>}
-    {view==='login'&&<Login setView={navigate}/>}
+    {view==='login'&&<AccessPage setView={navigate}/>}
     {view==='office'&&<OfficeDashboard setView={navigate}/>}
     {view==='workshop'&&<WorkshopBoard setView={navigate}/>}
     {view==='customer'&&<CustomerPortal setView={navigate}/>}
