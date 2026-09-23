@@ -152,10 +152,14 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
 function VehicleCard({name,plate,detail,active,tone,stage='approval',demo=false,photoPath}:{name:string;plate:string;detail:string;active?:boolean;tone:number;stage?:Stage;demo?:boolean;photoPath?:string|null}){return <article className="panel vehicle-card">{demo||!photoPath?<CarArt large tone={tone}/>:<VehiclePhoto path={photoPath} alt={name}/>} <div className="vehicle-title"><div><h3>{name}</h3><small>{detail}</small></div><span className="plate">{plate}</span></div>{active?<div className="vehicle-current"><Status stage={stage}/><b>Aktiver Werkstattauftrag</b><small>Status wird automatisch synchronisiert.</small></div>:demo?<div className="vehicle-current neutral"><span>LETZTER SERVICE</span><b>Inspektion</b><small>17.06.2026</small></div>:<div className="vehicle-current neutral"><span>STATUS</span><b>Kein aktiver Auftrag</b><small>Fahrzeug ist in deiner Garage gespeichert.</small></div>}</article>}
 
 export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
- const live=useCustomerWorkspace(); const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false);
+ const live=useCustomerWorkspace();
+ const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false); const [requestModal,setRequestModal]=useState(false);
  const [documents,setDocuments]=useState<any[]>([]); const [docError,setDocError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
  const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
- const activeVehicle=activeOrder?live.vehicles.find(vehicle=>vehicle.id===activeOrder.vehicleId):live.vehicles[0];
+ const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['declined','cancelled','converted'].includes(request.status)):null;
+ const proposedAppointment=activeRequest?live.appointments.find(item=>item.serviceRequestId===activeRequest.id&&item.status==='proposed'):null;
+ const activeVehicleId=activeOrder?.vehicleId??activeRequest?.vehicleId;
+ const activeVehicle=activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):live.vehicles[0];
 
  useEffect(()=>{
    if(!live.isLive||!activeOrder){setDocuments([]);return}
@@ -182,17 +186,49 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    finally{setBusy(false)}
  };
 
- return <Shell onHome={()=>setView('home')} title="Meine Garage" mode="Kundenportal" active="Fahrzeuge"><div className="page"><PageHead title="Meine Garage" subtitle={live.isLive?'Deine echten Fahrzeuge, Aufträge und Dokumente an einem Ort.':'Produktdemo des Kundenportals.'}><div className="head-actions"><button className="btn secondary"><MapPin size={16}/> Werkstatt finden</button><button className="btn secondary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug</button><button className="btn secondary" onClick={()=>setChat(true)} disabled={live.isLive&&!activeOrder}><MessageCircle size={16}/> Chat {!live.isLive&&<span className="badge">1</span>}</button><button className="btn primary"><Plus size={16}/> Anfrage starten</button></div></PageHead>
+ const answerAppointment=async(decision:'confirmed'|'declined')=>{
+   if(!proposedAppointment||busy)return;
+   setBusy(true);setDocError(null);
+   try{await respondAppointment(proposedAppointment.id,decision);await live.reload()}
+   catch(err){setDocError(err instanceof Error?err.message:'Terminantwort konnte nicht gespeichert werden.')}
+   finally{setBusy(false)}
+ };
+
+ const requestStatusText=()=>{
+   if(!activeRequest)return'';
+   if(activeRequest.status==='submitted')return'Deine Werkstatt prüft die Anfrage.';
+   if(activeRequest.status==='accepted')return'Die Werkstatt bereitet die Terminabstimmung vor.';
+   if(activeRequest.status==='appointment_pending')return proposedAppointment?'Ein neuer Terminvorschlag wartet auf deine Entscheidung.':'Die Terminabstimmung läuft.';
+   if(activeRequest.status==='appointment_confirmed')return'Der Termin ist bestätigt.';
+   return'Anfrage wird bearbeitet.';
+ };
+
+ return <Shell onHome={()=>setView('home')} title="Meine Garage" mode="Kundenportal" active="Fahrzeuge"><div className="page">
+ <PageHead title="Meine Garage" subtitle={live.isLive?'Deine echten Fahrzeuge, Anfragen, Aufträge und Dokumente an einem Ort.':'Produktdemo des Kundenportals.'}>
+   <div className="head-actions"><button className="btn secondary"><MapPin size={16}/> Werkstatt finden</button><button className="btn secondary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug</button><button className="btn secondary" onClick={()=>setChat(true)} disabled={live.isLive&&!activeOrder}><MessageCircle size={16}/> Chat {!live.isLive&&<span className="badge">1</span>}</button><button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Anfrage starten</button></div>
+ </PageHead>
  {(live.error||docError)&&<div className="workspace-alert">{live.error??docError}</div>}
- {live.isLive?<div className="customer-layout"><div className="garage">{live.vehicles.length?live.vehicles.map((vehicle,index)=><VehicleCard key={vehicle.id} name={[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' ')} plate={vehicle.licensePlate} detail={`${vehicle.firstRegistration?new Date(vehicle.firstRegistration).getFullYear():'—'} · ${vehicle.mileage?.toLocaleString('de-DE')??'—'} km`} active={activeOrder?.vehicleId===vehicle.id} stage={activeOrder?.vehicleId===vehicle.id?activeOrder.stage:undefined} tone={index} photoPath={vehicle.photoPath}/>):<section className="panel vehicle-card empty-card"><Car size={30}/><h3>Noch kein Fahrzeug hinterlegt.</h3><small>Lege deinen ersten PKW an, um eine Werkstattanfrage zu starten.</small></section>}</div>
- <section className="panel timeline"><div className="panel-title"><div><span className="overline">{activeOrder?`AUFTRAG #${activeOrder.orderNumber}`:'KEIN AKTIVER AUFTRAG'}</span><h3>{activeOrder?'Aktueller Auftrag':'Alles erledigt'}</h3></div>{activeOrder&&<Status stage={activeOrder.stage}/>}</div>
- {activeOrder?<><Timeline title="Auftrag aktiv" detail={`Zuletzt aktualisiert: ${new Date(activeOrder.updatedAt).toLocaleString('de-DE')}`} current/>
- {quote&&<div className="customer-document-card"><div><FileText/><span><small>KOSTENVORANSCHLAG</small><b>{quote.document_number||'Dokument'}</b></span><strong>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):''}</strong></div><div><button className="btn secondary" onClick={()=>void openDocument(quote)}>PDF öffnen</button>{activeOrder.rawStage==='awaiting_customer_approval'&&<button className="btn primary" disabled={busy} onClick={()=>void approve('approved')}>{busy?'Wird gespeichert …':'Reparatur freigeben'}</button>}<button className="btn secondary" onClick={()=>void approve('question_requested')}>Rückfrage</button></div></div>}
- {invoice&&<div className="customer-document-card invoice-card"><div><FileText/><span><small>RECHNUNG</small><b>{invoice.document_number||'Dokument'}</b></span><strong>{invoice.amount_total!=null?Number(invoice.amount_total).toLocaleString('de-DE',{style:'currency',currency:invoice.currency||'EUR'}):''}</strong></div><div><button className="btn primary" onClick={()=>void openDocument(invoice)}>Rechnung öffnen</button></div></div>}
- <Timeline title="Nächster Schritt" detail={activeOrder.stage==='approval'?'Kostenvoranschlag prüfen und freigeben.':activeOrder.stage==='repair'?'Die Werkstatt bearbeitet den freigegebenen Auftrag.':activeOrder.stage==='pickup'?'Fahrzeug ist abholbereit. Rechnung steht im Dokumentbereich bereit.':'Status wird automatisch mit der Werkstatt synchronisiert.'}/></>:<div className="timeline-empty"><b>Kein laufender Werkstattauftrag.</b><span>Neue Anfragen und bestätigte Termine erscheinen hier automatisch.</span></div>}</section></div>:
+ {live.isLive?<div className="customer-layout">
+   <div className="garage">{live.vehicles.length?live.vehicles.map((vehicle,index)=><VehicleCard key={vehicle.id} name={[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' ')} plate={vehicle.licensePlate} detail={`${vehicle.firstRegistration?new Date(vehicle.firstRegistration).getFullYear():'—'} · ${vehicle.mileage?.toLocaleString('de-DE')??'—'} km`} active={activeVehicleId===vehicle.id} stage={activeOrder?.vehicleId===vehicle.id?activeOrder.stage:activeRequest?.vehicleId===vehicle.id?'arrived':undefined} tone={index} photoPath={vehicle.photoPath}/>):<section className="panel vehicle-card empty-card"><Car size={30}/><h3>Noch kein Fahrzeug hinterlegt.</h3><small>Lege deinen ersten PKW an, um eine Werkstattanfrage zu starten.</small></section>}</div>
+   <section className="panel timeline">
+     <div className="panel-title"><div><span className="overline">{activeOrder?`AUFTRAG #${activeOrder.orderNumber}`:activeRequest?'WERKSTATTANFRAGE':'KEIN AKTIVER VORGANG'}</span><h3>{activeOrder?'Aktueller Auftrag':activeRequest?'Deine Anfrage':'Alles erledigt'}</h3></div>{activeOrder&&<Status stage={activeOrder.stage}/>}</div>
+     {activeOrder?<>
+       <Timeline title="Auftrag aktiv" detail={`Zuletzt aktualisiert: ${new Date(activeOrder.updatedAt).toLocaleString('de-DE')}`} current/>
+       {quote&&<div className="customer-document-card"><div><FileText/><span><small>KOSTENVORANSCHLAG</small><b>{quote.document_number||'Dokument'}</b></span><strong>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):''}</strong></div><div><button className="btn secondary" onClick={()=>void openDocument(quote)}>PDF öffnen</button>{activeOrder.rawStage==='awaiting_customer_approval'&&<button className="btn primary" disabled={busy} onClick={()=>void approve('approved')}>{busy?'Wird gespeichert …':'Reparatur freigeben'}</button>}<button className="btn secondary" onClick={()=>void approve('question_requested')}>Rückfrage</button></div></div>}
+       {invoice&&<div className="customer-document-card invoice-card"><div><FileText/><span><small>RECHNUNG</small><b>{invoice.document_number||'Dokument'}</b></span><strong>{invoice.amount_total!=null?Number(invoice.amount_total).toLocaleString('de-DE',{style:'currency',currency:invoice.currency||'EUR'}):''}</strong></div><div><button className="btn primary" onClick={()=>void openDocument(invoice)}>Rechnung öffnen</button></div></div>}
+       <Timeline title="Nächster Schritt" detail={activeOrder.stage==='approval'?'Kostenvoranschlag prüfen und freigeben.':activeOrder.stage==='repair'?'Die Werkstatt bearbeitet den freigegebenen Auftrag.':activeOrder.stage==='pickup'?'Fahrzeug ist abholbereit. Rechnung steht im Dokumentbereich bereit.':'Status wird automatisch mit der Werkstatt synchronisiert.'}/>
+     </>:activeRequest?<>
+       <Timeline title="Anfrage gesendet" detail={`${new Date(activeRequest.createdAt).toLocaleString('de-DE')} · ${activeRequest.complaint}`} current={!proposedAppointment}/>
+       {activeRequest.desiredStart&&<Timeline title="Dein Wunschtermin" detail={new Date(activeRequest.desiredStart).toLocaleString('de-DE')}/>}
+       {proposedAppointment&&<div className="appointment-card"><div><CalendarDays/><span><small>TERMINVORSCHLAG DER WERKSTATT</small><b>{new Date(proposedAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b>{proposedAppointment.note&&<p>{proposedAppointment.note}</p>}</span></div><div><button className="btn secondary" disabled={busy} onClick={()=>void answerAppointment('declined')}>Passt nicht</button><button className="btn primary" disabled={busy} onClick={()=>void answerAppointment('confirmed')}>{busy?'Speichert …':'Termin bestätigen'}</button></div></div>}
+       <Timeline title="Aktueller Stand" detail={requestStatusText()} current={Boolean(proposedAppointment)}/>
+     </>:<div className="timeline-empty"><b>Kein laufender Werkstattvorgang.</b><span>Mit „Anfrage starten“ meldest du ein Problem direkt für eines deiner Fahrzeuge.</span></div>}
+   </section>
+ </div>:
  <div className="customer-layout"><div className="garage"><VehicleCard name="BMW X3 3.0i" plate="SAD XX 123" detail="2005 · 247.318 km" active tone={0} demo/><VehicleCard name="VW Golf VII" plate="SAD VW 407" detail="2016 · 128.140 km" tone={1} demo/></div><section className="panel timeline"><div className="panel-title"><div><span className="overline">BMW X3 · AUFTRAG #184</span><h3>Aktueller Auftrag</h3></div><Status stage={approved?'repair':'approval'}/></div><Timeline title="Fahrzeug eingetroffen" detail="08:41 · Carplus Service Center"/><Timeline title="Diagnose abgeschlossen" detail="09:12 · Lambdasonde Bank 1 vor Kat"/><Timeline current title={approved?'Reparatur freigegeben':'Deine Freigabe ist erforderlich'} detail={approved?'09:31 · an Werkstatt übermittelt':'09:26 · Kostenvoranschlag bereitgestellt'}>{!approved&&<div className="quote"><div><small>KOSTENVORANSCHLAG · PDF</small><b>328,40 €</b><span>inkl. MwSt.</span></div><p>Lambdasonde Bank 1 vor Kat + Einbau</p><div><button className="btn primary" onClick={()=>setApproved(true)}>Reparatur freigeben</button><button className="btn secondary" onClick={()=>setChat(true)}>Rückfrage</button></div></div>}</Timeline><Timeline title="Reparatur" detail={approved?'Auftrag steht in der Werkstatt-Queue':'Startet nach Freigabe'}/><Timeline title="Abholbereit" detail="Noch nicht erreicht" last/></section></div>}
  </div>
  <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
+ <ServiceRequestModal open={requestModal} onClose={()=>setRequestModal(false)} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops}/>
  <VehicleChat open={chat} onClose={()=>setChat(false)} audience="customer" workOrderId={live.isLive?activeOrder?.id:null} vehicleLabel={live.isLive&&activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'BMW X3 3.0i'} plate={live.isLive&&activeVehicle?activeVehicle.licensePlate:'SAD XX 123'} orderNumber={live.isLive&&activeOrder?activeOrder.orderNumber:'184'}/>
  </Shell>;
 }
