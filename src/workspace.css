@@ -70,10 +70,10 @@
 
 
 /* Real vehicle imagery */
-.vehicle-photo-real,.vehicle-photo-placeholder{width:100%;height:155px;border-radius:13px;object-fit:cover;display:block;background:linear-gradient(145deg,#edf3f5,#f8fafb);border:1px solid #e1e8eb}
+.vehicle-photo-real,.vehicle-photo-placeholder{width:100%;height:155px;border-radius:13px;object-fit:contain;display:block;background:linear-gradient(145deg,#edf3f5,#f8fafb);border:1px solid #e1e8eb;padding:7px}
 .vehicle-photo-placeholder{display:grid;place-items:center;color:#9aabb2}.vehicle-photo-placeholder svg{width:34px;height:34px}
 .vehicle-photo-upload{position:relative;min-height:210px;border:1.5px dashed #c9d9de;border-radius:16px;background:linear-gradient(145deg,#f5f9fa,#fbfcfc);display:flex!important;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;color:var(--brand);overflow:hidden;cursor:pointer;padding:20px}
-.vehicle-photo-upload input{display:none}.vehicle-photo-upload img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.vehicle-photo-upload svg{width:30px;height:30px}.vehicle-photo-upload b{font-size:10px;color:#3e5661}.vehicle-photo-upload>span{font-size:7px!important;color:#87969d!important;margin:0!important}
+.vehicle-photo-upload input{display:none}.vehicle-photo-upload img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:10px;background:#f6fafb}.vehicle-photo-upload svg{width:30px;height:30px}.vehicle-photo-upload b{font-size:10px;color:#3e5661}.vehicle-photo-upload>span{font-size:7px!important;color:#87969d!important;margin:0!important}
 .vehicle-modal .form-two{margin:0}
 @media(max-width:520px){.vehicle-photo-real,.vehicle-photo-placeholder{height:130px}.vehicle-photo-upload{min-height:180px}}
 
@@ -189,3 +189,8 @@
   .segment,.warning-segment{overflow-x:auto;grid-template-columns:repeat(4,minmax(82px,1fr))}
   .segment button{font-size:10px;min-height:40px}
 }
+
+.field-help{display:block!important;margin-top:6px!important;font-size:9px!important;line-height:1.45!important;color:#83939b!important;font-weight:500!important}
+.customer-request-list{display:grid;gap:10px}.customer-request-row{display:grid;grid-template-columns:42px 1fr;gap:12px;align-items:start;padding:16px}.customer-request-row>svg{width:40px;height:40px;padding:10px;border-radius:11px;background:var(--brand-soft);color:var(--brand)}.customer-request-row small{display:block;font-size:7px;letter-spacing:1px;font-weight:900;color:var(--brand)}.customer-request-row b{display:block;font-size:12px;color:#405762;margin-top:3px}.customer-request-row p{font-size:10px;line-height:1.5;color:#6f818a;margin:5px 0}.customer-request-row span{font-size:9px;color:#85939a}.customer-request-row.rejected{border-color:#efd1cb;background:#fff8f6}.customer-request-row.rejected>svg,.customer-request-row.rejected small{color:#a45448;background:#fff}.customer-request-row.accepted{border-color:#d7eadf;background:#fbfefd}.customer-documents-panel{padding:18px}.customer-garage-full{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));display:grid;gap:12px}
+.request-modal textarea{min-height:92px}.request-modal select:invalid{color:#8b999f}
+@media(max-width:900px){.customer-garage-full{grid-template-columns:1fr}.field-help{font-size:10px!important}.customer-request-row b{font-size:13px}.customer-request-row p,.customer-request-row span{font-size:10px}}
