@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight, Building2, Car, CheckCircle2, Clock3, Eye, EyeOff, Gauge, LockKeyhole,
   Mail, MapPin, MessageCircle, ShieldCheck, Sparkles, UserRound, Users, WalletCards
@@ -19,7 +19,7 @@ async function resolveSignedInView():Promise<AppView>{
   return'customer';
 }
 
-type Tab='start'|'login'|'customer'|'workshop';
+type Tab='start'|'login'|'customer'|'workshop'|'reset'|'password';
 
 const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{icon:any;title:string;text:string}>}>={
   start:{
@@ -61,10 +61,31 @@ const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{i
       {icon:Building2,title:'Professioneller auftreten',text:'Öffentliches Werkstattprofil, klare Kundenkommunikation und ein durchgängiger digitaler Ablauf.'},
       {icon:Sparkles,title:'Mehr Chancen auf Umsatz',text:'24/7 auffindbar, weniger verpasste Anfragen und schnellere Kundenfreigaben für laufende Aufträge.'}
     ]
+  },
+  reset:{
+    kicker:'PASSWORT ZURÜCKSETZEN',
+    title:'Zugang verloren? Wir schicken dir einen sicheren Rücksetz-Link.',
+    text:'Aus Sicherheitsgründen verrät MotorAtlas nicht, ob eine E-Mail-Adresse bereits registriert ist.',
+    items:[
+      {icon:Mail,title:'Link per E-Mail',text:'Du erhältst einen zeitlich begrenzten Link an die angegebene Adresse.'},
+      {icon:ShieldCheck,title:'Keine Konto-Auskunft',text:'Die Rückmeldung bleibt bewusst gleich, egal ob ein Konto existiert.'},
+      {icon:LockKeyhole,title:'Neues Passwort setzen',text:'Nach dem Link kannst du direkt ein neues Passwort vergeben.'}
+    ]
+  },
+  password:{
+    kicker:'NEUES PASSWORT',
+    title:'Vergib jetzt ein neues MotorAtlas-Passwort.',
+    text:'Der Rücksetz-Link stellt dafür eine temporäre, abgesicherte Sitzung her.',
+    items:[
+      {icon:LockKeyhole,title:'Mindestens 8 Zeichen',text:'Nutze idealerweise ein einzigartiges Passwort oder einen Passwortmanager.'},
+      {icon:ShieldCheck,title:'Nicht im Klartext gespeichert',text:'Das Passwort wird vom Authentifizierungsdienst nur als sicherer Hash gespeichert.'},
+      {icon:Gauge,title:'Danach neu anmelden',text:'Nach erfolgreicher Änderung meldest du dich mit dem neuen Passwort wieder an.'}
+    ]
   }
 };
 
 function initialTab():Tab{
+  if(new URLSearchParams(location.search).get('recovery')==='1')return'password';
   const mode=sessionStorage.getItem('motoratlas_access_mode');
   sessionStorage.removeItem('motoratlas_access_mode');
   return mode==='login'||mode==='customer'||mode==='workshop'||mode==='start'?mode:'start';
@@ -79,11 +100,21 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [postalCode,setPostalCode]=useState('');
   const [city,setCity]=useState('');
   const [show,setShow]=useState(false);
+  const [newPassword,setNewPassword]=useState('');
+  const [newPassword2,setNewPassword2]=useState('');
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
 
   const setTab=(next:Tab)=>{setMessage('');setTabState(next)};
   const benefit=benefits[tab];
+
+  useEffect(()=>{
+    if(!supabase)return;
+    const {data}=supabase.auth.onAuthStateChange(event=>{
+      if(event==='PASSWORD_RECOVERY')setTabState('password');
+    });
+    return()=>data.subscription.unsubscribe();
+  },[]);
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();
@@ -95,6 +126,30 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     }
     setBusy(true);
     try{
+      if(tab==='reset'){
+        const base=new URL('./',document.baseURI);
+        base.search='recovery=1';
+        base.hash='';
+        const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:base.toString()});
+        if(error)throw error;
+        setMessage('Wenn zu dieser E-Mail ein Konto existiert, wurde ein Link zum Zurücksetzen des Passworts versendet.');
+        return;
+      }
+      if(tab==='password'){
+        if(newPassword.length<8)throw new Error('Das neue Passwort muss mindestens 8 Zeichen lang sein.');
+        if(newPassword!==newPassword2)throw new Error('Die beiden Passwörter stimmen nicht überein.');
+        const {error}=await supabase.auth.updateUser({password:newPassword});
+        if(error)throw error;
+        await supabase.auth.signOut();
+        const base=new URL('./',document.baseURI);
+        history.replaceState({},'',base.pathname+'#/anmelden');
+        setMessage('Passwort erfolgreich geändert. Du kannst dich jetzt neu anmelden.');
+        setPassword('');
+        setNewPassword('');
+        setNewPassword2('');
+        setTabState('login');
+        return;
+      }
       if(tab==='login'){
         const {error}=await supabase.auth.signInWithPassword({email,password});
         if(error)throw error;
@@ -145,7 +200,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
       <section className="access-card">
         <div className="access-tabs">
-          <button className={tab==='login'?'active':''} onClick={()=>setTab('login')}>Anmelden</button>
+          <button className={tab==='login'||tab==='reset'||tab==='password'?'active':''} onClick={()=>setTab('login')}>Anmelden</button>
           <button className={tab==='customer'?'active':''} onClick={()=>setTab('customer')}>Autofahrer</button>
           <button className={tab==='workshop'?'active':''} onClick={()=>setTab('workshop')}>Werkstatt</button>
         </div>
@@ -171,6 +226,30 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           </div>
 
           <button className="access-existing" onClick={()=>setTab('login')}>Schon registriert? <b>Jetzt anmelden</b></button>
+        </>:tab==='reset'?<>
+          <div className="access-card-head">
+            <span>PASSWORT VERGESSEN</span>
+            <h2>Rücksetz-Link anfordern</h2>
+            <p>Gib die E-Mail-Adresse deines MotorAtlas-Kontos ein. Die Rückmeldung ist aus Sicherheitsgründen immer neutral.</p>
+          </div>
+          <form onSubmit={submit}>
+            <label><span>E-Mail</span><div><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@beispiel.de"/></div></label>
+            {message&&<div className="access-message">{message}</div>}
+            <button className="btn primary xl full access-submit" disabled={busy}>{busy?'Bitte einen Moment …':'Rücksetz-Link senden'} <ArrowRight/></button>
+          </form>
+          <button className="access-existing" onClick={()=>setTab('login')}>Zurück zur <b>Anmeldung</b></button>
+        </>:tab==='password'?<>
+          <div className="access-card-head">
+            <span>PASSWORT ÄNDERN</span>
+            <h2>Neues Passwort festlegen</h2>
+            <p>Der Link aus deiner E-Mail hat diesen Vorgang autorisiert. Vergib jetzt dein neues Passwort.</p>
+          </div>
+          <form onSubmit={submit}>
+            <label><span>Neues Passwort</span><div><LockKeyhole/><input type={show?'text':'password'} value={newPassword} onChange={e=>setNewPassword(e.target.value)} minLength={8} required placeholder="Mindestens 8 Zeichen"/><button type="button" className="access-show" onClick={()=>setShow(!show)}>{show?<EyeOff/>:<Eye/>}</button></div></label>
+            <label><span>Passwort wiederholen</span><div><LockKeyhole/><input type={show?'text':'password'} value={newPassword2} onChange={e=>setNewPassword2(e.target.value)} minLength={8} required placeholder="Passwort wiederholen"/></div></label>
+            {message&&<div className="access-message">{message}</div>}
+            <button className="btn primary xl full access-submit" disabled={busy}>{busy?'Bitte einen Moment …':'Passwort speichern'} <ArrowRight/></button>
+          </form>
         </>:<>
           <div className="access-card-head">
             <span>{tab==='login'?'WILLKOMMEN ZURÜCK':tab==='customer'?'KOSTENLOS STARTEN':'WERKSTATT EINRICHTEN'}</span>
@@ -195,6 +274,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
             <label><span>E-Mail</span><div><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@beispiel.de"/></div></label>
             <label><span>Passwort</span><div><LockKeyhole/><input type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required placeholder="••••••••••••"/><button type="button" className="access-show" onClick={()=>setShow(!show)}>{show?<EyeOff/>:<Eye/>}</button></div></label>
+            {tab==='login'&&<button type="button" className="access-forgot" onClick={()=>setTab('reset')}>Passwort vergessen?</button>}
 
             {message&&<div className="access-message">{message}</div>}
 
@@ -202,6 +282,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
               {busy?'Bitte einen Moment …':tab==='login'?'Sicher anmelden':tab==='customer'?'Autofahrer-Konto erstellen':'Werkstattkonto starten'} <ArrowRight/>
             </button>
           </form>
+          {tab!=='login'&&<p className="access-privacy-note">Mit der Kontoerstellung nimmst du die <button type="button" onClick={()=>setView('privacy')}>Datenschutzhinweise</button> zur Kenntnis. Für die Bereitstellung des Kontos werden nur die hierfür erforderlichen Daten verarbeitet.</p>}
         </>}
 
         <div className="access-trust">
@@ -209,6 +290,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           <span><LockKeyhole/> Geschützte Daten</span>
         </div>
 
+        <div className="access-legal-links"><button onClick={()=>setView('privacy')}>Datenschutz</button><span>·</span><button onClick={()=>setView('imprint')}>Impressum</button></div>
         <div className="access-demo">
           <span>MotorAtlas vorab ansehen</span>
           <div><button onClick={()=>setView('office')}><Building2/> Büro</button><button onClick={()=>setView('workshop')}><Car/> Werkstatt</button><button onClick={()=>setView('customer')}><UserRound/> Kunde</button></div>
