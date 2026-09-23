@@ -296,3 +296,101 @@
   .customer-document-row{grid-template-columns:1fr}.customer-document-row>strong{grid-column:1;grid-row:auto}.customer-document-context{grid-column:1}
   .customer-workshop-hero{grid-template-columns:1fr;text-align:center}.customer-workshop-logo{margin:0 auto}.customer-workshop-address{justify-content:center}.customer-workshop-contact-grid{grid-template-columns:1fr}
 }
+
+
+/* Persistent chat inbox, workshop metrics and mobile chat polish */
+.workshop-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
+.workshop-metrics .primary-customers{border-color:#d6e8df;background:#fbfefc}
+.workshop-metrics .primary-customers b{color:var(--brand)}
+
+.workshop-chat-inbox{margin:14px 0;overflow:hidden}
+.workshop-chat-inbox>header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;border-bottom:1px solid #e6edef}
+.workshop-chat-inbox>header h3{font:800 17px Manrope;margin:3px 0 0;color:#3d5560}
+.workshop-chat-inbox>header small{display:block;font-size:8px;color:#819097;margin-top:3px}
+.chat-inbox-count{display:grid;grid-template-columns:26px auto;gap:1px 8px;align-items:center;min-width:94px}
+.chat-inbox-count>svg{grid-row:1/3;width:25px;color:var(--brand)}
+.chat-inbox-count b{font:800 19px Manrope;color:#405762;line-height:1}
+.chat-inbox-count span{font-size:7px;color:#86959b}
+.chat-inbox-list{display:grid}
+.chat-inbox-row{border:0;border-bottom:1px solid #edf1f2;background:#fff;padding:10px 14px;display:grid;grid-template-columns:58px minmax(0,1fr) auto;gap:11px;align-items:center;text-align:left;cursor:pointer}
+.chat-inbox-row:last-child{border-bottom:0}
+.chat-inbox-row:hover{background:#f9fbfb}
+.chat-inbox-row.unread{background:#f4faf7}
+.chat-inbox-row>.vehicle-photo-real,.chat-inbox-row>.vehicle-photo-placeholder{width:58px;height:46px;border-radius:9px;object-fit:contain;padding:3px}
+.chat-inbox-main{min-width:0}
+.chat-inbox-main>b{display:block;font-size:10px;color:#405762}
+.chat-inbox-main>small{display:block;font-size:8px;color:#819198;margin-top:2px}
+.chat-inbox-main>p{font-size:9px;color:#687b84;margin:5px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-inbox-meta{text-align:right;display:grid;justify-items:end;gap:6px}
+.chat-inbox-meta>small{font-size:7px;color:#94a0a5}
+.chat-inbox-meta>b{min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:8px}
+
+.workshop-chat-disabled{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid #ead8b1;background:#fffaf0;border-radius:12px}
+.workshop-chat-disabled>svg{width:20px;flex:0 0 20px;color:#8d6c28}
+.workshop-chat-disabled b{display:block;font-size:10px;color:#5f5b50}
+.workshop-chat-disabled span{display:block;font-size:9px;line-height:1.45;color:#81796b;margin-top:2px}
+.contact-muted{display:block;margin-top:auto;font-size:8px;line-height:1.4;color:#8b989e}
+.customer-workshop-contact-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+
+.chat-note.disabled{background:#fff8ed;color:#7d6e50}
+.chat-disabled-footer{min-height:68px;border-top:1px solid #e2e8eb;padding:11px 14px;display:flex;align-items:center;gap:10px;background:#fffaf3}
+.chat-disabled-footer>svg{width:20px;color:#8a6c31}
+.chat-disabled-footer b{display:block;font-size:9px;color:#5e625f}
+.chat-disabled-footer span{display:block;font-size:8px;color:#88928e;margin-top:2px}
+
+@media(max-width:1100px){
+  .workshop-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .customer-workshop-contact-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+@media(max-width:720px){
+  .workshop-metrics{grid-template-columns:repeat(5,145px);overflow-x:auto;padding-bottom:3px}
+  .workshop-chat-inbox>header{align-items:flex-start;padding:14px}
+  .chat-inbox-row{grid-template-columns:50px minmax(0,1fr) auto;padding:10px}
+  .chat-inbox-row>.vehicle-photo-real,.chat-inbox-row>.vehicle-photo-placeholder{width:50px;height:42px}
+  .chat-inbox-main>p{max-width:56vw}
+  .customer-workshop-contact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+  .drawer-backdrop{align-items:flex-end;justify-content:center;background:rgba(7,20,29,.38)}
+  .chat-drawer{
+    width:100%;
+    height:min(72dvh,620px);
+    max-height:72dvh;
+    border-radius:18px 18px 0 0;
+    overflow:hidden;
+    box-shadow:0 -18px 55px rgba(5,20,30,.22);
+    animation:chatSheetIn .22s ease;
+  }
+  .chat-drawer>header{height:56px;min-height:56px;padding:0 13px}
+  .chat-drawer>header b{font-size:12px}
+  .chat-drawer>header small{font-size:9px}
+  .chat-note{padding:7px 11px;font-size:9px;line-height:1.35}
+  .messages{padding:11px;gap:8px;overscroll-behavior:contain}
+  .message{max-width:88%;padding:8px 10px;border-radius:4px 12px 12px 12px}
+  .message.mine{border-radius:12px 4px 12px 12px}
+  .message p{font-size:13px;line-height:1.42}
+  .message small{font-size:9px;margin-top:4px}
+  .chat-drawer>footer{
+    height:auto;
+    min-height:60px;
+    grid-template-columns:38px minmax(0,1fr) 38px;
+    gap:6px;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    background:#fff;
+  }
+  .chat-drawer>footer input:not(.chat-file-input){
+    height:42px;
+    min-width:0;
+    font-size:16px;
+    padding:0 11px;
+    border-radius:11px;
+  }
+  .attach,.send{width:38px;height:38px}
+  .chat-disabled-footer{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  @keyframes chatSheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+}
+
+@media(max-width:520px){
+  .customer-workshop-contact-grid{grid-template-columns:1fr}
+  .chat-inbox-main>p{max-width:50vw}
+}
