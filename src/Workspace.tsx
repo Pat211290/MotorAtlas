@@ -986,6 +986,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  const [description,setDescription]=useState(''); const [accepts,setAccepts]=useState(true); const [chatEnabled,setChatEnabled]=useState(true); const [verified,setVerified]=useState(false);
  const [services,setServices]=useState<string[]>([]);
  const [verificationStatus,setVerificationStatus]=useState<string>('not_requested');
+ const [verificationMode,setVerificationMode]=useState<string>('standard');
  const [verificationReviewNote,setVerificationReviewNote]=useState<string|null>(null);
  const [busy,setBusy]=useState(false); const [error,setError]=useState<string|null>(null);
 
@@ -1000,6 +1001,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
      setAccepts(Boolean(profile.accepts_new_customers));setChatEnabled(profile.chat_enabled!==false);setVerified(Boolean(profile.verified_at));
      setServices(Array.isArray(profile.services)?profile.services.filter((item:unknown):item is string=>typeof item==='string'):[]);
      setVerificationStatus(profile.verification_status??(profile.verified_at?'verified':'not_requested'));
+     setVerificationMode(profile.verification_mode??'standard');
      setVerificationReviewNote(profile.verification_review_note??null);
      if(profile.logo_path)setUrl(getWorkshopLogoPublicUrl(profile.logo_path));
      if(profile.brand_primary){
@@ -1097,6 +1099,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
    workshopId={live.identity.workshopId}
    services={services}
    initialStatus={verificationStatus}
+   verificationMode={verificationMode}
    reviewNote={verificationReviewNote}
    onBeforeSubmit={saveBeforeVerification}
  />}
