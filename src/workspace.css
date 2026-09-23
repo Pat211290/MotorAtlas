@@ -67,3 +67,12 @@
 .toggle-row{display:flex!important;align-items:flex-start;gap:9px;margin-top:6px;padding:13px;border:1px solid #e1e9eb;border-radius:12px;background:#f8fafb}.toggle-row input{width:17px;height:17px;accent-color:var(--brand);margin-top:1px}.toggle-row>span{margin:0!important}.toggle-row b{display:block;font-size:9px;color:#405761}.toggle-row small{display:block;font-size:7px;color:#87959c;line-height:1.45;margin-top:3px}
 .pending-copy{color:#a87b24!important}.verified-copy{color:#44816a!important}
 @media(max-width:900px){.branding-fields{grid-template-columns:1fr}}@media(max-width:560px){.profile-form>.form-two,.address-grid{grid-template-columns:1fr}.profile-form{padding:18px}}
+
+
+/* Real vehicle imagery */
+.vehicle-photo-real,.vehicle-photo-placeholder{width:100%;height:155px;border-radius:13px;object-fit:cover;display:block;background:linear-gradient(145deg,#edf3f5,#f8fafb);border:1px solid #e1e8eb}
+.vehicle-photo-placeholder{display:grid;place-items:center;color:#9aabb2}.vehicle-photo-placeholder svg{width:34px;height:34px}
+.vehicle-photo-upload{position:relative;min-height:210px;border:1.5px dashed #c9d9de;border-radius:16px;background:linear-gradient(145deg,#f5f9fa,#fbfcfc);display:flex!important;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;color:var(--brand);overflow:hidden;cursor:pointer;padding:20px}
+.vehicle-photo-upload input{display:none}.vehicle-photo-upload img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.vehicle-photo-upload svg{width:30px;height:30px}.vehicle-photo-upload b{font-size:10px;color:#3e5661}.vehicle-photo-upload>span{font-size:7px!important;color:#87969d!important;margin:0!important}
+.vehicle-modal .form-two{margin:0}
+@media(max-width:520px){.vehicle-photo-real,.vehicle-photo-placeholder{height:130px}.vehicle-photo-upload{min-height:180px}}
