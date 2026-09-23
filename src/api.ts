@@ -2,13 +2,21 @@ import { backendConfigured, supabase } from './lib';
 
 function db(){if(!backendConfigured||!supabase)throw new Error('MotorAtlas backend is not configured.');return supabase;}
 
+function authReturnUrl(query:string){
+  if(typeof window==='undefined')return undefined;
+  const base=new URL('./',document.baseURI);
+  base.search=query;
+  base.hash='';
+  return base.toString();
+}
+
 export async function signUpCustomer(
   email:string,password:string,fullName:string,
   input?:{accountIntent?:'customer'|'workshop';street?:string;postalCode?:string;city?:string}
 ){
   const {data,error}=await db().auth.signUp({
     email,password,
-    options:{emailRedirectTo:typeof window!=='undefined'?window.location.origin+'/?app=1':undefined,data:{
+    options:{emailRedirectTo:authReturnUrl('app=1'),data:{
       full_name:fullName.trim(),
       account_intent:input?.accountIntent??'customer',
       street:input?.street?.trim()||null,
