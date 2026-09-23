@@ -16,9 +16,40 @@ import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
 import { TeamManager } from './TeamManager';
 
-function Shell({children,title,mode,active,onHome,onSettings}:{children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void;onSettings?:()=>void}){
-  const items=[['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText]] as const;
-  return <div className="app-shell"><aside className="sidebar"><button className="side-brand" onClick={onHome}><Brand compact/></button><nav>{items.map(([name,Icon])=><button key={name} className={active===name?'active':''}><Icon size={18}/><span>{name}</span></button>)}</nav><div className="side-bottom">{onSettings&&<button onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}<button className="profile"><span>PW</span><div><b>{title}</b><small>{mode}</small></div></button></div></aside><main className="app-main"><div className="app-top"><div className="app-search"><Search size={17}/><span>Fahrzeug, Kunde oder Auftrag suchen …</span></div><button className="icon-button"><Bell size={18}/><i/></button><div className="top-identity"><span>CS</span><div><b>{title}</b><small>{mode}</small></div></div></div>{children}</main></div>;
+type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente';
+
+function Shell({
+  children,title,mode,active,onHome,onSettings,onNavigate
+}:{
+  children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void;
+  onSettings?:()=>void;onNavigate?:(section:ShellSection)=>void;
+}){
+  const items:Array<[ShellSection,typeof Home]>=[
+    ['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText]
+  ];
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <button className="side-brand" onClick={onHome}><Brand compact/></button>
+      <nav>{items.map(([name,Icon])=><button
+        key={name}
+        className={active===name?'active':''}
+        onClick={()=>onNavigate?.(name)}
+        aria-current={active===name?'page':undefined}
+      ><Icon size={18}/><span>{name}</span></button>)}</nav>
+      <div className="side-bottom">
+        {onSettings&&<button onClick={onSettings}><Settings size={18}/><span>Einstellungen</span></button>}
+        <button className="profile"><span>PW</span><div><b>{title}</b><small>{mode}</small></div></button>
+      </div>
+    </aside>
+    <main className="app-main">
+      <div className="app-top">
+        <div className="app-search"><Search size={17}/><span>Fahrzeug, Kunde oder Auftrag suchen …</span></div>
+        <button className="icon-button"><Bell size={18}/><i/></button>
+        <div className="top-identity"><span>CS</span><div><b>{title}</b><small>{mode}</small></div></div>
+      </div>
+      {children}
+    </main>
+  </div>;
 }
 
 function PageHead({title,subtitle,children}:{title:string;subtitle:string;children?:React.ReactNode}){return <div className="page-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
@@ -31,14 +62,44 @@ function JobCard({job}:{job:DisplayJob}){return <article className="job-card"><d
 export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const live=useWorkshopWorkspace();
  const displayJobs=(live.isLive?live.jobs:jobs) as DisplayJob[];
- const [chat,setChat]=useState(false); const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
+ const [section,setSection]=useState<ShellSection>(()=>{
+   const saved=sessionStorage.getItem('motoratlas_office_section') as ShellSection|null;
+   return saved&&['Übersicht','Termine','Kunden','Fahrzeuge','Dokumente'].includes(saved)?saved:'Übersicht';
+ });
+ const [chat,setChat]=useState(false);
+ const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
  const [customerRequest,setCustomerRequest]=useState<any|null>(null);
- const [busy,setBusy]=useState(false); const [actionError,setActionError]=useState<string|null>(null);
+ const [busy,setBusy]=useState(false);
+ const [actionError,setActionError]=useState<string|null>(null);
+ const [documents,setDocuments]=useState<any[]>([]);
+ const [documentsBusy,setDocumentsBusy]=useState(false);
  const selected=displayJobs.find(job=>job.id===selectedId)??displayJobs[0];
  const counts=useMemo(()=>Object.fromEntries(orderStages.map(stage=>[stage,displayJobs.filter(job=>job.stage===stage).length])),[displayJobs]);
  const title=live.identity?.workshopName??'Carplus Service';
+
+ const openSection=(next:ShellSection)=>{
+   if(next==='Werkstatt'){setView('workshop');return;}
+   sessionStorage.setItem('motoratlas_office_section',next);
+   setSection(next);
+   window.scrollTo({top:0,behavior:'auto'});
+ };
+
+ useEffect(()=>{
+   if(section!=='Dokumente'||!live.isLive){setDocuments([]);return;}
+   let cancelled=false;
+   setDocumentsBusy(true);
+   Promise.all(live.jobs.map(async job=>{
+     const docs=await listWorkOrderDocuments(job.id);
+     return docs.map(document=>({...document,job}));
+   })).then(groups=>{
+     if(!cancelled)setDocuments(groups.flat().sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))));
+   }).catch(err=>{
+     if(!cancelled)setActionError(err instanceof Error?err.message:'Dokumente konnten nicht geladen werden.');
+   }).finally(()=>{if(!cancelled)setDocumentsBusy(false)});
+   return()=>{cancelled=true};
+ },[section,live.isLive,live.jobs]);
 
  const actionLabel=()=>{
    if(!live.isLive||!selected)return'Vorgang öffnen';
@@ -74,19 +135,112 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    await live.reload();
  };
 
- return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} title={title} mode="Büro" active="Übersicht"><div className="page">
- <PageHead title="Werkstattübersicht" subtitle={live.isLive?'Live-Daten deiner Werkstatt – Änderungen erscheinen auf allen Geräten.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}><div className="head-actions"><span className="realtime"><i/> {live.isLive?'Echtzeit verbunden':'Demo-Modus'}</span><button className="btn primary"><Plus size={16}/> Neue Annahme</button></div></PageHead>
- {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
- <div className="metrics"><article><small>AKTIVE VORGÄNGE</small><b>{displayJobs.length}</b><span>gesamt</span></article><article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>Termin prüfen</span></article><article><small>KUNDENAUFNAHME</small><b>{live.isLive?live.customerRequests.length:1}</b><span>offen</span></article><article><small>FREIGABEN</small><b>{counts.approval??0}</b><span>beim Kunden</span></article></div>
+ const openDocument=async(document:any)=>{
+   const version=document.versions?.[0];
+   if(!version)return;
+   try{
+     const url=await getDocumentVersionUrl(version.storage_path);
+     window.open(url,'_blank','noopener,noreferrer');
+   }catch(err){setActionError(err instanceof Error?err.message:'Dokument konnte nicht geöffnet werden.')}
+ };
 
- {live.isLive&&<div className="office-inbox-grid">
-   <section className="panel office-inbox"><header><div><span className="overline">WERKSTATTANFRAGEN</span><h3>Termin abstimmen</h3></div><b>{live.serviceRequests.length}</b></header>{live.serviceRequests.length?live.serviceRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}><span className="inbox-icon"><CalendarDays/></span><span><b>{request.vehicle}</b><small>{request.plate} · {request.customerName}</small><p>{request.complaint}</p></span><strong>{request.desiredStart?new Date(request.desiredStart).toLocaleDateString('de-DE'):'Termin offen'}</strong></button>):<div className="inbox-empty">Keine neuen Werkstattanfragen.</div>}</section>
-   <section className="panel office-inbox"><header><div><span className="overline">NEUE KUNDEN</span><h3>Aufnahme freigeben</h3></div><b>{live.customerRequests.length}</b></header>{live.customerRequests.length?live.customerRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}><span className="inbox-icon"><Users/></span><span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?`${request.profile.postal_code??''} ${request.profile.city??''}`:'Profilanfrage'}</small><p>{request.message||'Möchte Kunde dieser Werkstatt werden.'}</p></span><strong>Prüfen</strong></button>):<div className="inbox-empty">Keine offenen Kundenaufnahmen.</div>}</section>
- </div>}
+ const vehicles=useMemo(()=>{
+   const map=new Map<string,{id:string;vehicle:string;plate:string;job?:DisplayJob;request?:any}>();
+   for(const job of displayJobs)if(job.vehicleId)map.set(job.vehicleId,{id:job.vehicleId,vehicle:job.vehicle,plate:job.plate,job});
+   for(const request of live.serviceRequests)if(!map.has(request.vehicleId))map.set(request.vehicleId,{id:request.vehicleId,vehicle:request.vehicle,plate:request.plate,request});
+   return[...map.values()];
+ },[displayJobs,live.serviceRequests]);
 
- <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
- <div className="lower-grid">{selected?<section className="panel focus-card"><div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button><button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button></div></section>:<section className="panel focus-card"><div><span className="overline">KEINE AKTIVEN VORGÄNGE</span><h3>Die Werkstatt-Queue ist leer.</h3><small>Neue bestätigte Termine erscheinen hier automatisch.</small></div></section>}
- {!live.isLive&&<section className="panel incoming"><div><span className="overline">NEUE KUNDENANFRAGE</span><h3>Anna Meier</h3><p>möchte Kunde bei Carplus Service Center werden.</p></div><div><button className="btn secondary">Ablehnen</button><button className="btn primary">Annehmen</button></div></section>}</div></div>
+ const customers=useMemo(()=>{
+   const map=new Map<string,{id:string;name:string;detail:string;request?:any}>();
+   for(const request of live.serviceRequests)map.set(request.customerUserId,{id:request.customerUserId,name:request.customerName,detail:'Werkstattanfrage vorhanden'});
+   for(const request of live.customerRequests){
+     const name=request.profile?.full_name||'Kundenanfrage';
+     const detail=request.profile?[request.profile.postal_code,request.profile.city].filter(Boolean).join(' '):'Aufnahme angefragt';
+     map.set(request.customer_user_id,{id:request.customer_user_id,name,detail,request});
+   }
+   return[...map.values()];
+ },[live.serviceRequests,live.customerRequests]);
+
+ return <Shell
+   onHome={()=>setView('home')}
+   onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined}
+   onNavigate={openSection}
+   title={title}
+   mode="Büro"
+   active={section}
+ ><div className="page">
+   {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
+
+   {section==='Übersicht'&&<>
+     <PageHead title="Werkstattübersicht" subtitle={live.isLive?'Live-Daten deiner Werkstatt – Änderungen erscheinen auf allen Geräten.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}>
+       <div className="head-actions">
+         <span className="realtime"><i/> {live.isLive?'Echtzeit verbunden':'Demo-Modus'}</span>
+         <button className="btn primary" onClick={()=>openSection('Termine')}><Plus size={16}/> Neue Annahme</button>
+       </div>
+     </PageHead>
+     <div className="metrics"><article><small>AKTIVE VORGÄNGE</small><b>{displayJobs.length}</b><span>gesamt</span></article><article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>Termin prüfen</span></article><article><small>KUNDENAUFNAHME</small><b>{live.isLive?live.customerRequests.length:1}</b><span>offen</span></article><article><small>FREIGABEN</small><b>{counts.approval??0}</b><span>beim Kunden</span></article></div>
+
+     {live.isLive&&<div className="office-inbox-grid">
+       <section className="panel office-inbox"><header><div><span className="overline">WERKSTATTANFRAGEN</span><h3>Termin abstimmen</h3></div><b>{live.serviceRequests.length}</b></header>{live.serviceRequests.length?live.serviceRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}><span className="inbox-icon"><CalendarDays/></span><span><b>{request.vehicle}</b><small>{request.plate} · {request.customerName}</small><p>{request.complaint}</p></span><strong>{request.desiredStart?new Date(request.desiredStart).toLocaleDateString('de-DE'):'Termin offen'}</strong></button>):<div className="inbox-empty">Keine neuen Werkstattanfragen.</div>}</section>
+       <section className="panel office-inbox"><header><div><span className="overline">NEUE KUNDEN</span><h3>Aufnahme freigeben</h3></div><b>{live.customerRequests.length}</b></header>{live.customerRequests.length?live.customerRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}><span className="inbox-icon"><Users/></span><span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?`${request.profile.postal_code??''} ${request.profile.city??''}`:'Profilanfrage'}</small><p>{request.message||'Möchte Kunde dieser Werkstatt werden.'}</p></span><strong>Prüfen</strong></button>):<div className="inbox-empty">Keine offenen Kundenaufnahmen.</div>}</section>
+     </div>}
+
+     <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
+     <div className="lower-grid">{selected?<section className="panel focus-card"><div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button><button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button></div></section>:<section className="panel focus-card"><div><span className="overline">KEINE AKTIVEN VORGÄNGE</span><h3>Die Werkstatt-Queue ist leer.</h3><small>Neue bestätigte Termine erscheinen hier automatisch.</small></div></section>}</div>
+   </>}
+
+   {section==='Termine'&&<>
+     <PageHead title="Termine & Anfragen" subtitle="Offene Werkstattanfragen und Terminwünsche an einem Ort."/>
+     <section className="panel office-inbox">
+       <header><div><span className="overline">OFFENE ANFRAGEN</span><h3>{live.serviceRequests.length} Vorgänge warten auf Bearbeitung</h3></div></header>
+       {live.serviceRequests.length?live.serviceRequests.map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}>
+         <span className="inbox-icon"><CalendarDays/></span>
+         <span><b>{request.customerName} · {request.vehicle}</b><small>{request.plate}</small><p>{request.complaint}</p></span>
+         <strong>{request.desiredStart?new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Termin offen'}</strong>
+       </button>):<div className="inbox-empty">Keine offenen Terminanfragen.</div>}
+     </section>
+   </>}
+
+   {section==='Kunden'&&<>
+     <PageHead title="Kunden" subtitle="Kundenbeziehungen und offene Aufnahmeanfragen deiner Werkstatt."/>
+     <section className="panel office-inbox">
+       <header><div><span className="overline">KUNDEN</span><h3>{customers.length} aktuelle Kontakte</h3></div></header>
+       {customers.length?customers.map(customer=><button key={customer.id} className="inbox-row customer" onClick={()=>customer.request&&setCustomerRequest(customer.request)}>
+         <span className="inbox-icon"><Users/></span>
+         <span><b>{customer.name}</b><small>{customer.detail}</small></span>
+         <strong>{customer.request?'Prüfen':'Aktiv'}</strong>
+       </button>):<div className="inbox-empty">Noch keine Kundenkontakte vorhanden.</div>}
+     </section>
+   </>}
+
+   {section==='Fahrzeuge'&&<>
+     <PageHead title="Fahrzeuge" subtitle="Fahrzeuge aus laufenden Aufträgen und aktuellen Werkstattanfragen."/>
+     <section className="panel office-inbox">
+       <header><div><span className="overline">FAHRZEUGE</span><h3>{vehicles.length} Fahrzeuge im aktuellen Bestand</h3></div></header>
+       {vehicles.length?vehicles.map(vehicle=><button key={vehicle.id} className="inbox-row" onClick={()=>{
+         if(vehicle.job){setSelectedId(vehicle.job.id);openSection('Übersicht')}
+         else if(vehicle.request)setServiceRequest(vehicle.request);
+       }}>
+         <span className="inbox-icon"><Car/></span>
+         <span><b>{vehicle.vehicle}</b><small>{vehicle.plate}</small></span>
+         <strong>{vehicle.job?'Auftrag öffnen':'Anfrage öffnen'}</strong>
+       </button>):<div className="inbox-empty">Noch keine Fahrzeuge vorhanden.</div>}
+     </section>
+   </>}
+
+   {section==='Dokumente'&&<>
+     <PageHead title="Dokumente" subtitle="Kostenvoranschläge, Rechnungen und weitere Dokumente aus deinen Aufträgen."/>
+     <section className="panel office-inbox">
+       <header><div><span className="overline">DOKUMENTE</span><h3>{documentsBusy?'Dokumente werden geladen …':`${documents.length} Dokumente`}</h3></div></header>
+       {!documentsBusy&&documents.length?documents.map(document=><button key={document.id} className="inbox-row" onClick={()=>void openDocument(document)}>
+         <span className="inbox-icon"><FileText/></span>
+         <span><b>{document.title||document.document_number||'Dokument'}</b><small>{document.job?.vehicle} · {document.job?.plate}</small><p>{document.document_type==='quote'?'Kostenvoranschlag':document.document_type==='invoice'?'Rechnung':'Dokument'} · {document.status}</p></span>
+         <strong>{document.amount_total!=null?Number(document.amount_total).toLocaleString('de-DE',{style:'currency',currency:document.currency||'EUR'}):'Öffnen'}</strong>
+       </button>):!documentsBusy&&<div className="inbox-empty">Noch keine Dokumente vorhanden.</div>}
+     </section>
+   </>}
+ </div>
  {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)}/>}
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  <ServiceRequestOfficeModal open={Boolean(serviceRequest)} onClose={()=>setServiceRequest(null)} onDone={live.reload} request={serviceRequest}/>
@@ -146,7 +300,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    return'Öffnen';
  };
 
- return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
+ return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} onNavigate={next=>{if(next==='Werkstatt')return;sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
  {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
  <div className="workshop-grid"><section className="panel queue"><div className="panel-title"><div><span className="overline">OFFENE ARBEITEN</span><h3>{queue.length} Fahrzeuge in der Werkstatt</h3></div><b>{queue.length}</b></div>
  {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Sobald das Büro ein Fahrzeug als eingetroffen markiert oder eine Reparatur freigegeben wird, erscheint es hier.</span></div>}
@@ -301,7 +455,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  };
 
  const title=name.trim()||'Deine Werkstatt';
- return <Shell onHome={()=>setView('home')} onSettings={()=>setView('branding')} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><button className="btn primary" disabled={busy} onClick={()=>void save()}>{busy?'Speichert …':live.identity?'Änderungen speichern':'Werkstatt anlegen'}</button></PageHead>
+ return <Shell onHome={()=>setView('home')} onSettings={()=>setView('branding')} onNavigate={next=>{if(next==='Werkstatt'){setView('workshop');return}sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><button className="btn primary" disabled={busy} onClick={()=>void save()}>{busy?'Speichert …':live.identity?'Änderungen speichern':'Werkstatt anlegen'}</button></PageHead>
  {error&&<div className="workspace-alert">{error}</div>}
  {!live.identity&&<div className="onboarding-note"><ShieldCheck/><div><b>Neue Werkstatt</b><span>Dein Profil wird angelegt, ist aber erst nach MotorAtlas-Verifizierung öffentlich auf der Deutschlandkarte sichtbar.</span></div></div>}
  <div className="branding-fields">
