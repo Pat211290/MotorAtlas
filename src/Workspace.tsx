@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
+import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -230,6 +230,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [scheduleRange,setScheduleRange]=useState<AppointmentView>('week');
  const [now,setNow]=useState(()=>new Date());
  const [chat,setChat]=useState(false);
+ const [chatInboxTarget,setChatInboxTarget]=useState<WorkshopChatInboxItem|null>(null);
  const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
@@ -243,6 +244,14 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const selected=displayJobs.find(job=>job.id===selectedId)??displayJobs[0];
  const counts=useMemo(()=>Object.fromEntries(orderStages.map(stage=>[stage,displayJobs.filter(job=>job.stage===stage).length])),[displayJobs]);
  const title=live.identity?.workshopName??'Carplus Service';
+ const unreadChats=live.chatInbox.reduce((sum,item)=>sum+item.unreadCount,0);
+ const responseTimeLabel=live.responseStats.sampleCount<3||live.responseStats.medianResponseMinutes==null
+   ?'Noch nicht genug Daten'
+   :live.responseStats.medianResponseMinutes<60
+     ?`Antwortet meist in ca. ${Math.max(1,Math.round(live.responseStats.medianResponseMinutes))} Min.`
+     :live.responseStats.medianResponseMinutes<1440
+       ?`Antwortet meist in ca. ${Math.round(live.responseStats.medianResponseMinutes/60*10)/10} Std.`
+       :`Antwortet meist in ca. ${Math.round(live.responseStats.medianResponseMinutes/1440*10)/10} Tagen`;
 
  useEffect(()=>{
    const timer=window.setInterval(()=>setNow(new Date()),60_000);
@@ -378,6 +387,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const openNotification=(notification:AppNotification)=>{
    if(notification.kind==='customer_request'){openSection('Kunden');return}
    if(notification.kind==='request'||notification.kind==='appointment'){openSection('Termine');return}
+   if(notification.kind==='chat'){openSection('Übersicht');return}
    openSection('Übersicht');
  };
 
@@ -439,11 +449,12 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
          <button className="btn primary" onClick={()=>openSection('Termine')}><CalendarDays size={16}/> Terminplanung</button>
        </div>
      </PageHead>
-     <div className="metrics">
+     <div className="metrics workshop-metrics">
        <article><small>IN DER WERKSTATT</small><b>{displayJobs.length}</b><span>aktive Fahrzeuge</span></article>
        <article className={appointmentStats.today?'attention':''}><small>HEUTE ERWARTET</small><b>{appointmentStats.today}</b><span>{appointmentStats.due?'davon '+appointmentStats.due+' jetzt fällig':'geplante Ankünfte'}</span></article>
        <article className={appointmentStats.late?'danger':''}><small>VERSPÄTET</small><b>{appointmentStats.late}</b><span>Termin überschritten</span></article>
        <article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>zu bearbeiten</span></article>
+       <article className="primary-customers"><small>STAMMWERKSTATT FÜR</small><b>{live.isLive?live.metrics.primaryCustomerCount:0}</b><span>{live.metrics.activeCustomerCount} aktive Kunden insgesamt</span></article>
      </div>
 
      {live.isLive&&<section className="panel today-arrivals">
@@ -456,6 +467,20 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
        <section className="panel office-inbox"><header><div><span className="overline">NEUE WERKSTATTANFRAGEN</span><h3>Termin abstimmen</h3></div><b>{live.serviceRequests.length}</b></header>{live.serviceRequests.length?live.serviceRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}><span className="inbox-icon"><CalendarDays/></span><span><b>{request.vehicle}</b><small>{request.plate} · {request.customerName}{request.customerPhone?' · '+request.customerPhone:''}</small><p>{request.complaint}</p></span><strong>{request.desiredStart?new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}):'Termin offen'}</strong></button>):<div className="inbox-empty">Keine neuen Werkstattanfragen.</div>}</section>
        <section className="panel office-inbox"><header><div><span className="overline">NEUE KUNDEN</span><h3>Aufnahme freigeben</h3></div><b>{live.customerRequests.length}</b></header>{live.customerRequests.length?live.customerRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}><span className="inbox-icon"><Users/></span><span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?.phone||[request.profile?.postal_code,request.profile?.city].filter(Boolean).join(' ')||'Profilanfrage'}</small><p>{request.message||'Möchte Kunde dieser Werkstatt werden.'}</p></span><strong>Prüfen</strong></button>):<div className="inbox-empty">Keine offenen Kundenaufnahmen.</div>}</section>
      </div>}
+
+     {live.isLive&&<section className="panel workshop-chat-inbox">
+       <header>
+         <div><span className="overline">CHAT-EINGANG</span><h3>Nachrichten von Kunden</h3><small>{live.identity?.chatEnabled?responseTimeLabel:'Chat ist derzeit deaktiviert – vorhandene Verläufe bleiben lesbar.'}</small></div>
+         <div className="chat-inbox-count"><MessageCircle/><b>{unreadChats}</b><span>ungelesen</span></div>
+       </header>
+       <div className="chat-inbox-list">
+         {live.chatInbox.length?live.chatInbox.slice(0,6).map(item=><button key={item.threadId} className={item.unreadCount?'chat-inbox-row unread':'chat-inbox-row'} onClick={()=>setChatInboxTarget(item)}>
+           <VehiclePhoto path={item.photoPath} alt={item.vehicleName}/>
+           <span className="chat-inbox-main"><b>{item.customerName}</b><small>{item.vehicleName} · {item.plate}</small><p>{item.lastMessage}</p></span>
+           <span className="chat-inbox-meta"><small>{new Date(item.lastMessageAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}</small>{item.unreadCount>0&&<b>{item.unreadCount}</b>}</span>
+         </button>):<div className="inbox-empty">Noch keine Chatnachrichten vorhanden.</div>}
+       </div>
+     </section>}
 
      <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
      <div className="lower-grid">{selected?<section className="panel focus-card"><div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button><button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button></div></section>:<section className="panel focus-card"><div><span className="overline">KEINE FAHRZEUGE IN DER WERKSTATT</span><h3>Die Werkstatt-Queue ist leer.</h3><small>Bestätigte Termine bleiben in der Terminplanung, bis das Fahrzeug tatsächlich eintrifft.</small></div></section>}</div>
@@ -535,7 +560,8 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      </section>
    </>}
  </div>
- {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)}/>}
+ {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
+ <VehicleChat open={Boolean(chatInboxTarget)} onClose={()=>setChatInboxTarget(null)} audience="workshop" workshopId={live.identity?.workshopId} vehicleId={chatInboxTarget?.vehicleId} vehicleLabel={chatInboxTarget?.vehicleName??'Fahrzeug'} plate={chatInboxTarget?.plate??'—'} chatEnabled={live.identity?.chatEnabled}/>
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  <ServiceRequestOfficeModal open={Boolean(serviceRequest)} onClose={()=>setServiceRequest(null)} onDone={live.reload} request={serviceRequest}/>
  <CustomerAdmissionModal open={Boolean(customerRequest)} onClose={()=>setCustomerRequest(null)} onDone={live.reload} request={customerRequest}/>
@@ -601,7 +627,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Sobald das Büro ein Fahrzeug als eingetroffen markiert oder eine Reparatur freigegeben wird, erscheint es hier.</span></div>}
  {queue.map((job,index)=><article key={job.id} className={selected?.id===job.id?'selected':''} onClick={()=>setSelectedId(job.id)}><span className={`queue-index ${job.stage==='repair'?'repair':''}`}>{job.stage==='repair'?'R':index+1}</span><div className="queue-copy"><b>{job.vehicle}</b><small>{job.plate}</small><p>{job.rawStage==='repairing'?'Reparatur in Arbeit':job.rawStage==='diagnosing'?'Diagnose in Arbeit':job.stage==='repair'?'Reparatur vom Kunden freigegeben':job.complaint}</p></div><button className={`btn ${owned(job)||job.assignee?'muted':'primary'}`} disabled={busy||Boolean(job.assignee&&!owned(job))} onClick={event=>{event.stopPropagation();void primaryFor(job)}}>{job.assignee&&!owned(job)?`Bei ${job.assignee}`:owned(job)?'Mein Auftrag':job.stage==='repair'?'Reparatur nehmen':'Diagnose nehmen'}</button></article>)}</section>
  <section className="panel work-card"><span className="overline">WERKSTATTKARTE</span>{selected?<><div className="work-car"><CarArt large tone={toneFor(selected.id)}/><div><h2>{selected.vehicle}</h2><span className="plate">{selected.plate}</span></div></div><div className="complaint"><small>KUNDENBEANSTANDUNG</small><p>{selected.complaint}</p></div><div className="work-buttons"><button className="btn primary xl full" disabled={busy||Boolean(live.isLive&&selected.assignee&&!owned(selected))} onClick={()=>void primary()}>{busy?'Bitte warten …':primaryLabel()}</button>{(owned(selected)||!live.isLive)&&<button className="btn secondary full" onClick={()=>setChat(true)}><MessageCircle size={17}/> Fahrzeugchat</button>}</div><p className="permission-note">Ein übernommener Auftrag ist dem Mechaniker eindeutig zugeordnet. Andere Mitarbeiter sehen den Status, können ihn aber nicht abschließen.</p></>:<div className="work-empty"><Car size={34}/><b>Keine Werkstattkarte ausgewählt.</b><span>Neue Arbeiten erscheinen automatisch in der Queue.</span></div>}</section></div></div>
- {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)}/>}
+ {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
  {selected&&<DiagnosisModal open={diagnosis} onClose={()=>setDiagnosis(false)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle}/>}
  </Shell>;
 
