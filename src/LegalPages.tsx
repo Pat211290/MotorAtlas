@@ -158,19 +158,26 @@ export function PrivacyPage({setView}:{setView:(view:AppView)=>void}){
       </article>
 
       <article className="legal-card">
-        <h2>8. Technisch erforderliche Speicherung auf dem Endgerät</h2>
+        <h2>8. Kartenansicht mit OpenStreetMap</h2>
+        <p>Für die Kartenansicht in der Werkstattsuche werden Kartenkacheln der OpenStreetMap Foundation (OSMF) direkt vom Browser geladen. Dabei können insbesondere IP-Adresse, Browser- und Gerätedaten, Referrer sowie Datum und Uhrzeit des Abrufs an die OSMF beziehungsweise deren technische Auslieferungsinfrastruktur übermittelt werden.</p>
+        <p>Die Kartenfunktion dient der nutzerfreundlichen Darstellung öffentlich gelisteter Werkstätten. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; das berechtigte Interesse liegt in der verständlichen geografischen Darstellung der Werkstattsuche. Die OpenStreetMap Foundation verarbeitet die bei ihren Diensten anfallenden Daten in eigener datenschutzrechtlicher Verantwortung.</p>
+        <p>Weitere Informationen: osmfoundation.org/wiki/Privacy_Policy</p>
+      </article>
+
+      <article className="legal-card">
+        <h2>9. Technisch erforderliche Speicherung auf dem Endgerät</h2>
         <p>MotorAtlas nutzt für Anmeldung, Sitzungsverwaltung, Navigation und ausgewählte kurzfristige Zustände technisch erforderliche Browser-Speichermechanismen. Diese dienen nicht der werblichen Profilbildung.</p>
         <p>Soweit Informationen ausschließlich erforderlich gespeichert oder ausgelesen werden, um den vom Nutzer ausdrücklich angeforderten digitalen Dienst bereitzustellen, erfolgt dies im Rahmen von § 25 Abs. 2 TDDDG ohne gesonderte Einwilligung. Werden künftig optionale Analyse-, Marketing- oder vergleichbare Technologien eingesetzt, wird hierfür – soweit erforderlich – vorab eine Einwilligung eingeholt.</p>
       </article>
 
       <article className="legal-card">
-        <h2>9. Speicherdauer</h2>
+        <h2>10. Speicherdauer</h2>
         <p>Personenbezogene Daten werden nur so lange gespeichert, wie dies für den jeweiligen Zweck erforderlich ist. Kontodaten werden grundsätzlich bis zur Löschung des Kontos beziehungsweise bis zum Wegfall des Nutzungszwecks verarbeitet. Auftrags- und Rechnungsdaten können aufgrund gesetzlicher handels- und steuerrechtlicher Pflichten länger aufzubewahren sein.</p>
         <p>Sicherheits- und Protokolldaten werden nur für den Zeitraum vorgehalten, der zur Absicherung, Fehleranalyse und Missbrauchsabwehr erforderlich ist.</p>
       </article>
 
       <article className="legal-card">
-        <h2>10. Rechtsgrundlagen</h2>
+        <h2>11. Rechtsgrundlagen</h2>
         <ul>
           <li>Art. 6 Abs. 1 lit. b DSGVO für Konto, Plattformnutzung, Anfragen, Termine und Auftragsabwicklung,</li>
           <li>Art. 6 Abs. 1 lit. c DSGVO für gesetzliche Aufbewahrungs- und Nachweispflichten,</li>
@@ -180,13 +187,13 @@ export function PrivacyPage({setView}:{setView:(view:AppView)=>void}){
       </article>
 
       <article className="legal-card">
-        <h2>11. Rechte betroffener Personen</h2>
+        <h2>12. Rechte betroffener Personen</h2>
         <p>Im Rahmen der gesetzlichen Voraussetzungen bestehen insbesondere Rechte auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. Erteilte Einwilligungen können für die Zukunft widerrufen werden.</p>
         <p>Zur Ausübung dieser Rechte genügt eine Nachricht an <a href={'mailto:'+controller.email}>{controller.email}</a>. Vor Herausgabe oder Löschung personenbezogener Daten kann eine geeignete Identitätsprüfung erforderlich sein.</p>
       </article>
 
       <article className="legal-card">
-        <h2>12. Beschwerderecht</h2>
+        <h2>13. Beschwerderecht</h2>
         <p>Betroffene Personen haben das Recht, sich bei einer Datenschutzaufsichtsbehörde zu beschweren. Für nicht-öffentliche Stellen in Bayern ist insbesondere das Bayerische Landesamt für Datenschutzaufsicht (BayLDA) zuständig.</p>
         <p>Bayerisches Landesamt für Datenschutzaufsicht<br/>
         Promenade 18<br/>
@@ -195,12 +202,12 @@ export function PrivacyPage({setView}:{setView:(view:AppView)=>void}){
       </article>
 
       <article className="legal-card">
-        <h2>13. Keine automatisierte Einzelentscheidung</h2>
+        <h2>14. Keine automatisierte Einzelentscheidung</h2>
         <p>MotorAtlas trifft derzeit keine ausschließlich automatisierten Entscheidungen mit rechtlicher oder vergleichbar erheblicher Wirkung im Sinne von Art. 22 DSGVO über Autofahrer oder Werkstätten.</p>
       </article>
 
       <article className="legal-card">
-        <h2>14. Stand und Änderungen</h2>
+        <h2>15. Stand und Änderungen</h2>
         <p>Stand: September 2026. Diese Datenschutzerklärung wird angepasst, wenn sich Funktionen, eingesetzte Dienstleister oder rechtliche Anforderungen ändern. Wesentliche Änderungen werden in geeigneter Weise kenntlich gemacht.</p>
       </article>
     </section>
