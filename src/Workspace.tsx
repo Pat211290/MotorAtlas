@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markAllWorkshopNotificationsRead, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
+import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -45,9 +45,9 @@ function Shell({
   };
 
   const readAll=async()=>{
-    const workshopId=notifications.find(item=>item.workshopId)?.workshopId;
-    if(!workshopId)return;
-    try{await markAllWorkshopNotificationsRead(workshopId);await onNotificationsChanged?.()}catch{}
+    const unreadItems=notifications.filter(item=>!item.readAt);
+    if(!unreadItems.length)return;
+    try{await Promise.all(unreadItems.map(item=>markNotificationRead(item.id)));await onNotificationsChanged?.()}catch{}
   };
 
   return <div className="app-shell">
@@ -610,6 +610,9 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    onHome={()=>setView('home')}
    onNavigate={next=>{setSection(next);window.scrollTo({top:0,behavior:'auto'})}}
    navItems={customerNav}
+   notifications={live.notifications}
+   onNotificationOpen={notification=>{if(notification.kind==='appointment'||notification.kind==='request')setSection('Termine');else if(notification.kind==='document')setSection('Dokumente');else setSection('Übersicht')}}
+   onNotificationsChanged={live.reload}
    title="Mein MotorAtlas"
    mode="Kundenportal"
    active={section}
