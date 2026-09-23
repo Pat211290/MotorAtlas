@@ -70,7 +70,16 @@ export async function createServiceRequestDraft(input:{
     complaint:input.complaint.trim()||'Keine Fehlerbeschreibung angegeben.',customer_notes:input.customerNotes?.trim()||null,
     desired_start:input.desiredStart??null,desired_end:input.desiredEnd??null,driveable:input.driveable??null,
     warning_level:input.warningLevel??null,status:'draft'
-  }).select().single();if(error)throw error;return data;
+  }).select().single();
+  if(error){
+    const message=error.message.includes('desired_appointment_in_past')
+      ?'Der Wunschtermin muss in der Zukunft liegen.'
+      :error.message.includes('invalid_desired_appointment_range')
+        ?'Das gewünschte Terminende muss nach dem Beginn liegen.'
+        :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function uploadRequestImage(serviceRequestId:string,file:File){
@@ -106,9 +115,11 @@ export async function proposeAppointment(input:{serviceRequestId:string;startsAt
     p_service_request_id:input.serviceRequestId,p_starts_at:input.startsAt,p_ends_at:input.endsAt??null,p_note:input.note?.trim()||null
   });
   if(error){
-    const message=error.message.includes('appointment_must_use_15_minute_slots')
-      ?'Termine können nur in 15-Minuten-Schritten gewählt werden.'
-      :error.message.includes('invalid_appointment_range')
+    const message=error.message.includes('appointment_in_past')
+      ?'Termine in der Vergangenheit sind nicht möglich. Bitte wähle einen zukünftigen 15-Minuten-Slot.'
+      :error.message.includes('appointment_must_use_15_minute_slots')
+        ?'Termine können nur in 15-Minuten-Schritten gewählt werden.'
+        :error.message.includes('invalid_appointment_range')
         ?'Das voraussichtliche Ende muss nach dem Terminbeginn liegen.'
         :error.message;
     throw new Error(message);
