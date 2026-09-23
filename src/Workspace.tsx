@@ -565,12 +565,15 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const live=useCustomerWorkspace();
  const [section,setSection]=useState<ShellSection>('Übersicht');
  const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false); const [requestModal,setRequestModal]=useState(false); const [directory,setDirectory]=useState(false); const [profileModal,setProfileModal]=useState(false);
+ const [cancelTarget,setCancelTarget]=useState<(typeof live.appointments)[number]|null>(null);
+ const [now,setNow]=useState(()=>new Date());
  const [documents,setDocuments]=useState<any[]>([]); const [docError,setDocError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
  const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
  const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['cancelled','converted'].includes(request.status)):null;
  const requestIsActive=Boolean(activeRequest&&activeRequest.status!=='declined');
  const proposedAppointment=requestIsActive&&activeRequest?live.appointments.find(item=>item.serviceRequestId===activeRequest.id&&item.status==='proposed'):null;
  const activeOrderAppointment=activeOrder?.serviceRequestId?live.appointments.find(item=>item.serviceRequestId===activeOrder.serviceRequestId&&item.status==='confirmed'):null;
+ const activeOrderWorkshop=activeOrder?live.workshops.find(item=>item.workshopId===activeOrder.workshopId):null;
  const relationshipNotice=live.isLive?live.relationshipRequests.find(request=>request.status==='pending'||request.status==='rejected')??null:null;
  const activeVehicleId=activeOrder?.vehicleId??(requestIsActive?activeRequest?.vehicleId:undefined);
  const activeVehicle=activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):live.vehicles[0];
@@ -580,6 +583,11 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    ['Fahrzeuge',Car,'Garage'],
    ['Dokumente',FileText,'Dokumente']
  ];
+
+ useEffect(()=>{
+   const timer=window.setInterval(()=>setNow(new Date()),60_000);
+   return()=>window.clearInterval(timer);
+ },[]);
 
  useEffect(()=>{
    if(!live.isLive||!activeOrder){setDocuments([]);return}
@@ -621,6 +629,8 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    if(request.status==='appointment_pending')return request.id===activeRequest?.id&&proposedAppointment?'Ein neuer Terminvorschlag wartet auf deine Entscheidung.':'Die Terminabstimmung läuft.';
    if(request.status==='appointment_confirmed')return'Der Termin ist bestätigt.';
    if(request.status==='declined')return request.declineReason||'Die Werkstatt kann diese Anfrage derzeit nicht annehmen.';
+   if(request.status==='cancelled')return'Der Termin wurde storniert.';
+   if(request.status==='converted')return'Aus der Anfrage wurde ein Werkstatttermin.';
    return'Anfrage wird bearbeitet.';
  };
 
@@ -635,8 +645,16 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    <div className="panel-title"><div><span className="overline">{activeOrder?`AUFTRAG #${activeOrder.orderNumber}`:activeRequest?'WERKSTATTANFRAGE':'KEIN AKTIVER VORGANG'}</span><h3>{activeOrder?(activeOrder.rawStage==='appointment_confirmed'?'Bestätigter Termin':'Aktueller Auftrag'):activeRequest?'Deine Anfrage':'Alles erledigt'}</h3></div>{activeOrder&&activeOrder.rawStage!=='appointment_confirmed'&&<Status stage={activeOrder.stage}/>}</div>
    {activeOrder?<>
      {activeOrder.rawStage==='appointment_confirmed'?<>
-       <Timeline title="Termin bestätigt" detail={activeOrderAppointment?new Date(activeOrderAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'full',timeStyle:'short'}):'Der Termin wurde bestätigt.'} current/>
+       <Timeline title="Termin bestätigt" detail={activeOrderAppointment?`${relativeDayLabel(new Date(activeOrderAppointment.startsAt),now)} · ${new Date(activeOrderAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'full',timeStyle:'short'})}`:'Der Termin wurde bestätigt.'} current/>
        <Timeline title="Fahrzeug wird erwartet" detail="Das Fahrzeug gilt erst als eingetroffen, wenn die Werkstatt es vor Ort eincheckt."/>
+       {activeOrderAppointment&&<div className="customer-cancel-window">
+         {customerCancellationOpen(activeOrderAppointment.startsAt,now)?<>
+           <div><CalendarDays/><span><small>ONLINE-STORNIERUNG</small><b>Bis 12 Stunden vor dem Termin möglich</b><p>Danach muss eine kurzfristige Absage direkt telefonisch mit {activeOrderWorkshop?.name||'der Werkstatt'} geklärt werden.</p></span></div>
+           <button className="btn secondary cancel-appointment" onClick={()=>setCancelTarget(activeOrderAppointment)}>Termin stornieren</button>
+         </>:<>
+           <div><Phone/><span><small>KURZFRISTIGE ÄNDERUNG</small><b>Online-Stornierung nicht mehr möglich</b><p>Der Termin ist in weniger als 12 Stunden bzw. bereits fällig. Bitte kontaktiere {activeOrderWorkshop?.name||'die Werkstatt'} telefonisch. Die Werkstatt kann den Termin jederzeit stornieren.</p></span></div>
+         </>}
+       </div>}
      </>:<>
        <Timeline title="Auftrag aktiv" detail={`Zuletzt aktualisiert: ${new Date(activeOrder.updatedAt).toLocaleString('de-DE')}`} current/>
        {quote&&<div className="customer-document-card"><div><FileText/><span><small>KOSTENVORANSCHLAG</small><b>{quote.document_number||'Dokument'}</b></span><strong>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):''}</strong></div><div><button className="btn secondary" onClick={()=>void openDocument(quote)}>PDF öffnen</button>{activeOrder.rawStage==='awaiting_customer_approval'&&<button className="btn primary" disabled={busy} onClick={()=>void approve('approved')}>{busy?'Wird gespeichert …':'Reparatur freigeben'}</button>}<button className="btn secondary" onClick={()=>void approve('question_requested')}>Rückfrage</button></div></div>}
@@ -691,7 +709,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
          {live.requests.map(request=>{
            const vehicle=live.vehicles.find(item=>item.id===request.vehicleId);
            const appointment=live.appointments.find(item=>item.serviceRequestId===request.id);
-           return <article className={'panel customer-request-row '+request.status} key={request.id}><Car/><div><small>WERKSTATTANFRAGE · {requestStatusLabel(request.status).toUpperCase()}</small><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b><p>{request.complaint}</p><span>{requestStatusText(request)}{appointment?` · Termin: ${new Date(appointment.startsAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}`:''}</span></div></article>
+           return <article className={'panel customer-request-row '+request.status} key={request.id}><Car/><div><small>WERKSTATTANFRAGE · {requestStatusLabel(request.status).toUpperCase()}</small><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b><p>{request.complaint}</p><span>{requestStatusText(request)}{appointment?` · Termin: ${relativeDayLabel(new Date(appointment.startsAt),now)}, ${new Date(appointment.startsAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}`:''}{appointment?.status==='cancelled'&&appointment.cancellationReason?` · ${appointment.cancellationReason}`:''}</span></div></article>
          })}
        </>}
      </div>}
@@ -706,6 +724,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
  <ServiceRequestModal open={requestModal} onClose={()=>setRequestModal(false)} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops}/>
  <VehicleChat open={chat} onClose={()=>setChat(false)} audience="customer" workOrderId={live.isLive?activeOrder?.id:null} vehicleLabel={live.isLive&&activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'BMW X3 3.0i'} plate={live.isLive&&activeVehicle?activeVehicle.licensePlate:'SAD XX 123'} orderNumber={live.isLive&&activeOrder?activeOrder.orderNumber:'184'}/>
+ <AppointmentCancelModal open={Boolean(cancelTarget)} onClose={()=>setCancelTarget(null)} onDone={live.reload} appointmentId={cancelTarget?.id} startsAt={cancelTarget?.startsAt} mode="customer" vehicle={activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}/>
  </Shell>;
 }
 
