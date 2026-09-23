@@ -14,6 +14,10 @@ export function PublicHeader({
 }:{view:AppView;setView:(view:AppView)=>void}){
   const [open,setOpen]=useState(false);
   const go=(next:AppView)=>{setOpen(false);setView(next)};
+  const openAccess=(mode:'start'|'login')=>{
+    sessionStorage.setItem('motoratlas_access_mode',mode);
+    go('login');
+  };
   return <header className="public-header">
     <div className="wrap public-nav">
       <button className="brand-button" onClick={()=>go('home')} aria-label="MotorAtlas Startseite"><Brand/></button>
@@ -25,8 +29,8 @@ export function PublicHeader({
         >{item.label}</button>)}
       </nav>
       <div className="public-nav-actions">
-        <button className={`public-login ${view==='login'?'active':''}`} onClick={()=>go('login')}>Anmelden</button>
-        <button className="btn primary public-start" onClick={()=>go('login')}>Als Werkstatt starten <ArrowRight size={15}/></button>
+        <button className={`public-login ${view==='login'?'active':''}`} onClick={()=>openAccess('login')}>Anmelden</button>
+        <button className="btn primary public-start" onClick={()=>openAccess('start')}>Kostenlos starten <ArrowRight size={15}/></button>
         <button className="public-menu" aria-label={open?'Menü schließen':'Menü öffnen'} onClick={()=>setOpen(!open)}>{open?<X/>:<Menu/>}</button>
       </div>
     </div>
