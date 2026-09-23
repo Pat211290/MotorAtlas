@@ -5,6 +5,7 @@ import './base.css';
 import './marketing.css';
 import './public-header.css';
 import './access.css';
+import './legal.css';
 import './finder.css';
 import './workshop-profile.css';
 import './marketing-pages.css';
