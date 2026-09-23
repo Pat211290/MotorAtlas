@@ -327,17 +327,56 @@ export type CustomerVehicle={
 export type CustomerOrder={
   id:string;orderNumber:string;vehicleId:string;stage:LiveStage;rawStage:string;updatedAt:string;workshopId:string;
 };
+export type CustomerWorkshop={
+  workshopId:string;linkId:string;isPrimary:boolean;name:string;street:string;postalCode:string;city:string;
+  logoPath?:string|null;acceptsNewCustomers:boolean;
+};
+export type CustomerServiceRequest={
+  id:string;workshopId:string;vehicleId:string;complaint:string;status:string;desiredStart?:string|null;desiredEnd?:string|null;
+  warningLevel?:string|null;driveable?:boolean|null;createdAt:string;
+};
+export type CustomerAppointment={
+  id:string;serviceRequestId:string;workshopId:string;startsAt:string;endsAt?:string|null;status:string;note?:string|null;
+};
 
-export async function loadCustomerWorkspace():Promise<{vehicles:CustomerVehicle[];orders:CustomerOrder[]}>{
+export async function loadCustomerWorkspace():Promise<{
+  vehicles:CustomerVehicle[];orders:CustomerOrder[];workshops:CustomerWorkshop[];
+  requests:CustomerServiceRequest[];appointments:CustomerAppointment[];
+}>{
   const client=db();
   const {data:auth}=await client.auth.getUser();
   if(!auth.user)throw new Error('Not signed in');
+
   const vehicleResult=await client.from('vehicles').select('id,make,model,variant,license_plate,mileage,first_registration,photo_path')
       .eq('owner_user_id',auth.user.id).is('archived_at',null).order('created_at',{ascending:true});
   if(vehicleResult.error)throw vehicleResult.error;
+
   const orderResult=await client.from('work_orders').select('id,order_number,vehicle_id,stage,updated_at,workshop_id')
       .eq('customer_user_id',auth.user.id).neq('stage','cancelled').order('updated_at',{ascending:false});
   if(orderResult.error)throw orderResult.error;
+
+  const requestResult=await client.from('service_requests')
+      .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,created_at')
+      .eq('customer_user_id',auth.user.id).not('status','in','("cancelled","converted")').order('created_at',{ascending:false});
+  if(requestResult.error)throw requestResult.error;
+
+  const linkResult=await client.from('customer_workshop_links')
+      .select('id,workshop_id,is_primary').eq('customer_user_id',auth.user.id).eq('active',true);
+  if(linkResult.error)throw linkResult.error;
+
+  const workshopIds=[...new Set(((linkResult.data??[]) as any[]).map(link=>link.workshop_id))];
+  const workshopResult=workshopIds.length
+    ?await client.from('workshops').select('id,name,street,postal_code,city,logo_path,accepts_new_customers').in('id',workshopIds)
+    :{data:[],error:null} as any;
+  if(workshopResult.error)throw workshopResult.error;
+
+  const requestIds=((requestResult.data??[]) as any[]).map(request=>request.id);
+  const appointmentResult=requestIds.length
+    ?await client.from('appointments').select('id,service_request_id,workshop_id,starts_at,ends_at,status,note').in('service_request_id',requestIds).not('status','eq','cancelled').order('created_at',{ascending:false})
+    :{data:[],error:null} as any;
+  if(appointmentResult.error)throw appointmentResult.error;
+
+  const workshopMap=new Map(((workshopResult.data??[]) as any[]).map(workshop=>[workshop.id,workshop]));
   return{
     vehicles:((vehicleResult.data??[]) as any[]).map(v=>({
       id:v.id,make:v.make,model:v.model,variant:v.variant,licensePlate:v.license_plate,mileage:v.mileage,
@@ -346,8 +385,52 @@ export async function loadCustomerWorkspace():Promise<{vehicles:CustomerVehicle[
     orders:((orderResult.data??[]) as any[]).map(o=>({
       id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,stage:mapOrderStage(o.stage),rawStage:o.stage,
       updatedAt:o.updated_at,workshopId:o.workshop_id
+    })),
+    workshops:((linkResult.data??[]) as any[]).map(link=>{
+      const workshop=workshopMap.get(link.workshop_id) as any;
+      return{workshopId:link.workshop_id,linkId:link.id,isPrimary:Boolean(link.is_primary),name:workshop?.name??'Werkstatt',
+        street:workshop?.street??'',postalCode:workshop?.postal_code??'',city:workshop?.city??'',logoPath:workshop?.logo_path??null,
+        acceptsNewCustomers:Boolean(workshop?.accepts_new_customers)};
+    }),
+    requests:((requestResult.data??[]) as any[]).map(r=>({
+      id:r.id,workshopId:r.workshop_id,vehicleId:r.vehicle_id,complaint:r.complaint,status:r.status,
+      desiredStart:r.desired_start,desiredEnd:r.desired_end,warningLevel:r.warning_level,driveable:r.driveable,createdAt:r.created_at
+    })),
+    appointments:((appointmentResult.data??[]) as any[]).map(a=>({
+      id:a.id,serviceRequestId:a.service_request_id,workshopId:a.workshop_id,startsAt:a.starts_at,endsAt:a.ends_at,status:a.status,note:a.note
     }))
   };
+}
+
+export type WorkshopServiceRequest={
+  id:string;customerUserId:string;customerName:string;vehicleId:string;vehicle:string;plate:string;
+  complaint:string;status:string;desiredStart?:string|null;desiredEnd?:string|null;driveable?:boolean|null;
+  warningLevel?:string|null;createdAt:string;
+};
+
+export async function listWorkshopServiceRequests(workshopId:string):Promise<WorkshopServiceRequest[]>{
+  const client=db();
+  const {data:requests,error}=await client.from('service_requests')
+    .select('id,customer_user_id,vehicle_id,complaint,status,desired_start,desired_end,driveable,warning_level,created_at')
+    .eq('workshop_id',workshopId).in('status',['submitted','accepted','appointment_pending']).order('created_at',{ascending:true});
+  if(error)throw error;
+  const rows=(requests??[]) as any[];if(!rows.length)return[];
+  const vehicleIds=[...new Set(rows.map(row=>row.vehicle_id))];
+  const customerIds=[...new Set(rows.map(row=>row.customer_user_id))];
+  const [vehicleResult,profileResult]=await Promise.all([
+    client.from('vehicles').select('id,make,model,variant,license_plate').in('id',vehicleIds),
+    client.from('profiles').select('id,full_name').in('id',customerIds)
+  ]);
+  if(vehicleResult.error)throw vehicleResult.error;if(profileResult.error)throw profileResult.error;
+  const vehicleMap=new Map(((vehicleResult.data??[]) as any[]).map(v=>[v.id,v]));
+  const profileMap=new Map(((profileResult.data??[]) as any[]).map(p=>[p.id,p.full_name]));
+  return rows.map(row=>{
+    const v=vehicleMap.get(row.vehicle_id) as any;
+    return{id:row.id,customerUserId:row.customer_user_id,customerName:profileMap.get(row.customer_user_id)??'Kunde',
+      vehicleId:row.vehicle_id,vehicle:v?[v.make,v.model,v.variant].filter(Boolean).join(' '):'Fahrzeug',
+      plate:v?.license_plate??'—',complaint:row.complaint,status:row.status,desiredStart:row.desired_start,desiredEnd:row.desired_end,
+      driveable:row.driveable,warningLevel:row.warning_level,createdAt:row.created_at};
+  });
 }
 
 export function subscribeCustomerOrders(userId:string,onChange:()=>void){
@@ -550,10 +633,18 @@ export function getWorkshopLogoPublicUrl(path:string){
 }
 
 export async function listPendingCustomerRequests(workshopId:string){
-  const {data,error}=await db().from('workshop_customer_requests')
+  const client=db();
+  const {data,error}=await client.from('workshop_customer_requests')
     .select('id,customer_user_id,message,status,created_at')
     .eq('workshop_id',workshopId).eq('status','pending').order('created_at',{ascending:true});
-  if(error)throw error;return data??[];
+  if(error)throw error;
+  const rows=(data??[]) as any[];if(!rows.length)return[];
+  const ids=[...new Set(rows.map(row=>row.customer_user_id))];
+  const {data:profiles,error:profileError}=await client.from('profiles')
+    .select('id,full_name,street,postal_code,city').in('id',ids);
+  if(profileError)throw profileError;
+  const map=new Map(((profiles??[]) as any[]).map(profile=>[profile.id,profile]));
+  return rows.map(row=>({ ...row, profile:map.get(row.customer_user_id)??null }));
 }
 
 
