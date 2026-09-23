@@ -764,7 +764,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
            </div>
            <div className="customer-focus-actions">
              {workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}><Phone size={16}/> Werkstatt anrufen</a>}
-             <button className="btn secondary" onClick={()=>setChatTarget('order')}><MessageCircle size={16}/> Chat</button>
+             {workshop?.chatEnabled!==false&&<button className="btn secondary" onClick={()=>setChatTarget('order')}><MessageCircle size={16}/> Chat</button>}
              {isAppointment&&<button className="btn primary" onClick={()=>setSection('Termine')}><CalendarDays size={16}/> Termin ansehen</button>}
            </div>
          </div>
@@ -782,7 +782,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
 
        {quote&&activeOrder.rawStage==='awaiting_customer_approval'&&<section className="panel customer-priority-card">
          <div><FileText/><span><small>DEINE ENTSCHEIDUNG</small><b>Kostenvoranschlag liegt vor</b><p>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):'Betrag im Dokument'}</p></span></div>
-         <div><button className="btn secondary" onClick={()=>void openDocument(quote)}>Angebot öffnen</button><button className="btn secondary" onClick={()=>setChatTarget('order')}>Rückfrage</button><button className="btn primary" disabled={busy} onClick={()=>void approveQuote()}>{busy?'Speichert …':'Reparatur freigeben'}</button></div>
+         <div><button className="btn secondary" onClick={()=>void openDocument(quote)}>Angebot öffnen</button>{activeWorkshop?.chatEnabled!==false&&<button className="btn secondary" onClick={()=>setChatTarget('order')}>Rückfrage</button>}<button className="btn primary" disabled={busy} onClick={()=>void approveQuote()}>{busy?'Speichert …':'Reparatur freigeben'}</button></div>
        </section>}
 
        {invoice&&<section className="panel customer-priority-card invoice">
@@ -893,15 +893,25 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    const workshop=primaryWorkshop;
    if(!workshop)return <section className="panel customer-simple-empty"><Building2/><h3>Noch keine Stammwerkstatt.</h3><p>Wähle eine Werkstatt aus der MotorAtlas-Karte und sende eine Kundenanfrage.</p><button className="btn primary" onClick={()=>setDirectory(true)}>Werkstatt finden</button></section>;
    const logo=workshop.logoPath?getWorkshopLogoPublicUrl(workshop.logoPath):null;
+   const stats=live.responseStats[workshop.workshopId];
+   const responseText=stats&&stats.sampleCount>=3&&stats.medianResponseMinutes!=null
+     ?stats.medianResponseMinutes<60
+       ?`Antwortet in der Regel in ca. ${Math.max(1,Math.round(stats.medianResponseMinutes))} Min.`
+       :stats.medianResponseMinutes<1440
+         ?`Antwortet in der Regel in ca. ${Math.round(stats.medianResponseMinutes/60*10)/10} Std.`
+         :`Antwortet in der Regel in ca. ${Math.round(stats.medianResponseMinutes/1440*10)/10} Tagen.`
+     :'Noch nicht genug Chat-Antworten für eine belastbare Analyse.';
    return <div className="customer-workshop-view">
      <section className="panel customer-workshop-hero">
        <div className="customer-workshop-logo">{logo?<img src={logo} alt={workshop.name}/>:<Building2/>}</div>
        <div><span className="overline">DEINE STAMMWERKSTATT</span><h2>{workshop.name}</h2><p>{workshop.description||'Direkt mit deiner Werkstatt verbunden.'}</p><div className="customer-workshop-address"><MapPin/>{workshop.street}, {workshop.postalCode} {workshop.city}</div></div>
      </section>
+     {!workshop.chatEnabled&&<div className="workshop-chat-disabled"><MessageCircle/><div><b>MotorAtlas-Chat nicht angeboten</b><span>Diese Werkstatt hat den Chat deaktiviert. Nutze bitte Telefon oder E-Mail.</span></div></div>}
      <section className="customer-workshop-contact-grid">
        <article className="panel"><Phone/><small>TELEFON</small><b>{workshop.phone||'Nicht hinterlegt'}</b>{workshop.phone&&<a className="btn primary" href={phoneHref(workshop.phone)}>Anrufen</a>}</article>
        <article className="panel"><Mail/><small>E-MAIL</small><b>{workshop.email||'Nicht hinterlegt'}</b>{workshop.email&&<a className="btn secondary" href={mailHref(workshop.email)}>E-Mail schreiben</a>}</article>
-       <article className="panel"><MessageCircle/><small>CHAT</small><b>Direkt in MotorAtlas</b><button className="btn secondary" disabled={!live.vehicles.length} onClick={()=>setChatTarget('workshop')}>Chat öffnen</button></article>
+       <article className="panel"><MessageCircle/><small>CHAT</small><b>{workshop.chatEnabled?'Direkt in MotorAtlas':'Von der Werkstatt deaktiviert'}</b>{workshop.chatEnabled?<button className="btn secondary" disabled={!live.vehicles.length} onClick={()=>setChatTarget('workshop')}>Chat öffnen</button>:<span className="contact-muted">Telefon oder E-Mail verwenden</span>}</article>
+       <article className="panel"><Clock3/><small>ANTWORTZEIT</small><b>{responseText}</b><span className="contact-muted">{stats?.sampleCount??0} ausgewertete Antwort{(stats?.sampleCount??0)===1?'':'en'}</span></article>
        <article className="panel"><Building2/><small>WEBSITE</small><b>{workshop.website||'Nicht hinterlegt'}</b>{workshop.website&&<a className="btn secondary" href={websiteHref(workshop.website)} target="_blank" rel="noreferrer">Website öffnen</a>}</article>
      </section>
    </div>;
@@ -959,6 +969,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    vehicleLabel={activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}
    plate={activeVehicle?.licensePlate??'—'}
    orderNumber={activeOrder?.orderNumber??''}
+   chatEnabled={(chatTarget==='order'?activeWorkshop:primaryWorkshop)?.chatEnabled}
  />
  <AppointmentCancelModal open={Boolean(cancelTarget)} onClose={()=>setCancelTarget(null)} onDone={live.reload} appointmentId={cancelTarget?.id} startsAt={cancelTarget?.startsAt} mode="customer" vehicle={activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}/>
  </Shell>;
