@@ -684,7 +684,7 @@ export type WorkshopVerificationDocument={
   id:string;
   workshop_id:string;
   uploaded_by:string;
-  document_type:'business_registration'|'handwerksrolle'|'meisterbrief'|'industriemeister'|'techniker'|'other';
+  document_type:'business_registration'|'handwerksrolle'|'climate_certificate'|'meisterbrief'|'industriemeister'|'techniker'|'other';
   storage_path:string;
   file_name:string;
   mime_type:string;
