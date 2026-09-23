@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getCurrentWorkshopIdentity,getSignedInUserId,listMyCustomerDocuments,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
+  getCurrentWorkshopIdentity,getSignedInUserId,getWorkshopDashboardMetrics,getWorkshopResponseStats,listMyCustomerDocuments,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopChatInbox,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
   subscribeCustomerOrders,subscribeWorkshop,
   type AppNotification,type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
-  type LiveJob,type WorkshopAppointment,type WorkshopIdentity,type WorkshopServiceRequest
+  type LiveJob,type WorkshopAppointment,type WorkshopChatInboxItem,type WorkshopDashboardMetrics,type WorkshopIdentity,type WorkshopResponseStats,type WorkshopServiceRequest
 } from './api';
 import { backendConfigured } from './lib';
 
@@ -14,6 +14,9 @@ export function useWorkshopWorkspace(){
   const [customerRequests,setCustomerRequests]=useState<any[]>([]);
   const [appointments,setAppointments]=useState<WorkshopAppointment[]>([]);
   const [notifications,setNotifications]=useState<AppNotification[]>([]);
+  const [chatInbox,setChatInbox]=useState<WorkshopChatInboxItem[]>([]);
+  const [metrics,setMetrics]=useState<WorkshopDashboardMetrics>({activeCustomerCount:0,primaryCustomerCount:0});
+  const [responseStats,setResponseStats]=useState<WorkshopResponseStats>({medianResponseMinutes:null,averageResponseMinutes:null,sampleCount:0});
   const [loading,setLoading]=useState(backendConfigured);
   const [error,setError]=useState<string|null>(null);
 
@@ -23,17 +26,24 @@ export function useWorkshopWorkspace(){
       const current=await getCurrentWorkshopIdentity();
       setIdentity(current);
       if(!current){
-        setJobs([]);setServiceRequests([]);setCustomerRequests([]);setAppointments([]);setNotifications([]);setLoading(false);return;
+        setJobs([]);setServiceRequests([]);setCustomerRequests([]);setAppointments([]);setNotifications([]);setChatInbox([]);
+        setMetrics({activeCustomerCount:0,primaryCustomerCount:0});
+        setResponseStats({medianResponseMinutes:null,averageResponseMinutes:null,sampleCount:0});
+        setLoading(false);return;
       }
-      const [nextJobs,nextServiceRequests,nextCustomerRequests,nextAppointments,nextNotifications]=await Promise.all([
+      const [nextJobs,nextServiceRequests,nextCustomerRequests,nextAppointments,nextNotifications,nextChatInbox,nextMetrics,nextResponseStats]=await Promise.all([
         listWorkshopJobs(current.workshopId),
         listWorkshopServiceRequests(current.workshopId),
         listPendingCustomerRequests(current.workshopId),
         listWorkshopAppointments(current.workshopId),
-        listMyWorkshopNotifications(current.workshopId)
+        listMyWorkshopNotifications(current.workshopId),
+        listWorkshopChatInbox(current.workshopId).catch(()=>[]),
+        getWorkshopDashboardMetrics(current.workshopId),
+        getWorkshopResponseStats(current.workshopId)
       ]);
       setJobs(nextJobs);setServiceRequests(nextServiceRequests);setCustomerRequests(nextCustomerRequests);
-      setAppointments(nextAppointments);setNotifications(nextNotifications);
+      setAppointments(nextAppointments);setNotifications(nextNotifications);setChatInbox(nextChatInbox);
+      setMetrics(nextMetrics);setResponseStats(nextResponseStats);
       setError(null);
     }catch(err){
       setError(err instanceof Error?err.message:'Werkstattdaten konnten nicht geladen werden.');
@@ -59,7 +69,7 @@ export function useWorkshopWorkspace(){
     };
   },[reload]);
 
-  return{identity,jobs,serviceRequests,customerRequests,appointments,notifications,loading,error,reload,isLive:Boolean(identity)};
+  return{identity,jobs,serviceRequests,customerRequests,appointments,notifications,chatInbox,metrics,responseStats,loading,error,reload,isLive:Boolean(identity)};
 }
 
 export function useCustomerWorkspace(){
@@ -72,10 +82,11 @@ export function useCustomerWorkspace(){
   const [relationshipRequests,setRelationshipRequests]=useState<CustomerRelationshipRequest[]>([]);
   const [documents,setDocuments]=useState<Awaited<ReturnType<typeof listMyCustomerDocuments>>>([]);
   const [notifications,setNotifications]=useState<AppNotification[]>([]);
+  const [responseStats,setResponseStats]=useState<Record<string,WorkshopResponseStats>>({});
   const [loading,setLoading]=useState(backendConfigured);
   const [error,setError]=useState<string|null>(null);
 
-  const clear=()=>{setVehicles([]);setOrders([]);setWorkshops([]);setRequests([]);setAppointments([]);setRelationshipRequests([]);setDocuments([]);setNotifications([])};
+  const clear=()=>{setVehicles([]);setOrders([]);setWorkshops([]);setRequests([]);setAppointments([]);setRelationshipRequests([]);setDocuments([]);setNotifications([]);setResponseStats({})};
 
   const reload=useCallback(async()=>{
     if(!backendConfigured){setLoading(false);return;}
@@ -83,10 +94,18 @@ export function useCustomerWorkspace(){
       const id=await getSignedInUserId();
       setUserId(id);
       if(!id){clear();setLoading(false);return;}
-      const [data,nextDocuments,nextNotifications]=await Promise.all([loadCustomerWorkspace(),listMyCustomerDocuments(),listMyNotifications()]);
+      const data=await loadCustomerWorkspace();
+      const [nextDocuments,nextNotifications,statsPairs]=await Promise.all([
+        listMyCustomerDocuments(),
+        listMyNotifications(),
+        Promise.all(data.workshops.map(async workshop=>[
+          workshop.workshopId,
+          await getWorkshopResponseStats(workshop.workshopId).catch(()=>({medianResponseMinutes:null,averageResponseMinutes:null,sampleCount:0}))
+        ] as const))
+      ]);
       setVehicles(data.vehicles);setOrders(data.orders);setWorkshops(data.workshops);
       setRequests(data.requests);setAppointments(data.appointments);setRelationshipRequests(data.relationshipRequests);
-      setDocuments(nextDocuments);setNotifications(nextNotifications);setError(null);
+      setDocuments(nextDocuments);setNotifications(nextNotifications);setResponseStats(Object.fromEntries(statsPairs));setError(null);
     }catch(err){
       setError(err instanceof Error?err.message:'Kundendaten konnten nicht geladen werden.');
     }finally{setLoading(false)}
@@ -111,5 +130,5 @@ export function useCustomerWorkspace(){
     };
   },[reload]);
 
-  return{userId,vehicles,orders,workshops,requests,appointments,relationshipRequests,documents,notifications,loading,error,reload,isLive:Boolean(userId)};
+  return{userId,vehicles,orders,workshops,requests,appointments,relationshipRequests,documents,notifications,responseStats,loading,error,reload,isLive:Boolean(userId)};
 }
