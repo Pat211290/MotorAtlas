@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Car, FileText, Image as ImageIcon, Paperclip, Send, ShieldCheck, X } from 'lucide-react';
 import {
-  ensureWorkOrderChat,getChatAttachmentUrl,getSignedInUserId,listChatMessages,markChatRead,
+  ensureVehicleChat,ensureWorkOrderChat,getChatAttachmentUrl,getSignedInUserId,listChatMessages,markChatRead,
   sendChatAttachment,sendChatMessage,subscribeChat,type ChatMessage
 } from './api';
 import { backendConfigured } from './lib';
@@ -11,6 +11,8 @@ type Props={
   onClose:()=>void;
   audience:'customer'|'workshop';
   workOrderId?:string|null;
+  workshopId?:string|null;
+  vehicleId?:string|null;
   vehicleLabel?:string;
   plate?:string;
   orderNumber?:string;
@@ -29,7 +31,7 @@ function formatTime(value:string){
 }
 
 export function VehicleChat({
-  open,onClose,audience,workOrderId,vehicleLabel='BMW X3 3.0i',plate='SAD XX 123',orderNumber='184'
+  open,onClose,audience,workOrderId,workshopId,vehicleId,vehicleLabel='BMW X3 3.0i',plate='SAD XX 123',orderNumber='184'
 }:Props){
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [threadId,setThreadId]=useState<string|null>(null);
@@ -38,7 +40,10 @@ export function VehicleChat({
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const fileRef=useRef<HTMLInputElement>(null);
-  const isLive=backendConfigured&&Boolean(workOrderId&&uuid.test(workOrderId));
+  const isLive=backendConfigured&&Boolean(
+    (workOrderId&&uuid.test(workOrderId))||
+    (workshopId&&vehicleId&&uuid.test(workshopId)&&uuid.test(vehicleId))
+  );
 
   useEffect(()=>{
     if(!open)return;
@@ -51,7 +56,9 @@ export function VehicleChat({
       try{
         const uid=await getSignedInUserId();
         if(!uid)throw new Error('Bitte zuerst anmelden.');
-        const thread=await ensureWorkOrderChat(workOrderId!);
+        const thread=workOrderId&&uuid.test(workOrderId)
+          ?await ensureWorkOrderChat(workOrderId)
+          :await ensureVehicleChat(workshopId!,vehicleId!);
         const initial=await listChatMessages(thread.id);
         if(cancelled)return;
         setUserId(uid);setThreadId(thread.id);setMessages(initial);setError(null);
@@ -66,7 +73,7 @@ export function VehicleChat({
     };
     void run();
     return()=>{cancelled=true;unsubscribe?.()};
-  },[open,isLive,workOrderId]);
+  },[open,isLive,workOrderId,workshopId,vehicleId]);
 
   if(!open)return null;
 
@@ -114,7 +121,7 @@ export function VehicleChat({
   return <div className="drawer-backdrop" onMouseDown={onClose}>
     <aside className="chat-drawer" onMouseDown={event=>event.stopPropagation()}>
       <header>
-        <div><span className="chat-vehicle"><Car size={17}/></span><div><b>{vehicleLabel}</b><small>{plate} · Auftrag #{orderNumber}</small></div></div>
+        <div><span className="chat-vehicle"><Car size={17}/></span><div><b>{vehicleLabel}</b><small>{plate} · {workOrderId?`Auftrag #${orderNumber}`:'Werkstattchat'}</small></div></div>
         <button onClick={onClose} aria-label="Chat schließen"><X/></button>
       </header>
       <div className="chat-note"><ShieldCheck size={14}/> Chat und formelle Reparaturfreigabe sind bewusst getrennt.</div>
