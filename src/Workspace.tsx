@@ -882,13 +882,13 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
              <i/><div><b>Diagnose gestartet</b><span>{activeOrder.progress.diagnosisStartedAt?<>{new Date(activeOrder.progress.diagnosisStartedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}{activeOrder.progress.diagnosisStaffName?' · '+activeOrder.progress.diagnosisStaffName:''}</>:'Wartet auf Zuordnung'}</span></div>
            </div>
            <div className={activeOrder.progress.diagnosisCompletedAt?'done':['diagnosing'].includes(activeOrder.rawStage)?'current':'pending'}>
-             <i/><div><b>Diagnose abgeschlossen</b><span>{activeOrder.progress.diagnosisCompletedAt?new Date(activeOrder.progress.diagnosisCompletedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch offen'}</span></div>
+             <i/><div><b>Diagnose abgeschlossen</b><span>{activeOrder.progress.diagnosisCompletedAt?<>{new Date(activeOrder.progress.diagnosisCompletedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}{activeOrder.progress.diagnosisStaffName?' · durch '+activeOrder.progress.diagnosisStaffName:''}</>:'Noch offen'}</span></div>
            </div>
            <div className={activeOrder.progress.repairStartedAt?'done':activeOrder.rawStage==='ready_for_repair'?'current':'pending'}>
              <i/><div><b>Reparatur gestartet</b><span>{activeOrder.progress.repairStartedAt?<>{new Date(activeOrder.progress.repairStartedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}{activeOrder.progress.repairStaffName?' · '+activeOrder.progress.repairStaffName:''}</>:'Noch nicht gestartet'}</span></div>
            </div>
            <div className={activeOrder.progress.repairCompletedAt?'done':activeOrder.rawStage==='repairing'?'current':'pending'}>
-             <i/><div><b>Reparatur abgeschlossen</b><span>{activeOrder.progress.repairCompletedAt?new Date(activeOrder.progress.repairCompletedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch offen'}</span></div>
+             <i/><div><b>Reparatur abgeschlossen</b><span>{activeOrder.progress.repairCompletedAt?<>{new Date(activeOrder.progress.repairCompletedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}{activeOrder.progress.repairStaffName?' · durch '+activeOrder.progress.repairStaffName:''}</>:'Noch offen'}</span></div>
            </div>
            <div className={activeOrder.progress.readyForPickupAt?'done':activeOrder.rawStage==='repair_complete'?'current':'pending'}>
              <i/><div><b>Abholbereit</b><span>{activeOrder.progress.readyForPickupAt?new Date(activeOrder.progress.readyForPickupAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch nicht freigegeben'}</span></div>
