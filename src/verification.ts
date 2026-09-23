@@ -1,4 +1,4 @@
-export type QualificationScope='none'|'kfz_trade'|'tire_trade';
+export type QualificationScope='none'|'review'|'kfz_trade'|'tire_trade'|'climate_cert';
 
 export type WorkshopServiceOption={
   code:string;
@@ -10,15 +10,23 @@ export type WorkshopServiceOption={
 export const WORKSHOP_SERVICE_OPTIONS:WorkshopServiceOption[]=[
   {code:'detailing',label:'Fahrzeugaufbereitung',description:'Innen-/Außenreinigung, Politur und Pflege.',qualificationScope:'none'},
   {code:'wash',label:'Fahrzeugwäsche',description:'Handwäsche und Pflegeleistungen.',qualificationScope:'none'},
-  {code:'tire_basic',label:'Rad-/Reifenservice',description:'Radwechsel, Reifenwechsel und Auswuchten.',qualificationScope:'none'},
-  {code:'basic_service',label:'Einfacher Fahrzeugservice',description:'Einfache Servicearbeiten wie Flüssigkeitskontrollen, Filter oder Zündkerzen, soweit handwerksrechtlich zulässig.',qualificationScope:'none'},
-  {code:'diagnostics',label:'Diagnose & Fehlersuche',description:'Systematische Diagnose mechanischer, elektrischer oder elektronischer Fehler.',qualificationScope:'kfz_trade'},
-  {code:'inspection',label:'Inspektion & Wartung',description:'Umfassende Inspektions- und Wartungsarbeiten.',qualificationScope:'kfz_trade'},
+  {code:'tire_basic',label:'Rad-/Reifenservice',description:'Radwechsel, Reifenwechsel und Auswuchten ohne Reifenreparatur/Vulkanisation.',qualificationScope:'none'},
+
+  {code:'maintenance_basic',label:'Service & Wartung (Basis)',description:'Einfache Wartungsarbeiten und einzelne Servicepositionen. Die handwerksrechtliche Einordnung wird beim Gesamtumfang mitgeprüft.',qualificationScope:'review'},
+  {code:'oil_filter_service',label:'Öl- & Filterservice',description:'Motorölwechsel sowie Öl-, Luft-, Innenraum- und – soweit fahrzeugüblich – Kraftstofffilterwechsel.',qualificationScope:'review'},
+  {code:'ignition_glow_service',label:'Zünd- & Glühkerzenservice',description:'Zündkerzen und Glühkerzen im Rahmen von Wartungsarbeiten erneuern.',qualificationScope:'review'},
+  {code:'transmission_fluid_service',label:'Getriebeölwechsel & Getriebespülung',description:'Getriebeölservice einschließlich maschineller Spülung und korrekter Füllstands-/Temperaturprozedur.',qualificationScope:'review'},
+  {code:'climate_service',label:'Klimaservice',description:'Kältemittel absaugen, evakuieren, befüllen und Klimaanlagen-Service. Dafür wird ein Kfz-Klimasachkundenachweis geprüft.',qualificationScope:'climate_cert'},
+
+  {code:'obd_readout',label:'Fehlerspeicher auslesen & Fahrzeugcheck',description:'Fehlerspeicher auslesen, Messwerte ansehen und Befund dokumentieren – ohne Reparatur oder tiefgehende systematische Fehlersuche.',qualificationScope:'review'},
+  {code:'diagnostics',label:'Systematische Fehlerdiagnose',description:'Geführte Fehlersuche, Messungen, Stellgliedtests und fachliche Ursachenanalyse an Fahrzeug-Systemen.',qualificationScope:'kfz_trade'},
+  {code:'inspection',label:'Inspektion nach Herstellervorgabe',description:'Umfassende Inspektion/Wartung nach Herstellervorgaben einschließlich systematischer Prüfpositionen.',qualificationScope:'kfz_trade'},
+
   {code:'brakes',label:'Bremsanlage',description:'Reparatur- und Instandsetzungsarbeiten an der Bremsanlage.',qualificationScope:'kfz_trade'},
   {code:'suspension',label:'Fahrwerk & Lenkung',description:'Reparaturen an Fahrwerk, Lenkung und Achskomponenten.',qualificationScope:'kfz_trade'},
   {code:'engine',label:'Motor',description:'Motorreparaturen und weitergehende Motorarbeiten.',qualificationScope:'kfz_trade'},
   {code:'transmission',label:'Getriebe & Antrieb',description:'Reparaturen an Getriebe und Antriebsstrang.',qualificationScope:'kfz_trade'},
-  {code:'electrical',label:'Kfz-Elektrik & Elektronik',description:'Fehlersuche und Reparaturen an elektrischen/elektronischen Fahrzeugsystemen.',qualificationScope:'kfz_trade'},
+  {code:'electrical',label:'Kfz-Elektrik & Elektronik',description:'Reparaturen und tiefergehende Arbeiten an elektrischen/elektronischen Fahrzeugsystemen.',qualificationScope:'kfz_trade'},
   {code:'general_repair',label:'Allgemeine Kfz-Reparaturen',description:'Allgemeine Instandsetzung von Kraftfahrzeugen.',qualificationScope:'kfz_trade'},
   {code:'tire_repair',label:'Reifenreparatur / Vulkanisation',description:'Reparatur und vulkanisationstechnische Arbeiten an Reifen.',qualificationScope:'tire_trade'}
 ];
