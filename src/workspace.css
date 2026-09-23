@@ -482,6 +482,12 @@
 .workflow-choice.primary:hover{filter:brightness(.98)}
 .workflow-choice.primary>svg{background:rgba(255,255,255,.14);color:#fff}
 .workflow-choice.primary b,.workflow-choice.primary small{color:#fff}.workflow-choice.primary small{opacity:.82}
+.workflow-choice:disabled{opacity:.58;cursor:not-allowed;transform:none}
+.billing-choice-grid .workflow-choice.primary{grid-column:auto}
+.billing-choice-grid .no-cost-choice{border-color:rgba(var(--brand-rgb),.24);background:linear-gradient(135deg,var(--brand-soft),#fff)}
+.billing-choice-grid .no-cost-choice>svg{background:#fff}
+.no-cost-modal .workflow-decision-note{margin:0 0 13px}
+.no-cost-modal .modal-actions{margin-top:13px}
 
 .workflow-decision-note{display:grid;grid-template-columns:32px 1fr;gap:9px;border:1px solid #dfe8e5;background:#f8fcfa;border-radius:11px;padding:11px}.workflow-decision-note>svg{width:30px;height:30px;padding:7px;border-radius:9px;background:#fff;color:var(--brand)}.workflow-decision-note p{font-size:9px;line-height:1.5;color:#60757e;margin:0}
 .work-decision-modal form{display:grid;gap:11px}
@@ -492,7 +498,7 @@
 
 @media(max-width:850px){
   .request-intent-grid{grid-template-columns:1fr}.request-intent-grid .request-intent:last-child{grid-column:auto}
-  .workflow-choice-grid{grid-template-columns:1fr}.workflow-choice.primary{grid-column:auto}
+  .workflow-choice-grid{grid-template-columns:1fr}.workflow-choice.primary{grid-column:auto}.billing-choice-grid .workflow-choice.primary{grid-column:auto}
   .customer-decision-card{align-items:stretch;flex-direction:column}.customer-decision-actions{display:grid;grid-template-columns:1fr}.customer-decision-actions .btn{width:100%}
 }
 
