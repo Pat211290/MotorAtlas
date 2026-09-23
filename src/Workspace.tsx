@@ -23,14 +23,36 @@ type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokum
 type ShellNavItem=[ShellSection,typeof Home,string?];
 
 function Shell({
-  children,title,mode,active,onHome,onSettings,onNavigate,navItems
+  children,title,mode,active,onHome,onSettings,onNavigate,navItems,notifications=[],onNotificationOpen,onNotificationsChanged
 }:{
   children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void;
   onSettings?:()=>void;onNavigate?:(section:ShellSection)=>void;navItems?:ShellNavItem[];
+  notifications?:AppNotification[];onNotificationOpen?:(notification:AppNotification)=>void;
+  onNotificationsChanged?:()=>Promise<void>|void;
 }){
   const items:ShellNavItem[]=navItems??[
     ['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText]
   ];
+  const [notificationOpen,setNotificationOpen]=useState(false);
+  const unread=notifications.filter(item=>!item.readAt).length;
+
+  const openNotification=async(notification:AppNotification)=>{
+    if(!notification.readAt){
+      try{await markNotificationRead(notification.id);await onNotificationsChanged?.()}catch{}
+    }
+    onNotificationOpen?.(notification);
+    setNotificationOpen(false);
+  };
+
+  const readAll=async()=>{
+    const first=notifications[0];
+    if(!first)return;
+    try{
+      const workshopId=(first as any).workshopId;
+      if(workshopId)await markAllWorkshopNotificationsRead(workshopId);
+    }catch{}
+  };
+
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="side-brand" onClick={onHome}><Brand compact/></button>
@@ -49,7 +71,17 @@ function Shell({
     <main className="app-main">
       <div className="app-top">
         <div className="app-search"><Search size={17}/><span>Fahrzeug, Kunde oder Auftrag suchen …</span></div>
-        <button className="icon-button"><Bell size={18}/><i/></button>
+        <div className="notification-wrap">
+          <button className="icon-button" onClick={()=>setNotificationOpen(value=>!value)} aria-label="Benachrichtigungen">
+            <Bell size={18}/>{unread>0&&<span className="notification-count">{unread>99?'99+':unread}</span>}
+          </button>
+          {notificationOpen&&<div className="notification-popover">
+            <header><div><small>BENACHRICHTIGUNGEN</small><b>{unread?unread+' neu':'Alles gelesen'}</b></div>{unread>0&&<button onClick={async()=>{if(notifications.length){const first=notifications[0] as any;if(first.workshopId){await markAllWorkshopNotificationsRead(first.workshopId);await onNotificationsChanged?.();}}}}>Alle gelesen</button>}</header>
+            <div>{notifications.length?notifications.slice(0,12).map(item=><button key={item.id} className={item.readAt?'':'unread'} onClick={()=>void openNotification(item)}>
+              <span className="notification-dot"/><div><b>{item.title}</b><p>{item.body||'Neue Aktivität in MotorAtlas.'}</p><small>{new Date(item.createdAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}</small></div>
+            </button>):<div className="notification-empty"><Bell/><b>Keine neuen Meldungen.</b><span>Neue Anfragen und Terminantworten erscheinen hier automatisch.</span></div>}</div>
+          </div>}
+        </div>
         <div className="top-identity"><span>CS</span><div><b>{title}</b><small>{mode}</small></div></div>
       </div>
       {children}
