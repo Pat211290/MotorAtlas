@@ -173,7 +173,7 @@ export type WorkshopMemberOption={
   userId:string;displayName:string;role:string;permissions:Record<string,unknown>;
 };
 
-export async function listWorkshopMembers(workshopId:string):Promise<WorkshopMemberOption[]>{
+export async function listAssignableWorkshopMembers(workshopId:string):Promise<WorkshopMemberOption[]>{
   const {data,error}=await db().from('workshop_members')
     .select('user_id,display_name,role,permissions')
     .eq('workshop_id',workshopId).eq('active',true).order('created_at',{ascending:true});
