@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
+import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listMyCustomerDocuments, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -20,7 +20,7 @@ import { CustomerProfileModal } from './CustomerProfileModal';
 import { AppointmentCancelModal } from './AppointmentCancelModal';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
-type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente';
+type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente'|'Stammwerkstatt';
 type ShellNavItem=[ShellSection,typeof Home,string?];
 
 function Shell({
@@ -735,6 +735,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  const [url,setUrl]=useState<string>(); const [logoFile,setLogoFile]=useState<File|null>(null); const [palette,setPalette]=useState<Awaited<ReturnType<typeof paletteFromLogo>>|null>(null);
  const [mode,setMode]=useState<'solo'|'team'>('solo'); const [name,setName]=useState(''); const [legalName,setLegalName]=useState('');
  const [street,setStreet]=useState(''); const [postalCode,setPostalCode]=useState(''); const [city,setCity]=useState('');
+ const [phone,setPhone]=useState(''); const [email,setEmail]=useState(''); const [website,setWebsite]=useState('');
  const [description,setDescription]=useState(''); const [accepts,setAccepts]=useState(true); const [verified,setVerified]=useState(false);
  const [services,setServices]=useState<string[]>([]);
  const [verificationStatus,setVerificationStatus]=useState<string>('not_requested');
@@ -747,7 +748,8 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
    getWorkshopProfile(live.identity.workshopId).then(profile=>{
      if(cancelled)return;
      setName(profile.name??'');setLegalName(profile.legal_name??'');setStreet(profile.street??'');setPostalCode(profile.postal_code??'');
-     setCity(profile.city??'');setDescription(profile.description??'');setMode((profile.operating_mode??'solo') as 'solo'|'team');
+     setCity(profile.city??'');setPhone(profile.phone??'');setEmail(profile.email??'');setWebsite(profile.website??'');
+     setDescription(profile.description??'');setMode((profile.operating_mode??'solo') as 'solo'|'team');
      setAccepts(Boolean(profile.accepts_new_customers));setVerified(Boolean(profile.verified_at));
      setServices(Array.isArray(profile.services)?profile.services.filter((item:unknown):item is string=>typeof item==='string'):[]);
      setVerificationStatus(profile.verification_status??(profile.verified_at?'verified':'not_requested'));
@@ -777,7 +779,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
    if(!workshopId)throw new Error('Werkstatt konnte nicht angelegt werden.');
    const resolvedWorkshopId:string=workshopId;
    await updateWorkshopProfile({
-     workshopId:resolvedWorkshopId,name,legalName,street,postalCode,city,description,
+     workshopId:resolvedWorkshopId,name,legalName,street,postalCode,city,phone,email,website,description,
      operatingMode:mode,acceptsNewCustomers:accepts,services
    });
    if(logoFile&&palette)await uploadWorkshopLogo({workshopId:resolvedWorkshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
@@ -822,7 +824,7 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
    <button className="btn primary" onClick={openVerification}>{verificationStatus==='verified'?'Prüfung ansehen':'Jetzt Verifizierung starten'}</button>
  </div>}
  <div className="branding-fields">
-  <section className="panel profile-form"><span className="overline">STAMMDATEN</span><h3>Die Werkstatt hinter dem Profil.</h3><div className="form-two"><label><span>Werkstattname</span><input value={name} onChange={e=>setName(e.target.value)} placeholder="z. B. Carplus Service Center"/></label><label><span>Rechtlicher Firmenname</span><input value={legalName} onChange={e=>setLegalName(e.target.value)} placeholder="optional"/></label></div><label><span>Straße & Hausnummer</span><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Musterstraße 12"/></label><div className="address-grid"><label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value)} inputMode="numeric" placeholder="92421"/></label><label><span>Ort</span><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Schwandorf"/></label></div><label><span>Beschreibung</span><textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Leistungen, Spezialisierung und das, was deine Werkstatt besonders macht."/></label><label className="toggle-row"><input type="checkbox" checked={accepts} onChange={e=>setAccepts(e.target.checked)}/><span><b>Neue Kunden annehmen</b><small>Kann jederzeit deaktiviert werden, wenn die Werkstatt ausgelastet ist.</small></span></label></section>
+  <section className="panel profile-form"><span className="overline">STAMMDATEN</span><h3>Die Werkstatt hinter dem Profil.</h3><div className="form-two"><label><span>Werkstattname</span><input value={name} onChange={e=>setName(e.target.value)} placeholder="z. B. Carplus Service Center"/></label><label><span>Rechtlicher Firmenname</span><input value={legalName} onChange={e=>setLegalName(e.target.value)} placeholder="optional"/></label></div><label><span>Straße & Hausnummer</span><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Musterstraße 12"/></label><div className="address-grid"><label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value)} inputMode="numeric" placeholder="92421"/></label><label><span>Ort</span><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Schwandorf"/></label></div><div className="form-two"><label><span>Telefon</span><input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+49 …"/></label><label><span>E-Mail</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="service@werkstatt.de"/></label></div><label><span>Website</span><input value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://www.meine-werkstatt.de"/></label><label><span>Beschreibung</span><textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Leistungen, Spezialisierung und das, was deine Werkstatt besonders macht."/></label><label className="toggle-row"><input type="checkbox" checked={accepts} onChange={e=>setAccepts(e.target.checked)}/><span><b>Neue Kunden annehmen</b><small>Kann jederzeit deaktiviert werden, wenn die Werkstatt ausgelastet ist.</small></span></label></section>
   <div className="branding-stack"><section className="panel"><span className="overline">ADAPTIVES BRANDING</span><h3>Logo rein. Premium-Farbsystem raus.</h3><p>MotorAtlas analysiert die dominante Markenfarbe und erzeugt daraus kontraststarke, dezente UI-Akzente.</p><label className="logo-upload"><Sparkles/><b>{url?'Logo ändern':'Werkstattlogo hochladen'}</b><span>PNG, JPG oder WebP</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void logo(e.target.files?.[0])}/></label><div className="swatches"><i/><i/><i/></div></section>
   <section className="panel preview"><span className="overline">LIVE-VORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>{title.slice(0,2).toUpperCase()}</span>}</div><div><b>{title}</b><small className={verified?'verified-copy':'pending-copy'}><ShieldCheck size={14}/> {verified?'Verifizierte Werkstatt':'Verifizierung ausstehend'}</small></div></div><div className="preview-order"><Status stage="repair"/><h3>BMW X3 3.0i</h3><small>Auftrag #184 · Reparatur freigegeben</small><button className="btn primary full">Auftrag öffnen</button></div></section></div>
  </div>
