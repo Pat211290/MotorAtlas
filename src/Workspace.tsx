@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
+import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -92,7 +92,7 @@ function Shell({
 function PageHead({title,subtitle,children}:{title:string;subtitle:string;children?:React.ReactNode}){return <div className="page-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
 
 const orderStages:Stage[]=['arrived','diagnosis','approval','repair','pickup'];
-type DisplayJob=Job&{orderNumber?:string;rawStage?:string;vehicleId?:string;customerUserId?:string;serviceRequestId?:string|null;updatedAt?:string;assigneeUserId?:string|null;photoPath?:string|null};
+type DisplayJob=Job&Partial<LiveJob>;
 const toneFor=(id:string)=>[...id].reduce((sum,char)=>sum+char.charCodeAt(0),0)%5;
 function JobCard({job}:{job:DisplayJob}){return <article className="job-card"><div className="job-car">{job.photoPath?<VehiclePhoto path={job.photoPath} alt={job.vehicle}/>:<CarArt tone={toneFor(job.id)}/>}<div><b>{job.vehicle}</b><small>{job.plate}{job.mileage?` · ${job.mileage.toLocaleString('de-DE')} km`:''}</small></div></div><p>{job.complaint}</p><footer><span>#{job.orderNumber??job.id.slice(-6)}</span><Status stage={job.stage}/></footer></article>}
 
@@ -578,35 +578,46 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  const queue=live.isLive
    ?allJobs.filter(job=>['waiting_diagnosis','diagnosing','ready_for_repair','repairing'].includes(job.rawStage??''))
    :allJobs.filter(job=>job.stage==='arrived'||job.stage==='repair');
- const [claimed,setClaimed]=useState<string[]>([]);
  const [selectedId,setSelectedId]=useState<string>(queue[0]?.id??'');
  const selected=queue.find(job=>job.id===selectedId)??queue[0];
- const [chat,setChat]=useState(false); const [diagnosis,setDiagnosis]=useState(false);
- const [busy,setBusy]=useState(false); const [actionError,setActionError]=useState<string|null>(null);
+ const [chat,setChat]=useState(false);
+ const [diagnosis,setDiagnosis]=useState(false);
+ const [busy,setBusy]=useState(false);
+ const [actionError,setActionError]=useState<string|null>(null);
+ const [memberId,setMemberId]=useState('');
  const title=live.identity?.workshopName??'Carplus Service';
 
- const owned=(job:DisplayJob)=>!live.isLive?claimed.includes(job.id):job.assigneeUserId===live.identity?.userId;
- const take=async(job:DisplayJob)=>{
-   setSelectedId(job.id);setActionError(null);
-   if(!live.isLive){setClaimed(value=>value.includes(job.id)?value:[...value,job.id]);return;}
-   setBusy(true);
-   try{await claimWork(job.id,job.rawStage==='ready_for_repair'?'repair':'diagnosis');await live.reload()}
-   catch(err){setActionError(err instanceof Error?err.message:'Auftrag konnte nicht übernommen werden.')}
+ useEffect(()=>{
+   if(!selected)return;
+   if(selected.assigneeUserId){setMemberId(selected.assigneeUserId);return}
+   setMemberId(live.identity?.userId??live.members[0]?.userId??'');
+ },[selected?.id,selected?.assigneeUserId,live.identity?.userId,live.members]);
+
+ useEffect(()=>{
+   if(selectedId&&queue.some(job=>job.id===selectedId))return;
+   setSelectedId(queue[0]?.id??'');
+ },[queue,selectedId]);
+
+ const owned=(job:DisplayJob)=>Boolean(live.isLive&&job.assigneeUserId===live.identity?.userId);
+ const workType=(job:DisplayJob):'diagnosis'|'repair'=>job.rawStage==='ready_for_repair'||job.rawStage==='repairing'?'repair':'diagnosis';
+ const canAssign=(job:DisplayJob)=>job.rawStage==='waiting_diagnosis'||job.rawStage==='ready_for_repair';
+ const assignmentLabel=(job:DisplayJob)=>workType(job)==='diagnosis'?'Diagnose':'Reparatur';
+
+ const assign=async()=>{
+   if(!selected||!memberId||busy||!canAssign(selected))return;
+   setBusy(true);setActionError(null);
+   try{
+     await assignWorkToMember(selected.id,workType(selected),memberId);
+     await live.reload();
+   }catch(err){setActionError(err instanceof Error?err.message:'Auftrag konnte nicht zugeordnet werden.')}
    finally{setBusy(false)}
  };
 
- const primary=async()=>{
-   if(!selected||busy)return;
+ const runOwnedAction=async()=>{
+   if(!selected||busy||!owned(selected))return;
    setActionError(null);
-   if(!live.isLive){
-     if(!claimed.includes(selected.id)){await take(selected);return;}
-     if(selected.stage!=='repair'){setDiagnosis(true);return;}
-     return;
-   }
-   if(selected.rawStage==='waiting_diagnosis'||selected.rawStage==='ready_for_repair'){await take(selected);return;}
-   if(selected.rawStage==='diagnosing'){if(owned(selected))setDiagnosis(true);return;}
+   if(selected.rawStage==='diagnosing'){setDiagnosis(true);return}
    if(selected.rawStage==='repairing'){
-     if(!owned(selected))return;
      setBusy(true);
      try{await completeRepair(selected.id);await live.reload()}
      catch(err){setActionError(err instanceof Error?err.message:'Reparatur konnte nicht abgeschlossen werden.')}
@@ -614,31 +625,114 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    }
  };
 
- const primaryLabel=()=>{
-   if(!selected)return'Kein Auftrag';
-   if(!live.isLive)return claimed.includes(selected.id)?(selected.stage==='repair'?'Reparatur abschließen':'Diagnose eintragen'):(selected.stage==='repair'?'Reparatur nehmen':'Diagnose nehmen');
-   if(selected.rawStage==='waiting_diagnosis')return'Diagnose übernehmen';
-   if(selected.rawStage==='diagnosing')return owned(selected)?'Diagnose eintragen':'Bei '+(selected.assignee??'Kollege');
-   if(selected.rawStage==='ready_for_repair')return'Reparatur übernehmen';
-   if(selected.rawStage==='repairing')return owned(selected)?'Reparatur abschließen':'Bei '+(selected.assignee??'Kollege');
-   return'Öffnen';
+ const roleLabel=(role?:string)=>{
+   if(role==='owner')return'Inhaber';
+   if(role==='office')return'Büro';
+   if(role==='mechanic')return'Mechaniker';
+   return'Mitarbeiter';
  };
 
- return <Shell onHome={()=>setView('home')} onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined} onNavigate={next=>{if(next==='Werkstatt')return;sessionStorage.setItem('motoratlas_office_section',next);setView('office')}} notifications={live.notifications} onNotificationOpen={()=>{sessionStorage.setItem('motoratlas_office_section','Termine');setView('office')}} onNotificationsChanged={live.reload} logoUrl={live.identity?.logoPath?getWorkshopLogoPublicUrl(live.identity.logoPath):undefined} title={title} mode="Werkstatt" active="Werkstatt"><div className="page workshop-page"><PageHead title="Werkstattboard" subtitle="Nächsten Auftrag nehmen. Arbeiten. Ergebnis eintragen."><span className="realtime"><i/> {live.isLive?'Live mit dem Büro':'Demo-Modus'}</span></PageHead>
- {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
- <div className="workshop-grid"><section className="panel queue"><div className="panel-title"><div><span className="overline">OFFENE ARBEITEN</span><h3>{queue.length} Fahrzeuge in der Werkstatt</h3></div><b>{queue.length}</b></div>
- {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Sobald das Büro ein Fahrzeug als eingetroffen markiert oder eine Reparatur freigegeben wird, erscheint es hier.</span></div>}
- {queue.map((job,index)=><article key={job.id} className={selected?.id===job.id?'selected':''} onClick={()=>setSelectedId(job.id)}><span className={`queue-index ${job.stage==='repair'?'repair':''}`}>{job.stage==='repair'?'R':index+1}</span><div className="queue-copy"><b>{job.vehicle}</b><small>{job.plate}</small><p>{job.rawStage==='repairing'?'Reparatur in Arbeit':job.rawStage==='diagnosing'?'Diagnose in Arbeit':job.stage==='repair'?'Reparatur vom Kunden freigegeben':job.complaint}</p></div><button className={`btn ${owned(job)||job.assignee?'muted':'primary'}`} disabled={busy||Boolean(job.assignee&&!owned(job))} onClick={event=>{event.stopPropagation();void primaryFor(job)}}>{job.assignee&&!owned(job)?`Bei ${job.assignee}`:owned(job)?'Mein Auftrag':job.stage==='repair'?'Reparatur nehmen':'Diagnose nehmen'}</button></article>)}</section>
- <section className="panel work-card"><span className="overline">WERKSTATTKARTE</span>{selected?<><div className="work-car"><CarArt large tone={toneFor(selected.id)}/><div><h2>{selected.vehicle}</h2><span className="plate">{selected.plate}</span></div></div><div className="complaint"><small>KUNDENBEANSTANDUNG</small><p>{selected.complaint}</p></div><div className="work-buttons"><button className="btn primary xl full" disabled={busy||Boolean(live.isLive&&selected.assignee&&!owned(selected))} onClick={()=>void primary()}>{busy?'Bitte warten …':primaryLabel()}</button>{(owned(selected)||!live.isLive)&&<button className="btn secondary full" onClick={()=>setChat(true)}><MessageCircle size={17}/> Fahrzeugchat</button>}</div><p className="permission-note">Ein übernommener Auftrag ist dem Mechaniker eindeutig zugeordnet. Andere Mitarbeiter sehen den Status, können ihn aber nicht abschließen.</p></>:<div className="work-empty"><Car size={34}/><b>Keine Werkstattkarte ausgewählt.</b><span>Neue Arbeiten erscheinen automatisch in der Queue.</span></div>}</section></div></div>
+ const arrivedLabel=selected?.arrivedAt
+   ?new Date(selected.arrivedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})
+   :'—';
+
+ return <Shell
+   onHome={()=>setView('home')}
+   onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined}
+   onNavigate={next=>{if(next==='Werkstatt')return;sessionStorage.setItem('motoratlas_office_section',next);setView('office')}}
+   notifications={live.notifications}
+   onNotificationOpen={()=>{sessionStorage.setItem('motoratlas_office_section','Termine');setView('office')}}
+   onNotificationsChanged={live.reload}
+   logoUrl={live.identity?.logoPath?getWorkshopLogoPublicUrl(live.identity.logoPath):undefined}
+   title={title}
+   mode="Werkstatt"
+   active="Werkstatt"
+ ><div className="page workshop-page">
+   <PageHead title="Werkstattboard" subtitle="Fahrzeug öffnen, Angaben prüfen, Mitarbeiter zuordnen und Arbeit starten.">
+     <span className="realtime"><i/> {live.isLive?'Live mit Büro und Kunde':'Demo-Modus'}</span>
+   </PageHead>
+   {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
+
+   <div className="workshop-grid workshop-flow-grid">
+     <section className="panel queue workshop-queue">
+       <div className="panel-title"><div><span className="overline">FAHRZEUGE IN DER WERKSTATT</span><h3>{queue.length} offene Arbeiten</h3></div><b>{queue.length}</b></div>
+       {queue.length===0&&<div className="queue-empty"><b>Aktuell nichts offen.</b><span>Nach dem Check-in erscheint das Fahrzeug hier automatisch.</span></div>}
+       {queue.map((job,index)=>{
+         const inProgress=job.rawStage==='diagnosing'||job.rawStage==='repairing';
+         return <button key={job.id} className={selected?.id===job.id?'workshop-queue-card selected':'workshop-queue-card'} onClick={()=>setSelectedId(job.id)}>
+           <span className={'queue-index '+(workType(job)==='repair'?'repair':'')}>{workType(job)==='repair'?'R':index+1}</span>
+           <span className="queue-copy">
+             <b>{job.vehicle}</b>
+             <small>{job.plate} · Auftrag #{job.orderNumber??job.id.slice(-6)}</small>
+             <p>{inProgress
+               ?assignmentLabel(job)+' läuft'+(job.assignee?' · '+job.assignee:'')
+               :assignmentLabel(job)+' wartet auf Zuordnung'}</p>
+           </span>
+           <span className={'queue-state '+(inProgress?'active':'waiting')}>{inProgress?'In Arbeit':'Eingetroffen'}</span>
+         </button>;
+       })}
+     </section>
+
+     <section className="panel work-card work-order-detail">
+       {selected?<>
+         <div className="work-detail-head">
+           <div className="work-detail-photo">{selected.photoPath?<VehiclePhoto path={selected.photoPath} alt={selected.vehicle}/>:<CarArt large tone={toneFor(selected.id)}/>}</div>
+           <div>
+             <span className="overline">AUFTRAG #{selected.orderNumber??selected.id.slice(-6)}</span>
+             <h2>{selected.vehicle}</h2>
+             <div className="work-detail-tags"><span className="plate">{selected.plate}</span><span>Eingetroffen: {arrivedLabel}</span></div>
+           </div>
+         </div>
+
+         <div className="work-detail-grid">
+           <section>
+             <small>KUNDE</small>
+             <b>{selected.customerName??'Kunde'}</b>
+             <span>{selected.customerPhone||'Keine Telefonnummer hinterlegt'}</span>
+             {selected.customerEmail&&<span>{selected.customerEmail}</span>}
+             <span>{[selected.customerStreet,selected.customerPostalCode,selected.customerCity].filter(Boolean).join(', ')||'Keine Anschrift hinterlegt'}</span>
+           </section>
+           <section>
+             <small>FAHRZEUGDATEN</small>
+             <b>{selected.plate}</b>
+             <span>EZ: {selected.firstRegistration?new Date(selected.firstRegistration).toLocaleDateString('de-DE'):'—'}</span>
+             <span>km: {selected.mileage!=null?selected.mileage.toLocaleString('de-DE'):'—'}</span>
+             <span>HSN/TSN: {[selected.hsn,selected.tsn].filter(Boolean).join(' / ')||'—'}</span>
+             <span>VIN: {selected.vin||'—'}</span>
+           </section>
+         </div>
+
+         <div className="work-incident">
+           <div><small>KUNDENANGABE / SCHADEN / ANLIEGEN</small><p>{selected.complaint||'Keine Beschreibung hinterlegt.'}</p></div>
+           {selected.customerNotes&&<div><small>ZUSÄTZLICHE ANGABE</small><p>{selected.customerNotes}</p></div>}
+           <div className="incident-flags">
+             <span>{selected.driveable===false?'Nicht fahrbereit':selected.driveable===true?'Fahrbereit':'Fahrbereitschaft nicht angegeben'}</span>
+             <span>{selected.warningLevel==='red'?'Rote Warnleuchte':selected.warningLevel==='yellow'?'Gelbe Warnleuchte':selected.warningLevel==='none'?'Keine Warnleuchte':'Warnleuchte nicht angegeben'}</span>
+           </div>
+         </div>
+
+         {canAssign(selected)?<div className="work-assignment-box">
+           <div><span className="overline">NÄCHSTER SCHRITT</span><h3>{assignmentLabel(selected)} zuordnen und starten</h3><p>Mit der Zuordnung beginnt die Arbeit offiziell. Der Kunde sieht Mitarbeiter und Startzeit sofort in seinem Status.</p></div>
+           <label><span>Zuständiger Mitarbeiter</span><select value={memberId} onChange={event=>setMemberId(event.target.value)}>
+             {live.members.map(member=><option key={member.userId} value={member.userId}>{member.displayName} · {roleLabel(member.role)}{member.userId===live.identity?.userId?' · Ich':''}</option>)}
+           </select></label>
+           <button className="btn primary xl full" disabled={busy||!memberId} onClick={()=>void assign()}>{busy?'Wird zugeordnet …':assignmentLabel(selected)+' starten'}</button>
+         </div>:<div className="work-assignment-active">
+           <UserRound/>
+           <div><small>{assignmentLabel(selected).toUpperCase()} IN ARBEIT</small><b>{selected.assignee??'Werkstattteam'}</b><span>{selected.assignmentClaimedAt?new Date(selected.assignmentClaimedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Startzeit wird synchronisiert'}</span></div>
+           {owned(selected)?<button className="btn primary" disabled={busy} onClick={()=>void runOwnedAction()}>{selected.rawStage==='diagnosing'?'Diagnose eintragen':busy?'Bitte warten …':'Reparatur abschließen'}</button>:<span className="assigned-other">Zugeordnet</span>}
+         </div>}
+
+         <div className="work-detail-actions">
+           <button className="btn secondary" onClick={()=>setChat(true)} disabled={live.identity?.chatEnabled===false}><MessageCircle size={17}/> Fahrzeugchat</button>
+         </div>
+       </>:<div className="work-empty"><Car size={34}/><b>Kein Fahrzeug ausgewählt.</b><span>Klicke links auf ein eingetroffenes Fahrzeug, um alle Daten und den Auftrag zu öffnen.</span></div>}
+     </section>
+   </div>
+ </div>
  {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
  {selected&&<DiagnosisModal open={diagnosis} onClose={()=>setDiagnosis(false)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle}/>}
  </Shell>;
-
- async function primaryFor(job:DisplayJob){
-   setSelectedId(job.id);
-   if(live.isLive&&(job.rawStage==='diagnosing'||job.rawStage==='repairing'))return;
-   await take(job);
- }
 }
 
 function VehicleCard({name,plate,detail,active,tone,stage='approval',demo=false,photoPath}:{name:string;plate:string;detail:string;active?:boolean;tone:number;stage?:Stage;demo?:boolean;photoPath?:string|null}){return <article className="panel vehicle-card">{demo||!photoPath?<CarArt large tone={tone}/>:<VehiclePhoto path={photoPath} alt={name}/>} <div className="vehicle-title"><div><h3>{name}</h3><small>{detail}</small></div><span className="plate">{plate}</span></div>{active?<div className="vehicle-current"><Status stage={stage}/><b>Aktiver Werkstattauftrag</b><small>Status wird automatisch synchronisiert.</small></div>:demo?<div className="vehicle-current neutral"><span>LETZTER SERVICE</span><b>Inspektion</b><small>17.06.2026</small></div>:<div className="vehicle-current neutral"><span>STATUS</span><b>Kein aktiver Auftrag</b><small>Fahrzeug ist in deiner Garage gespeichert.</small></div>}</article>}
