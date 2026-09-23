@@ -21,3 +21,10 @@
 .access-choice>button>i svg{width:23px}.access-choice>button>span small{display:block;font-size:7px;letter-spacing:1px;color:#8b989e;font-weight:900}
 .access-choice>button>span b{display:block;font:800 14px Manrope;margin:3px 0}.access-choice>button>span p{font-size:8px;line-height:1.45;color:#71828b;margin:0}
 .access-choice>button>svg{width:18px;color:var(--brand)}.access-existing{width:100%;border:0;background:none;color:#73858e;font-size:9px;padding:9px}.access-existing b{color:var(--brand)}
+
+.access-forgot{justify-self:end;border:0;background:none;color:var(--brand);font-size:9px;font-weight:800;padding:0 2px 2px}
+.access-forgot:hover{text-decoration:underline}
+.access-privacy-note{font-size:8px;line-height:1.55;color:#7b8a91;margin:3px 2px 0;text-align:center}
+.access-privacy-note button,.access-legal-links button{border:0;background:none;color:var(--brand);font-size:inherit;font-weight:800;padding:0}
+.access-privacy-note button:hover,.access-legal-links button:hover{text-decoration:underline}
+.access-legal-links{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:14px;color:#9aa5aa;font-size:8px}
