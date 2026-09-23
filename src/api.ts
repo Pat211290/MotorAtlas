@@ -2,9 +2,12 @@ import { backendConfigured, supabase } from './lib';
 
 function db(){if(!backendConfigured||!supabase)throw new Error('MotorAtlas backend is not configured.');return supabase;}
 
-function authReturnUrl(query:string){
+export function authReturnUrl(query:string){
   if(typeof window==='undefined')return undefined;
-  const base=new URL('./',document.baseURI);
+  const configured=(import.meta.env.VITE_PUBLIC_APP_URL as string|undefined)?.trim();
+  const base=configured
+    ?new URL(configured)
+    :new URL('./',document.baseURI);
   base.search=query;
   base.hash='';
   return base.toString();
@@ -16,7 +19,7 @@ export async function signUpCustomer(
 ){
   const {data,error}=await db().auth.signUp({
     email,password,
-    options:{emailRedirectTo:authReturnUrl('app=1'),data:{
+    options:{emailRedirectTo:authReturnUrl('confirmed=1'),data:{
       full_name:fullName.trim(),
       account_intent:input?.accountIntent??'customer',
       street:input?.street?.trim()||null,
