@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, getDocumentVersionUrl, listWorkOrderDocuments, markReadyForPickup, markVehicleArrived, recordApproval } from './api';
+import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markReadyForPickup, markVehicleArrived, recordApproval, updateWorkshopProfile, uploadWorkshopLogo } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
@@ -197,7 +197,62 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
 function Timeline({title,detail,current=false,last=false,children}:{title:string;detail:string;current?:boolean;last?:boolean;children?:React.ReactNode}){return <div className={`timeline-row ${current?'current':''} ${last?'last':''}`}><i/><div><b>{title}</b><small>{detail}</small>{children}</div></div>}
 
 export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
- const [url,setUrl]=useState<string>(); const [mode,setMode]=useState<'solo'|'team'>('solo');
- const logo=async(file?:File)=>{if(!file)return;const palette=await paletteFromLogo(file);applyPalette(palette);if(url)URL.revokeObjectURL(url);setUrl(URL.createObjectURL(file))};
- return <Shell onHome={()=>setView('home')} title="Carplus Service" mode="Werkstattprofil" active=""><div className="page"><PageHead title="Deine Werkstatt. Deine Identität." subtitle="MotorAtlas übernimmt die Wirkung deines Logos – aber nicht seine Lautstärke."><button className="btn primary">Änderungen speichern</button></PageHead><div className="branding-grid"><section className="panel"><span className="overline">ADAPTIVES BRANDING</span><h3>Logo rein. Premium-Farbsystem raus.</h3><p>MotorAtlas analysiert die dominante Markenfarbe und erzeugt daraus kontraststarke, dezente UI-Akzente.</p><label className="logo-upload"><Sparkles/><b>Werkstattlogo hochladen</b><span>PNG, JPG oder WebP</span><input type="file" accept="image/*" onChange={e=>logo(e.target.files?.[0])}/></label><div className="swatches"><i/><i/><i/></div></section><section className="panel preview"><span className="overline">LIVE-VORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>CS</span>}</div><div><b>Carplus Service Center</b><small><ShieldCheck size={14}/> Verifizierte Werkstatt</small></div></div><div className="preview-order"><Status stage="repair"/><h3>BMW X3 3.0i</h3><small>Auftrag #184 · Reparatur freigegeben</small><button className="btn primary full">Auftrag öffnen</button></div></section></div><section className="panel org-mode"><span className="overline">ORGANISATION</span><h3>Die Oberfläche passt sich an deinen Betrieb an.</h3><div><button className={mode==='solo'?'selected':''} onClick={()=>setMode('solo')}><Building2/><b>Einzelbetrieb</b><span>Eine Person sieht Büro und Werkstatt in einem flüssigen Ablauf.</span></button><button className={mode==='team'?'selected':''} onClick={()=>setMode('team')}><Users/><b>Team-Betrieb</b><span>Büro, Mechaniker und individuelle Berechtigungen arbeiten synchron.</span></button></div></section></div></Shell>;
+ const live=useWorkshopWorkspace();
+ const [url,setUrl]=useState<string>(); const [logoFile,setLogoFile]=useState<File|null>(null); const [palette,setPalette]=useState<Awaited<ReturnType<typeof paletteFromLogo>>|null>(null);
+ const [mode,setMode]=useState<'solo'|'team'>('solo'); const [name,setName]=useState(''); const [legalName,setLegalName]=useState('');
+ const [street,setStreet]=useState(''); const [postalCode,setPostalCode]=useState(''); const [city,setCity]=useState('');
+ const [description,setDescription]=useState(''); const [accepts,setAccepts]=useState(true); const [verified,setVerified]=useState(false);
+ const [busy,setBusy]=useState(false); const [error,setError]=useState<string|null>(null);
+
+ useEffect(()=>{
+   if(!live.identity)return;
+   let cancelled=false;
+   getWorkshopProfile(live.identity.workshopId).then(profile=>{
+     if(cancelled)return;
+     setName(profile.name??'');setLegalName(profile.legal_name??'');setStreet(profile.street??'');setPostalCode(profile.postal_code??'');
+     setCity(profile.city??'');setDescription(profile.description??'');setMode((profile.operating_mode??'solo') as 'solo'|'team');
+     setAccepts(Boolean(profile.accepts_new_customers));setVerified(Boolean(profile.verified_at));
+     if(profile.logo_path)setUrl(getWorkshopLogoPublicUrl(profile.logo_path));
+     if(profile.brand_primary){
+       const primary=profile.brand_primary as string,secondary=(profile.brand_secondary as string|null)??primary;
+       applyPalette({primary,dark:secondary,soft:'#f1f8f9',rgb:'12,102,122'});
+     }
+   }).catch(err=>{if(!cancelled)setError(err instanceof Error?err.message:'Werkstattprofil konnte nicht geladen werden.')});
+   return()=>{cancelled=true};
+ },[live.identity?.workshopId]);
+
+ const logo=async(file?:File)=>{
+   if(!file)return;const next=await paletteFromLogo(file);setPalette(next);applyPalette(next);setLogoFile(file);
+   if(url&&url.startsWith('blob:'))URL.revokeObjectURL(url);setUrl(URL.createObjectURL(file));
+ };
+
+ const save=async()=>{
+   if(busy)return;
+   if(!name.trim()||!street.trim()||!postalCode.trim()||!city.trim()){setError('Name und vollständige Werkstattanschrift sind erforderlich.');return}
+   setBusy(true);setError(null);
+   try{
+     let workshopId=live.identity?.workshopId;
+     if(!workshopId){
+       const slugBase=name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,45)||'werkstatt';
+       const created=await createWorkshop({name,slug:slugBase+'-'+crypto.randomUUID().slice(0,6),street,postalCode,city,legalName,description});
+       workshopId=created.id;
+     }
+     await updateWorkshopProfile({workshopId,name,legalName,street,postalCode,city,description,operatingMode:mode,acceptsNewCustomers:accepts});
+     if(logoFile&&palette)await uploadWorkshopLogo({workshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
+     await live.reload();setView('office');
+   }catch(err){setError(err instanceof Error?err.message:'Werkstattprofil konnte nicht gespeichert werden.')}
+   finally{setBusy(false)}
+ };
+
+ const title=name.trim()||'Deine Werkstatt';
+ return <Shell onHome={()=>setView('home')} title={title} mode="Werkstattprofil" active=""><div className="page"><PageHead title={live.identity?'Werkstattprofil':'Werkstatt einrichten'} subtitle="Deine Marke bleibt erkennbar – MotorAtlas sorgt für die professionelle, ruhige Darstellung."><button className="btn primary" disabled={busy} onClick={()=>void save()}>{busy?'Speichert …':live.identity?'Änderungen speichern':'Werkstatt anlegen'}</button></PageHead>
+ {error&&<div className="workspace-alert">{error}</div>}
+ {!live.identity&&<div className="onboarding-note"><ShieldCheck/><div><b>Neue Werkstatt</b><span>Dein Profil wird angelegt, ist aber erst nach MotorAtlas-Verifizierung öffentlich auf der Deutschlandkarte sichtbar.</span></div></div>}
+ <div className="branding-fields">
+  <section className="panel profile-form"><span className="overline">STAMMDATEN</span><h3>Die Werkstatt hinter dem Profil.</h3><div className="form-two"><label><span>Werkstattname</span><input value={name} onChange={e=>setName(e.target.value)} placeholder="z. B. Carplus Service Center"/></label><label><span>Rechtlicher Firmenname</span><input value={legalName} onChange={e=>setLegalName(e.target.value)} placeholder="optional"/></label></div><label><span>Straße & Hausnummer</span><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Musterstraße 12"/></label><div className="address-grid"><label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value)} inputMode="numeric" placeholder="92421"/></label><label><span>Ort</span><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Schwandorf"/></label></div><label><span>Beschreibung</span><textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Leistungen, Spezialisierung und das, was deine Werkstatt besonders macht."/></label><label className="toggle-row"><input type="checkbox" checked={accepts} onChange={e=>setAccepts(e.target.checked)}/><span><b>Neue Kunden annehmen</b><small>Kann jederzeit deaktiviert werden, wenn die Werkstatt ausgelastet ist.</small></span></label></section>
+  <div className="branding-stack"><section className="panel"><span className="overline">ADAPTIVES BRANDING</span><h3>Logo rein. Premium-Farbsystem raus.</h3><p>MotorAtlas analysiert die dominante Markenfarbe und erzeugt daraus kontraststarke, dezente UI-Akzente.</p><label className="logo-upload"><Sparkles/><b>{url?'Logo ändern':'Werkstattlogo hochladen'}</b><span>PNG, JPG oder WebP</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void logo(e.target.files?.[0])}/></label><div className="swatches"><i/><i/><i/></div></section>
+  <section className="panel preview"><span className="overline">LIVE-VORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>{title.slice(0,2).toUpperCase()}</span>}</div><div><b>{title}</b><small className={verified?'verified-copy':'pending-copy'}><ShieldCheck size={14}/> {verified?'Verifizierte Werkstatt':'Verifizierung ausstehend'}</small></div></div><div className="preview-order"><Status stage="repair"/><h3>BMW X3 3.0i</h3><small>Auftrag #184 · Reparatur freigegeben</small><button className="btn primary full">Auftrag öffnen</button></div></section></div>
+ </div>
+ <section className="panel org-mode"><span className="overline">ORGANISATION</span><h3>Die Oberfläche passt sich an deinen Betrieb an.</h3><div><button className={mode==='solo'?'selected':''} onClick={()=>setMode('solo')}><Building2/><b>Einzelbetrieb</b><span>Eine Person sieht Büro und Werkstatt in einem flüssigen Ablauf.</span></button><button className={mode==='team'?'selected':''} onClick={()=>setMode('team')}><Users/><b>Team-Betrieb</b><span>Büro, Mechaniker und individuelle Berechtigungen arbeiten synchron.</span></button></div></section>
+ </div></Shell>;
 }
