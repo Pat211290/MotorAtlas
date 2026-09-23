@@ -167,6 +167,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
   useEffect(()=>{
     if(tab!=='confirmed'||!supabase)return;
+    const client=supabase;
     const params=new URLSearchParams(location.search);
     const tokenHash=params.get('token_hash');
     const type=params.get('type') as EmailOtpType|null;
@@ -178,7 +179,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           setConfirmationState('success');
           return;
         }
-        const {data}=await supabase.auth.getUser();
+        const {data}=await client.auth.getUser();
         if(data.user?.email_confirmed_at){
           setConfirmationState('success');
           return;
@@ -190,9 +191,9 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
       setConfirmationState('checking');
       setConfirmationError('');
-      const {error}=await supabase.auth.verifyOtp({token_hash:tokenHash,type});
+      const {error}=await client.auth.verifyOtp({token_hash:tokenHash,type});
       if(error){
-        const {data}=await supabase.auth.getUser();
+        const {data}=await client.auth.getUser();
         if(data.user?.email_confirmed_at){
           setConfirmationState('success');
           history.replaceState({},'',appPath('bestaetigung'));
@@ -203,7 +204,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
         return;
       }
 
-      try{await supabase.auth.signOut()}catch{}
+      try{await client.auth.signOut()}catch{}
       history.replaceState({},'',appPath('bestaetigung'));
       setConfirmationState('success');
     };
