@@ -96,20 +96,24 @@ function JobCard({job}:{job:DisplayJob}){return <article className="job-card"><d
 type AppointmentView='day'|'week'|'month';
 type AppointmentPhase='proposed'|'planned'|'today'|'late'|'arrived';
 
+function sameLocalDay(a:Date,b:Date){
+  return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+}
+
 function appointmentPhase(item:WorkshopAppointment,now=new Date()):AppointmentPhase{
   if(item.status==='proposed')return'proposed';
-  if(item.arrivedAt||item.rawOrderStage&&item.rawOrderStage!=='appointment_confirmed')return'arrived';
+  if(item.arrivedAt||(item.rawOrderStage&&item.rawOrderStage!=='appointment_confirmed'))return'arrived';
   const start=new Date(item.startsAt);
-  const sameDay=start.getFullYear()===now.getFullYear()&&start.getMonth()===now.getMonth()&&start.getDate()===now.getDate();
-  if(start.getTime()<now.getTime())return'late';
-  if(sameDay)return'today';
+  if(start.getTime()<=now.getTime()){
+    return now.getTime()-start.getTime()>=15*60*1000?'late':'today';
+  }
   return'planned';
 }
 
 function appointmentPhaseLabel(phase:AppointmentPhase){
   if(phase==='proposed')return'Terminvorschlag offen';
   if(phase==='planned')return'Geplant';
-  if(phase==='today')return'Heute erwartet';
+  if(phase==='today')return'Jetzt erwartet';
   if(phase==='late')return'Verspätet';
   return'Eingetroffen';
 }
@@ -163,10 +167,12 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  };
 
  const appointmentStats=useMemo(()=>{
-   const stats={today:0,late:0,planned:0,proposed:0,arrived:0};
+   const stats={today:0,due:0,late:0,planned:0,proposed:0,arrived:0};
    for(const item of live.appointments){
      const phase=appointmentPhase(item,now);
-     if(phase==='today')stats.today++;
+     const start=new Date(item.startsAt);
+     if(item.status==='confirmed'&&!item.arrivedAt&&sameLocalDay(start,now))stats.today++;
+     if(phase==='today')stats.due++;
      else if(phase==='late')stats.late++;
      else if(phase==='planned')stats.planned++;
      else if(phase==='proposed')stats.proposed++;
@@ -336,15 +342,15 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      </PageHead>
      <div className="metrics">
        <article><small>IN DER WERKSTATT</small><b>{displayJobs.length}</b><span>aktive Fahrzeuge</span></article>
-       <article className={appointmentStats.today?'attention':''}><small>HEUTE ERWARTET</small><b>{appointmentStats.today}</b><span>noch nicht eingetroffen</span></article>
+       <article className={appointmentStats.today?'attention':''}><small>HEUTE ERWARTET</small><b>{appointmentStats.today}</b><span>{appointmentStats.due?'davon '+appointmentStats.due+' jetzt fällig':'geplante Ankünfte'}</span></article>
        <article className={appointmentStats.late?'danger':''}><small>VERSPÄTET</small><b>{appointmentStats.late}</b><span>Termin überschritten</span></article>
        <article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>zu bearbeiten</span></article>
      </div>
 
      {live.isLive&&<section className="panel today-arrivals">
        <header><div><span className="overline">HEUTE & ÜBERFÄLLIG</span><h3>Anstehende Fahrzeugannahmen</h3></div><button className="btn secondary" onClick={()=>openSection('Termine')}>Alle Termine</button></header>
-       <div>{live.appointments.filter(item=>['today','late'].includes(appointmentPhase(item,now))).sort((a,b)=>new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime()).slice(0,5).map(appointmentCard)}</div>
-       {!live.appointments.some(item=>['today','late'].includes(appointmentPhase(item,now)))&&<div className="inbox-empty">Aktuell keine fälligen Fahrzeugannahmen.</div>}
+       <div>{live.appointments.filter(item=>{const phase=appointmentPhase(item,now);return phase==='late'||(item.status==='confirmed'&&!item.arrivedAt&&sameLocalDay(new Date(item.startsAt),now))}).sort((a,b)=>new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime()).slice(0,5).map(appointmentCard)}</div>
+       {!live.appointments.some(item=>{const phase=appointmentPhase(item,now);return phase==='late'||(item.status==='confirmed'&&!item.arrivedAt&&sameLocalDay(new Date(item.startsAt),now))})&&<div className="inbox-empty">Heute sind keine Fahrzeugannahmen geplant.</div>
      </section>}
 
      {live.isLive&&<div className="office-inbox-grid">
