@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listMyCustomerDocuments, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
+import { claimWork, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type WorkshopAppointment } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -134,6 +134,59 @@ function overdueSinceLabel(startsAt:string,now:Date){
 
 function customerCancellationOpen(startsAt:string,now:Date){
   return new Date(startsAt).getTime()-now.getTime()>=12*60*60*1000;
+}
+
+function appointmentCountdownText(startsAt:string,now:Date){
+  const diff=new Date(startsAt).getTime()-now.getTime();
+  const absolute=Math.abs(diff);
+  const totalMinutes=Math.max(0,Math.floor(absolute/60_000));
+  const days=Math.floor(totalMinutes/1440);
+  const hours=Math.floor((totalMinutes%1440)/60);
+  const minutes=totalMinutes%60;
+
+  if(diff>0){
+    const parts:string[]=[];
+    if(days)parts.push(`${days} ${days===1?'Tag':'Tagen'}`);
+    if(hours)parts.push(`${hours} Std.`);
+    if(minutes||!parts.length)parts.push(`${minutes} Min.`);
+    return `Du musst in ${parts.join(' ')} zur Werkstatt.`;
+  }
+  if(totalMinutes<1)return'Dein Termin ist jetzt.';
+  const parts:string[]=[];
+  if(days)parts.push(`${days} ${days===1?'Tag':'Tagen'}`);
+  if(hours)parts.push(`${hours} Std.`);
+  if(minutes||!parts.length)parts.push(`${minutes} Min.`);
+  return `Du bist seit ${parts.join(' ')} überfällig.`;
+}
+
+function customerOrderTitle(rawStage:string){
+  if(rawStage==='appointment_confirmed')return'Bevorstehender Werkstatttermin';
+  if(rawStage==='arrived')return'Dein Fahrzeug ist eingetroffen';
+  if(rawStage==='diagnosis')return'Diagnose läuft';
+  if(rawStage==='awaiting_quote')return'Diagnose abgeschlossen';
+  if(rawStage==='awaiting_customer_approval')return'Deine Freigabe wird benötigt';
+  if(rawStage==='repair')return'Reparatur läuft';
+  if(rawStage==='repair_complete')return'Reparatur abgeschlossen';
+  if(rawStage==='ready_for_pickup')return'Dein Fahrzeug ist abholbereit';
+  return'Aktueller Werkstattauftrag';
+}
+
+function customerOrderDetail(rawStage:string){
+  if(rawStage==='arrived')return'Die Werkstatt hat dein Fahrzeug vor Ort angenommen.';
+  if(rawStage==='diagnosis')return'Die Werkstatt prüft dein Fahrzeug und sucht die Ursache.';
+  if(rawStage==='awaiting_quote')return'Die Diagnose ist abgeschlossen. Der Kostenvoranschlag wird vorbereitet.';
+  if(rawStage==='awaiting_customer_approval')return'Prüfe den Kostenvoranschlag und entscheide über die Reparatur.';
+  if(rawStage==='repair')return'Die freigegebene Reparatur wird durchgeführt.';
+  if(rawStage==='repair_complete')return'Die Reparatur ist abgeschlossen. Die Werkstatt bereitet die Abholung vor.';
+  if(rawStage==='ready_for_pickup')return'Dein Fahrzeug kann abgeholt werden.';
+  return'Der Status wird automatisch mit der Werkstatt synchronisiert.';
+}
+
+function documentTypeLabel(type:string){
+  if(type==='quote')return'Angebot / Kostenvoranschlag';
+  if(type==='invoice')return'Rechnung';
+  if(type==='credit_note')return'Gutschrift';
+  return'Dokument';
 }
 
 function appointmentPhase(item:WorkshopAppointment,now=new Date()):AppointmentPhase{
