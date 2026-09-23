@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Camera, CalendarDays, Car, ShieldAlert, X } from 'lucide-react';
 import { createServiceRequestDraft, submitServiceRequest, uploadRequestImage, type CustomerVehicle, type CustomerWorkshop } from './api';
+import { QuarterHourDateTime } from './QuarterHourDateTime';
 
 export function ServiceRequestModal({
   open,onClose,onDone,vehicles,workshops
@@ -63,7 +64,7 @@ export function ServiceRequestModal({
           <label><span>Fahrzeug fahrbereit?</span><div className="segment">{(['yes','no','unknown'] as const).map(value=><button key={value} type="button" className={driveable===value?'active':''} onClick={()=>setDriveable(value)}>{value==='yes'?'Ja':value==='no'?'Nein':'Unklar'}</button>)}</div></label>
           <label><span>Warnleuchte</span><div className="segment warning-segment">{(['none','yellow','red','unknown'] as const).map(value=><button key={value} type="button" className={warning===value?'active '+value:''} onClick={()=>setWarning(value)}>{value==='none'?'Keine':value==='yellow'?'Gelb':value==='red'?'Rot':'Unklar'}</button>)}</div></label>
         </div>
-        <label><span><CalendarDays size={14}/> Wunschtermin <small>optional</small></span><input type="datetime-local" value={desired} onChange={e=>setDesired(e.target.value)}/></label>
+        <label><span><CalendarDays size={14}/> Wunschtermin <small>optional · 15-Minuten-Takt</small></span><QuarterHourDateTime value={desired} onChange={setDesired}/></label>
         <label className="problem-photo">
           <input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" onChange={e=>setImage(e.target.files?.[0]??null)}/>
           {preview?<img src={preview} alt="Problemfoto"/>:<><Camera/><b>Bild zum Problem hinzufügen</b><span>Optional · direkt fotografieren oder auswählen</span></>}
