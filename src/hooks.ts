@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getCurrentWorkshopIdentity,getSignedInUserId,getWorkshopDashboardMetrics,getWorkshopResponseStats,listMyCustomerDocuments,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopChatInbox,listWorkshopJobs,listWorkshopMembers,listWorkshopServiceRequests,loadCustomerWorkspace,
+  getCurrentWorkshopIdentity,getSignedInUserId,getWorkshopDashboardMetrics,getWorkshopResponseStats,listMyCustomerDocuments,listMyNotifications,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopChatInbox,listWorkshopJobs,listAssignableWorkshopMembers,listWorkshopServiceRequests,loadCustomerWorkspace,
   subscribeCustomerOrders,subscribeWorkshop,
   type AppNotification,type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
   type LiveJob,type WorkshopAppointment,type WorkshopChatInboxItem,type WorkshopDashboardMetrics,type WorkshopIdentity,type WorkshopMemberOption,type WorkshopResponseStats,type WorkshopServiceRequest
@@ -45,7 +45,7 @@ export function useWorkshopWorkspace(){
         listWorkshopAppointments(current.workshopId),
         listMyWorkshopNotifications(current.workshopId),
         listWorkshopChatInbox(current.workshopId).catch(()=>[]),
-        listWorkshopMembers(current.workshopId).catch(()=>[]),
+        listAssignableWorkshopMembers(current.workshopId).catch(()=>[]),
         getWorkshopDashboardMetrics(current.workshopId),
         getWorkshopResponseStats(current.workshopId)
       ]);
