@@ -28,3 +28,22 @@
 .message.mine .chat-attachment{border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.1)}
 .chat-attachment span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attach:disabled,.send:disabled{opacity:.45;cursor:not-allowed}
+
+
+/* Workflow modals */
+.modal-backdrop{position:fixed;z-index:650;inset:0;background:rgba(7,20,29,.42);backdrop-filter:blur(5px);display:grid;place-items:center;padding:20px}
+.workflow-modal{width:min(640px,100%);max-height:min(820px,92vh);overflow:auto;background:#fff;border:1px solid #dfe7ea;border-radius:20px;box-shadow:0 35px 100px rgba(8,28,39,.28)}
+.workflow-modal>header{display:grid;grid-template-columns:44px 1fr 36px;gap:12px;align-items:center;padding:20px 22px;border-bottom:1px solid #e7edef;background:linear-gradient(180deg,#fff,#fbfcfc)}
+.workflow-modal>header>button{border:0;background:#f1f5f6;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#647883}
+.workflow-modal>header span{font-size:7px;letter-spacing:1.2px;font-weight:900;color:var(--brand)}
+.workflow-modal>header h2{font:800 20px Manrope;margin:3px 0 0;letter-spacing:-.5px}
+.workflow-modal>header small{font-size:8px;color:#84939a}
+.modal-icon{width:44px;height:44px;border-radius:13px;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center}.modal-icon svg{width:20px}
+.workflow-modal form{padding:22px;display:grid;gap:16px}.workflow-modal label>span{display:block;font-size:8px;font-weight:800;color:#536872;margin:0 0 7px}.workflow-modal label>span small{font-weight:600;color:#96a1a6;margin-left:4px}
+.workflow-modal input,.workflow-modal textarea,.workflow-modal select{width:100%;border:1px solid #dce5e8;background:#fbfcfc;border-radius:11px;padding:11px 12px;outline:0;color:#263e49;font:600 10px Inter;transition:.18s}
+.workflow-modal textarea{resize:vertical;line-height:1.5}.workflow-modal input:focus,.workflow-modal textarea:focus,.workflow-modal select:focus{border-color:rgba(var(--brand-rgb),.55);box-shadow:0 0 0 3px rgba(var(--brand-rgb),.08);background:#fff}
+.form-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.money-input{position:relative}.money-input input{padding-right:34px}.money-input b{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:10px;color:#778890}
+.document-drop{min-height:145px;border:1.5px dashed #cbdadf;border-radius:15px;background:#f7fafb;display:flex!important;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:5px;color:var(--brand);cursor:pointer;padding:20px}.document-drop input{display:none}.document-drop svg{width:25px}.document-drop b{font-size:10px;color:#405761}.document-drop>span{font-size:7px!important;font-weight:600!important;color:#8b999f!important;margin:0!important;max-width:370px;line-height:1.45}
+.legal-note{display:flex;gap:8px;align-items:flex-start;background:#f3f8f9;border-radius:11px;padding:11px 12px;color:#667a83;font-size:8px;line-height:1.5}.legal-note svg{width:16px;flex:0 0 16px;color:var(--brand)}
+.modal-error{padding:9px 11px;border:1px solid #efd2cb;background:#fff5f3;color:#914b3f;border-radius:9px;font-size:8px;font-weight:700}.modal-actions{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #edf1f3;padding-top:16px}
+@media(max-width:600px){.modal-backdrop{padding:0;align-items:end}.workflow-modal{max-height:94vh;border-radius:22px 22px 0 0}.form-two{grid-template-columns:1fr}.workflow-modal form{padding:18px}.workflow-modal>header{padding:17px}}
