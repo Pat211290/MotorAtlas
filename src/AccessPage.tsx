@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { EmailOtpType } from '@supabase/supabase-js';
 import {
   ArrowRight, Building2, Car, CheckCircle2, Clock3, Eye, EyeOff, Gauge, LockKeyhole,
   Mail, MailCheck, MapPin, MessageCircle, RefreshCw, ShieldCheck, Sparkles, UserRound, Users, WalletCards
@@ -137,6 +138,10 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [pendingEmail,setPendingEmail]=useState('');
   const [resendBusy,setResendBusy]=useState(false);
   const [resendStatus,setResendStatus]=useState('');
+  const [confirmationState,setConfirmationState]=useState<'checking'|'success'|'error'>(
+    initialTab()==='confirmed'?'checking':'success'
+  );
+  const [confirmationError,setConfirmationError]=useState('');
 
   const setTab=(next:Tab)=>{
     setMessage('');
@@ -159,6 +164,47 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     });
     return()=>data.subscription.unsubscribe();
   },[]);
+
+  useEffect(()=>{
+    if(tab!=='confirmed'||!supabase)return;
+    const params=new URLSearchParams(location.search);
+    const tokenHash=params.get('token_hash');
+    const type=params.get('type') as EmailOtpType|null;
+
+    const verify=async()=>{
+      if(!tokenHash||!type){
+        const {data}=await supabase.auth.getUser();
+        if(data.user?.email_confirmed_at){
+          setConfirmationState('success');
+          return;
+        }
+        setConfirmationError('Der Bestätigungslink ist unvollständig. Bitte fordere eine neue Bestätigungsmail an.');
+        setConfirmationState('error');
+        return;
+      }
+
+      setConfirmationState('checking');
+      setConfirmationError('');
+      const {error}=await supabase.auth.verifyOtp({token_hash:tokenHash,type});
+      if(error){
+        const {data}=await supabase.auth.getUser();
+        if(data.user?.email_confirmed_at){
+          setConfirmationState('success');
+          history.replaceState({},'',appPath('bestaetigung'));
+          return;
+        }
+        setConfirmationError('Dieser Bestätigungslink ist ungültig oder nicht mehr gültig. Bitte fordere eine neue Bestätigungsmail an.');
+        setConfirmationState('error');
+        return;
+      }
+
+      try{await supabase.auth.signOut()}catch{}
+      history.replaceState({},'',appPath('bestaetigung'));
+      setConfirmationState('success');
+    };
+
+    void verify();
+  },[tab]);
 
   const continueAfterConfirmation=async()=>{
     if(supabase){
@@ -307,33 +353,55 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           <button className="access-existing" onClick={()=>setTab('login')}>Schon registriert? <b>Jetzt anmelden</b></button>
         </>:tab==='confirmed'?<>
           <div className="access-verify">
-            <div className="access-verify-icon"><CheckCircle2/></div>
-            <span className="access-verify-kicker">E-MAIL ERFOLGREICH BESTÄTIGT</span>
-            <h2>Herzlich willkommen bei MotorAtlas</h2>
-            <p className="access-verify-lead">Deine E-Mail-Adresse wurde bestätigt und dein MotorAtlas-Konto ist jetzt aktiviert.</p>
+            {confirmationState==='checking'?<>
+              <div className="access-verify-icon"><RefreshCw/></div>
+              <span className="access-verify-kicker">E-MAIL WIRD BESTÄTIGT</span>
+              <h2>Einen Moment – MotorAtlas prüft deinen Link</h2>
+              <p className="access-verify-lead">Deine E-Mail-Adresse wird sicher verifiziert. Danach kannst du dich direkt anmelden.</p>
+            </>:confirmationState==='error'?<>
+              <div className="access-verify-icon"><MailCheck/></div>
+              <span className="access-verify-kicker">BESTÄTIGUNG NICHT MÖGLICH</span>
+              <h2>Der Bestätigungslink ist nicht mehr gültig</h2>
+              <p className="access-verify-lead">{confirmationError}</p>
+              <div className="access-verify-paths">
+                <article>
+                  <span>NÄCHSTER SCHRITT</span>
+                  <b>Neue Bestätigung anfordern</b>
+                  <p>Öffne die Anmeldung beziehungsweise Registrierung erneut und fordere dort eine neue Bestätigungsmail an.</p>
+                </article>
+              </div>
+              <button className="btn primary xl full access-submit" onClick={()=>setTab('login')}>
+                Zur Anmeldung <ArrowRight/>
+              </button>
+            </>:<>
+              <div className="access-verify-icon"><CheckCircle2/></div>
+              <span className="access-verify-kicker">E-MAIL ERFOLGREICH BESTÄTIGT</span>
+              <h2>Herzlich willkommen bei MotorAtlas</h2>
+              <p className="access-verify-lead">Deine E-Mail-Adresse wurde bestätigt und dein MotorAtlas-Konto ist jetzt aktiviert.</p>
 
-            <div className="access-verify-paths">
-              <article>
-                <span>REGISTRIERUNG ABGESCHLOSSEN</span>
-                <b>Dein Konto ist bereit</b>
-                <p>Du kannst dich jetzt mit deiner bestätigten E-Mail-Adresse und deinem Passwort anmelden.</p>
-              </article>
-              <article className="existing">
-                <span>NÄCHSTER SCHRITT</span>
-                <b>Jetzt bei MotorAtlas anmelden</b>
-                <p>Nach der Anmeldung erkennt MotorAtlas automatisch, ob du als Autofahrer oder Werkstatt startest, und öffnet den passenden Bereich.</p>
-              </article>
-            </div>
+              <div className="access-verify-paths">
+                <article>
+                  <span>REGISTRIERUNG ABGESCHLOSSEN</span>
+                  <b>Dein Konto ist bereit</b>
+                  <p>Du kannst dich jetzt mit deiner bestätigten E-Mail-Adresse und deinem Passwort anmelden.</p>
+                </article>
+                <article className="existing">
+                  <span>NÄCHSTER SCHRITT</span>
+                  <b>Jetzt bei MotorAtlas anmelden</b>
+                  <p>Nach der Anmeldung erkennt MotorAtlas automatisch, ob du als Autofahrer oder Werkstatt startest, und öffnet den passenden Bereich.</p>
+                </article>
+              </div>
 
-            <div className="access-verify-steps">
-              <span><b>✓</b> E-Mail-Adresse bestätigt</span>
-              <span><b>✓</b> Konto aktiviert</span>
-              <span><b>3</b> Jetzt sicher anmelden</span>
-            </div>
+              <div className="access-verify-steps">
+                <span><b>✓</b> E-Mail-Adresse bestätigt</span>
+                <span><b>✓</b> Konto aktiviert</span>
+                <span><b>3</b> Jetzt sicher anmelden</span>
+              </div>
 
-            <button className="btn primary xl full access-submit" onClick={continueAfterConfirmation}>
-              Zur Anmeldung <ArrowRight/>
-            </button>
+              <button className="btn primary xl full access-submit" onClick={continueAfterConfirmation}>
+                Zur Anmeldung <ArrowRight/>
+              </button>
+            </>}
           </div>
         </>:tab==='verify'?<>
           <div className="access-verify">
