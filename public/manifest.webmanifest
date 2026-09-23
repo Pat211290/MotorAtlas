@@ -2,15 +2,15 @@
   "name":"MotorAtlas – Werkstatt & Fahrzeugportal",
   "short_name":"MotorAtlas",
   "description":"Die digitale Verbindung zwischen Autofahrer und Werkstatt.",
-  "start_url":"/",
-  "scope":"/",
+  "start_url":".",
+  "scope":".",
   "display":"standalone",
   "background_color":"#f7fbfb",
   "theme_color":"#0c667a",
   "orientation":"any",
   "prefer_related_applications":false,
   "icons":[
-    {"src":"/motoratlas-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"},
-    {"src":"/motoratlas-maskable.svg","sizes":"any","type":"image/svg+xml","purpose":"maskable"}
+    {"src":"./motoratlas-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"},
+    {"src":"./motoratlas-maskable.svg","sizes":"any","type":"image/svg+xml","purpose":"maskable"}
   ]
 }
