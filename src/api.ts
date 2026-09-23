@@ -2,17 +2,13 @@ import { backendConfigured, supabase } from './lib';
 
 function db(){if(!backendConfigured||!supabase)throw new Error('MotorAtlas backend is not configured.');return supabase;}
 
-export function authReturnUrl(query:string){
+export function authReturnUrl(path:string,query?:string){
   if(typeof window==='undefined')return undefined;
-  const configured=(import.meta.env.VITE_PUBLIC_APP_URL as string|undefined)?.trim();
-  const current=new URL('./',document.baseURI);
-  const isLocal=current.hostname==='localhost'||current.hostname==='127.0.0.1'||current.hostname==='0.0.0.0';
-  const base=configured
-    ?new URL(configured)
-    :isLocal
-      ?new URL('https://pat211290.github.io/MotorAtlas/')
-      :current;
-  base.search=query;
+  const configured=(import.meta.env.VITE_PUBLIC_APP_URL as string|undefined)?.trim()||'https://motoratlas.de/';
+  const base=new URL(configured);
+  const normalized=path.startsWith('/')?path:`/${path}`;
+  base.pathname=normalized;
+  base.search=query??'';
   base.hash='';
   return base.toString();
 }
@@ -23,7 +19,7 @@ export async function signUpCustomer(
 ){
   const {data,error}=await db().auth.signUp({
     email,password,
-    options:{emailRedirectTo:authReturnUrl('confirmed=1'),data:{
+    options:{emailRedirectTo:authReturnUrl('/bestaetigung'),data:{
       full_name:fullName.trim(),
       account_intent:input?.accountIntent??'customer',
       street:input?.street?.trim()||null,
