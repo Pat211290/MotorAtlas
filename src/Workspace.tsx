@@ -17,6 +17,7 @@ import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
 import { TeamManager } from './TeamManager';
 import { VerificationPanel } from './VerificationPanel';
 import { CustomerProfileModal } from './CustomerProfileModal';
+import { AppointmentCancelModal } from './AppointmentCancelModal';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente';
@@ -100,12 +101,47 @@ function sameLocalDay(a:Date,b:Date){
   return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
 }
 
+function calendarDayDistance(date:Date,now:Date){
+  const dateDay=Date.UTC(date.getFullYear(),date.getMonth(),date.getDate());
+  const nowDay=Date.UTC(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.round((dateDay-nowDay)/86_400_000);
+}
+
+function relativeDayLabel(date:Date,now:Date){
+  const days=calendarDayDistance(date,now);
+  if(days===0)return'Heute';
+  if(days===-1)return'Gestern';
+  if(days===-2)return'Vorgestern';
+  if(days<0)return`Vor ${Math.abs(days)} Tagen`;
+  if(days===1)return'Morgen';
+  if(days===2)return'Übermorgen';
+  return`In ${days} Tagen`;
+}
+
+function overdueSinceLabel(startsAt:string,now:Date){
+  const diff=Math.max(0,now.getTime()-new Date(startsAt).getTime());
+  const minutes=Math.floor(diff/60_000);
+  if(minutes<=0)return'Jetzt fällig';
+  if(minutes===1)return'Überfällig seit 1 Minute';
+  if(minutes<60)return`Überfällig seit ${minutes} Minuten`;
+  const hours=Math.floor(minutes/60);
+  const remainingMinutes=minutes%60;
+  if(hours<24)return`Überfällig seit ${hours} Std${remainingMinutes?` ${remainingMinutes} Min`:''}`;
+  const days=Math.floor(hours/24);
+  const remainingHours=hours%24;
+  return`Überfällig seit ${days} ${days===1?'Tag':'Tagen'}${remainingHours?` ${remainingHours} Std`:''}`;
+}
+
+function customerCancellationOpen(startsAt:string,now:Date){
+  return new Date(startsAt).getTime()-now.getTime()>=12*60*60*1000;
+}
+
 function appointmentPhase(item:WorkshopAppointment,now=new Date()):AppointmentPhase{
   if(item.status==='proposed')return'proposed';
   if(item.arrivedAt||(item.rawOrderStage&&item.rawOrderStage!=='appointment_confirmed'))return'arrived';
   const start=new Date(item.startsAt);
   if(start.getTime()<=now.getTime()){
-    return now.getTime()-start.getTime()>=15*60*1000?'late':'today';
+    return now.getTime()-start.getTime()>=60*1000?'late':'today';
   }
   return'planned';
 }
