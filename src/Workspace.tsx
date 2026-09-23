@@ -235,6 +235,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [now,setNow]=useState(()=>new Date());
  const [chat,setChat]=useState(false);
  const [chatInboxTarget,setChatInboxTarget]=useState<WorkshopChatInboxItem|null>(null);
+ const [workshopOverviewOpen,setWorkshopOverviewOpen]=useState(false);
  const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
@@ -246,6 +247,9 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [documents,setDocuments]=useState<any[]>([]);
  const [documentsBusy,setDocumentsBusy]=useState(false);
  const selected=displayJobs.find(job=>job.id===selectedId)??displayJobs[0];
+ const inWorkshopJobs=useMemo(()=>displayJobs
+   .filter(job=>!live.isLive||Boolean(job.arrivedAt))
+   .sort((a,b)=>new Date(a.arrivedAt??a.updatedAt??0).getTime()-new Date(b.arrivedAt??b.updatedAt??0).getTime()),[displayJobs,live.isLive]);
  const counts=useMemo(()=>Object.fromEntries(orderStages.map(stage=>[stage,displayJobs.filter(job=>job.stage===stage).length])),[displayJobs]);
  const title=live.identity?.workshopName??'Carplus Service';
  const unreadChats=live.chatInbox.reduce((sum,item)=>sum+item.unreadCount,0);
@@ -455,7 +459,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
        </div>
      </PageHead>
      <div className="metrics workshop-metrics">
-       <article><small>IN DER WERKSTATT</small><b>{displayJobs.length}</b><span>aktive Fahrzeuge</span></article>
+       <button className="metric-card metric-clickable" onClick={()=>setWorkshopOverviewOpen(true)}><small>IN DER WERKSTATT</small><b>{inWorkshopJobs.length}</b><span>anwesende Fahrzeuge · öffnen</span></button>
        <article className={appointmentStats.today?'attention':''}><small>HEUTE ERWARTET</small><b>{appointmentStats.today}</b><span>{appointmentStats.due?'davon '+appointmentStats.due+' jetzt fällig':'geplante Ankünfte'}</span></article>
        <article className={appointmentStats.late?'danger':''}><small>VERSPÄTET</small><b>{appointmentStats.late}</b><span>Termin überschritten</span></article>
        <article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>zu bearbeiten</span></article>
@@ -571,6 +575,22 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  <ServiceRequestOfficeModal open={Boolean(serviceRequest)} onClose={()=>setServiceRequest(null)} onDone={live.reload} request={serviceRequest}/>
  <CustomerAdmissionModal open={Boolean(customerRequest)} onClose={()=>setCustomerRequest(null)} onDone={live.reload} request={customerRequest}/>
  <AppointmentCancelModal open={Boolean(cancelTarget)} onClose={()=>setCancelTarget(null)} onDone={live.reload} appointmentId={cancelTarget?.id} startsAt={cancelTarget?.startsAt} mode="workshop" vehicle={cancelTarget?.vehicle}/>
+ {workshopOverviewOpen&&<div className="modal-backdrop" onMouseDown={()=>setWorkshopOverviewOpen(false)}>
+   <section className="workflow-modal in-workshop-modal" onMouseDown={event=>event.stopPropagation()}>
+     <header><div className="modal-icon"><Car/></div><div><span>IN DER WERKSTATT</span><h2>{inWorkshopJobs.length} anwesende Fahrzeuge</h2><small>Nur tatsächlich eingecheckte, noch nicht abgeschlossene Fahrzeuge.</small></div><button onClick={()=>setWorkshopOverviewOpen(false)} aria-label="Schließen">×</button></header>
+     <div className="in-workshop-list">
+       {inWorkshopJobs.length?inWorkshopJobs.map(job=><button key={job.id} className="in-workshop-row" onClick={()=>{
+         sessionStorage.setItem('motoratlas_workshop_selected_order',job.id);
+         setWorkshopOverviewOpen(false);
+         setView('workshop');
+       }}>
+         <div className="in-workshop-photo">{job.photoPath?<VehiclePhoto path={job.photoPath} alt={job.vehicle}/>:<CarArt tone={toneFor(job.id)}/>}</div>
+         <div className="in-workshop-main"><b>{job.vehicle}</b><small>{job.plate} · Auftrag #{job.orderNumber??job.id.slice(-6)}</small><p>{job.customerName??'Kunde'} · {job.complaint}</p></div>
+         <div className="in-workshop-meta"><Status stage={job.stage}/><small>{job.arrivedAt?'Eingetroffen '+new Date(job.arrivedAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}):'Anwesend'}</small><strong>{job.assignee?'Bei '+job.assignee:'Auftrag öffnen'}</strong></div>
+       </button>):<div className="inbox-empty">Aktuell ist kein Fahrzeug eingecheckt.</div>}
+     </div>
+   </section>
+ </div>}
  </Shell>;
 }
 
@@ -580,7 +600,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  const queue=live.isLive
    ?allJobs.filter(job=>['waiting_diagnosis','diagnosing','ready_for_repair','repairing'].includes(job.rawStage??''))
    :allJobs.filter(job=>job.stage==='arrived'||job.stage==='repair');
- const [selectedId,setSelectedId]=useState<string>(queue[0]?.id??'');
+ const [selectedId,setSelectedId]=useState<string>(()=>sessionStorage.getItem('motoratlas_workshop_selected_order')??queue[0]?.id??'');
  const selected=queue.find(job=>job.id===selectedId)??queue[0];
  const [chat,setChat]=useState(false);
  const [diagnosis,setDiagnosis]=useState(false);
@@ -599,7 +619,10 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  },[selected?.id,selected?.assigneeUserId,selected?.rawStage,live.identity?.userId,live.members]);
 
  useEffect(()=>{
-   if(selectedId&&queue.some(job=>job.id===selectedId))return;
+   if(selectedId&&queue.some(job=>job.id===selectedId)){
+     sessionStorage.removeItem('motoratlas_workshop_selected_order');
+     return;
+   }
    setSelectedId(queue[0]?.id??'');
  },[queue,selectedId]);
 
