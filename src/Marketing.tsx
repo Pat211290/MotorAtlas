@@ -30,6 +30,54 @@ export function Marketing({setView}:{setView:(v:AppView)=>void}){
 
   <section className="process-line wrap"><p>Ein Fahrzeug. Ein Vorgang. Eine nachvollziehbare Geschichte.</p><div><span>ANFRAGE</span><i/><span>TERMIN</span><i/><span>DIAGNOSE</span><i/><span>FREIGABE</span><i/><span>REPARATUR</span><i/><span>RECHNUNG</span></div></section>
 
+  <section className="value-bridge wrap">
+    <div className="value-side customer">
+      <span>FÜR AUTOFAHRER</span>
+      <h2>Schneller Hilfe bekommen. <em>Zeit und unnötige Kosten sparen.</em></h2>
+      <p>MotorAtlas macht aus einem Werkstattproblem einen klaren digitalen Vorgang – fahrzeugspezifisch, nachvollziehbar und jederzeit aktuell.</p>
+      <div className="value-points">
+        <article><Car/><div><b>Fahrzeugspezifischer Reparaturauftrag</b><small>Problem, Foto, Fahrzeugdaten und Historie landen direkt am richtigen PKW.</small></div></article>
+        <article><Search/><div><b>Schneller zur passenden Werkstatt</b><small>Werkstattprofil prüfen, Leistungen sehen und direkt eine Anfrage senden.</small></div></article>
+        <article><FileCheck2/><div><b>Kosten besser kontrollieren</b><small>Diagnose und Kostenvoranschlag sehen, Rückfragen stellen und erst danach freigeben.</small></div></article>
+        <article><MessageCircle/><div><b>Immer auf dem aktuellen Stand</b><small>Termin, Diagnose, Freigabe, Reparatur und Abholung sind ohne Nachtelefonieren sichtbar.</small></div></article>
+      </div>
+      <button className="btn secondary xl" onClick={()=>setView('customer-info')}>Alle Vorteile für Autofahrer <ArrowRight size={17}/></button>
+    </div>
+
+    <div className="value-connector">
+      <span>MOTORATLAS VERBINDET BEIDE SEITEN</span>
+      <i/>
+      <b>Ein Fahrzeug. Ein Auftrag. Ein gemeinsamer aktueller Stand.</b>
+      <p>Weniger Rückfragen, weniger Missverständnisse und schnellere Entscheidungen für Kunde und Werkstatt.</p>
+    </div>
+
+    <div className="value-side workshop">
+      <span>FÜR WERKSTÄTTEN</span>
+      <h2>Personal entlasten. <em>Professioneller auftreten und Umsatzpotenzial nutzen.</em></h2>
+      <p>MotorAtlas reduziert Verwaltungsaufwand und macht aus Kundenkommunikation, Werkstattablauf und Online-Präsenz einen zusammenhängenden Prozess.</p>
+      <div className="value-points">
+        <article><Users/><div><b>Personal entlasten</b><small>Weniger Telefonate, Zettel, WhatsApp-Verläufe und doppelte Rückfragen.</small></div></article>
+        <article><Building2/><div><b>24/7 professionell sichtbar</b><small>Öffentliches Werkstattprofil mit Leistungen, Öffnungszeiten und Neukundenstatus.</small></div></article>
+        <article><Wrench/><div><b>Schnellere Abläufe</b><small>Diagnose, Kostenvoranschlag, Freigabe und Reparatur wechseln ohne Medienbruch weiter.</small></div></article>
+        <article><FileText/><div><b>Mehr Umsatzpotenzial</b><small>Weniger verpasste Anfragen, schnellere Freigaben und mehr nutzbare Zeit für wertschöpfende Arbeit.</small></div></article>
+      </div>
+      <button className="btn primary xl" onClick={()=>setView('workshop-info')}>Alle Vorteile für Werkstätten <ArrowRight size={17}/></button>
+    </div>
+  </section>
+
+  <section className="section soft difference-section">
+    <div className="wrap">
+      <SectionIntro kicker="WAS MOTORATLAS ANDERS MACHT" title={<>Nicht noch ein einzelnes Portal. <em>Ein durchgängiger Werkstattvorgang.</em></>} text="Viele digitale Angebote lösen nur einen Teil – etwa Werkstattsuche, Preisvergleich, Terminbuchung oder interne Werkstattverwaltung. MotorAtlas verbindet die Schritte davor, währenddessen und danach in einem gemeinsamen Vorgang."/>
+      <div className="difference-grid">
+        <article><span>Typische Einzellösung</span><b>Werkstatt suchen oder Termin buchen</b><p>Nach der Buchung geht die Kommunikation oft wieder über Telefon, E-Mail oder Messenger weiter.</p></article>
+        <article className="highlight"><span>MotorAtlas</span><b>Vom Problem bis zur Rechnung verbunden</b><p>Fahrzeugdaten, Anfrage, Termin, Diagnose, Chat, Kostenvoranschlag, Freigabe, Reparatur und Dokumente bleiben zusammen.</p></article>
+        <article><span>Typische Werkstattsoftware</span><b>Interne Verwaltung im Betrieb</b><p>Der Kunde sieht häufig nur einzelne Ergebnisse und muss für Rückfragen erneut Kontakt aufnehmen.</p></article>
+        <article className="highlight"><span>MotorAtlas</span><b>Kunde und Werkstatt arbeiten am selben aktuellen Vorgang</b><p>Jede Seite bekommt die passende Sicht – ohne dass Mechaniker mit zusätzlicher Bürokratie belastet werden.</p></article>
+      </div>
+      <small className="difference-note">Funktionsumfang anderer Anbieter variiert. MotorAtlas positioniert sich bewusst als verbindende Plattform zwischen öffentlichem Werkstattprofil, Kundenportal und Werkstattworkflow.</small>
+    </div>
+  </section>
+
   <section className="section wrap" id="werkstaetten"><SectionIntro kicker="FÜR WERKSTÄTTEN" title={<>Nicht nur Termine sehen. <em>Den Betrieb verstehen.</em></>} text="MotorAtlas bildet den echten Werkstattfluss ab – ohne den Mechaniker mit Verwaltungsarbeit zu belasten."/><Workflow/><div className="feature-grid"><Feature icon={<Building2/>} title="Büro & Werkstatt synchron" text="Das Büro meldet das Fahrzeug als eingetroffen. Die Werkstatt sieht den Diagnoseauftrag sofort."/><Feature icon={<Wrench/>} title="Werkstattkarte statt Formularfriedhof" text="Auftrag nehmen, Diagnose eintragen, Arbeit abschließen. Die Software erzeugt den Ablauf daraus."/><Feature icon={<Users/>} title="Ein Mann oder ganzes Team" text="Bei einer Person verschmelzen Rollen. Im Team greifen Rechte, Queues und saubere Übergaben."/></div></section>
 
   <section className="section soft" id="autofahrer"><div className="wrap customer-grid"><CustomerPhone/><div><SectionIntro align="left" kicker="FÜR AUTOFAHRER" title={<>Dein Auto hat ein Problem. <em>Nicht deine Kommunikation.</em></>} text="Deine Fahrzeugdaten sind bereits hinterlegt. Die nächste Anfrage beginnt deshalb nicht wieder bei null."/><div className="check-stack"><CheckLine title="Alle PKW in einer Garage" text="Foto, Kennzeichen, HSN, TSN, VIN, Historie und Dokumente bleiben am Fahrzeug."/><CheckLine title="Problem in Sekunden melden" text="Kurz beschreiben, Pflichtbild hinzufügen und Wunschtermin senden."/><CheckLine title="KVA verbindlich freigeben" text="Rückfragen per Chat oder Telefon – die formelle Freigabe bleibt separat dokumentiert."/><CheckLine title="Fahrzeugbezogener Chat" text="Werkstatt und Kunde sprechen genau dort, wo der Vorgang liegt. Keine verstreuten Messenger-Nachrichten."/></div></div></div></section>
