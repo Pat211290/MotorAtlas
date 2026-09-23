@@ -394,3 +394,8 @@
   .customer-workshop-contact-grid{grid-template-columns:1fr}
   .chat-inbox-main>p{max-width:50vw}
 }
+
+.developer-verification-card{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:15px;border:1px solid #cfe6da;background:#f7fcf9;border-radius:13px}
+.developer-verification-card>svg{width:24px;flex:0 0 24px;color:var(--brand)}
+.developer-verification-card b{display:block;font-size:11px;color:#405762}
+.developer-verification-card span{display:block;font-size:9px;line-height:1.5;color:#71838b;margin-top:3px}
