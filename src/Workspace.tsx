@@ -12,6 +12,7 @@ import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
 import { ServiceRequestModal } from './ServiceRequestModal';
 import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeRequestModals';
+import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
 
 function Shell({children,title,mode,active,onHome}:{children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void}){
@@ -165,7 +166,7 @@ function VehicleCard({name,plate,detail,active,tone,stage='approval',demo=false,
 
 export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const live=useCustomerWorkspace();
- const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false); const [requestModal,setRequestModal]=useState(false);
+ const [approved,setApproved]=useState(false); const [chat,setChat]=useState(false); const [vehicleModal,setVehicleModal]=useState(false); const [requestModal,setRequestModal]=useState(false); const [directory,setDirectory]=useState(false);
  const [documents,setDocuments]=useState<any[]>([]); const [docError,setDocError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
  const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
  const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['declined','cancelled','converted'].includes(request.status)):null;
@@ -217,7 +218,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
 
  return <Shell onHome={()=>setView('home')} title="Meine Garage" mode="Kundenportal" active="Fahrzeuge"><div className="page">
  <PageHead title="Meine Garage" subtitle={live.isLive?'Deine echten Fahrzeuge, Anfragen, Aufträge und Dokumente an einem Ort.':'Produktdemo des Kundenportals.'}>
-   <div className="head-actions"><button className="btn secondary"><MapPin size={16}/> Werkstatt finden</button><button className="btn secondary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug</button><button className="btn secondary" onClick={()=>setChat(true)} disabled={live.isLive&&!activeOrder}><MessageCircle size={16}/> Chat {!live.isLive&&<span className="badge">1</span>}</button><button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Anfrage starten</button></div>
+   <div className="head-actions"><button className="btn secondary" onClick={()=>setDirectory(true)}><MapPin size={16}/> Werkstatt finden</button><button className="btn secondary" onClick={()=>setVehicleModal(true)}><Plus size={16}/> Fahrzeug</button><button className="btn secondary" onClick={()=>setChat(true)} disabled={live.isLive&&!activeOrder}><MessageCircle size={16}/> Chat {!live.isLive&&<span className="badge">1</span>}</button><button className="btn primary" onClick={()=>setRequestModal(true)}><Plus size={16}/> Anfrage starten</button></div>
  </PageHead>
  {(live.error||docError)&&<div className="workspace-alert">{live.error??docError}</div>}
  {live.isLive?<div className="customer-layout">
@@ -240,6 +241,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  <div className="customer-layout"><div className="garage"><VehicleCard name="BMW X3 3.0i" plate="SAD XX 123" detail="2005 · 247.318 km" active tone={0} demo/><VehicleCard name="VW Golf VII" plate="SAD VW 407" detail="2016 · 128.140 km" tone={1} demo/></div><section className="panel timeline"><div className="panel-title"><div><span className="overline">BMW X3 · AUFTRAG #184</span><h3>Aktueller Auftrag</h3></div><Status stage={approved?'repair':'approval'}/></div><Timeline title="Fahrzeug eingetroffen" detail="08:41 · Carplus Service Center"/><Timeline title="Diagnose abgeschlossen" detail="09:12 · Lambdasonde Bank 1 vor Kat"/><Timeline current title={approved?'Reparatur freigegeben':'Deine Freigabe ist erforderlich'} detail={approved?'09:31 · an Werkstatt übermittelt':'09:26 · Kostenvoranschlag bereitgestellt'}>{!approved&&<div className="quote"><div><small>KOSTENVORANSCHLAG · PDF</small><b>328,40 €</b><span>inkl. MwSt.</span></div><p>Lambdasonde Bank 1 vor Kat + Einbau</p><div><button className="btn primary" onClick={()=>setApproved(true)}>Reparatur freigeben</button><button className="btn secondary" onClick={()=>setChat(true)}>Rückfrage</button></div></div>}</Timeline><Timeline title="Reparatur" detail={approved?'Auftrag steht in der Werkstatt-Queue':'Startet nach Freigabe'}/><Timeline title="Abholbereit" detail="Noch nicht erreicht" last/></section></div>}
  </div>
  <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
+ <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
  <ServiceRequestModal open={requestModal} onClose={()=>setRequestModal(false)} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops}/>
  <VehicleChat open={chat} onClose={()=>setChat(false)} audience="customer" workOrderId={live.isLive?activeOrder?.id:null} vehicleLabel={live.isLive&&activeVehicle?[activeVehicle.make,activeVehicle.model,activeVehicle.variant].filter(Boolean).join(' '):'BMW X3 3.0i'} plate={live.isLive&&activeVehicle?activeVehicle.licensePlate:'SAD XX 123'} orderNumber={live.isLive&&activeOrder?activeOrder.orderNumber:'184'}/>
  </Shell>;
