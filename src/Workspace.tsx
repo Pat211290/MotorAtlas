@@ -183,6 +183,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [customerRequest,setCustomerRequest]=useState<any|null>(null);
  const [busy,setBusy]=useState(false);
  const [arrivalBusy,setArrivalBusy]=useState<string|null>(null);
+ const [cancelTarget,setCancelTarget]=useState<WorkshopAppointment|null>(null);
  const [actionError,setActionError]=useState<string|null>(null);
  const [documents,setDocuments]=useState<any[]>([]);
  const [documentsBusy,setDocumentsBusy]=useState(false);
@@ -329,10 +330,18 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
 
  const appointmentCard=(item:WorkshopAppointment)=>{
    const phase=appointmentPhase(item,now);
+   const start=new Date(item.startsAt);
+   const dayLabel=relativeDayLabel(start,now);
    const canArrive=item.status==='confirmed'&&!item.arrivedAt&&item.rawOrderStage==='appointment_confirmed'&&Boolean(item.workOrderId);
+   const canCancel=!item.arrivedAt&&(item.status==='confirmed'||item.status==='proposed')&&(!item.rawOrderStage||item.rawOrderStage==='appointment_confirmed');
    return <article key={item.id} className={'schedule-card '+phase}>
      <div className="schedule-photo"><VehiclePhoto path={item.photoPath} alt={item.vehicle}/></div>
-     <div className="schedule-time"><b>{new Date(item.startsAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</b><small>{item.endsAt?'bis '+new Date(item.endsAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Termin'}</small></div>
+     <div className="schedule-time">
+       <span className="relative-day">{dayLabel}</span>
+       <b>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</b>
+       <small>{item.endsAt?'bis '+new Date(item.endsAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Termin'}</small>
+       {phase==='late'&&<em>{overdueSinceLabel(item.startsAt,now)}</em>}
+     </div>
      <div className="schedule-main">
        <div className="schedule-title"><div><b>{item.vehicle}</b><small>{item.plate} · {item.customerName}</small></div><span className={'schedule-status '+phase}>{phase==='late'&&<AlertTriangle/>}{appointmentPhaseLabel(phase)}</span></div>
        <p>{item.complaint}</p>
@@ -351,6 +360,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      <div className="schedule-actions">
        {canArrive&&<button className="btn primary" disabled={arrivalBusy===item.id} onClick={()=>void markArrived(item)}>{arrivalBusy===item.id?'Speichert …':'Fahrzeug eingetroffen'}</button>}
        {phase==='arrived'&&item.workOrderId&&<button className="btn secondary" onClick={()=>{setSelectedId(item.workOrderId!);openSection('Übersicht')}}>Auftrag öffnen</button>}
+       {canCancel&&<button className="btn secondary cancel-appointment" onClick={()=>setCancelTarget(item)}>{item.status==='proposed'?'Vorschlag zurückziehen':'Termin stornieren'}</button>}
        {phase==='proposed'&&<span className="waiting-customer">Wartet auf Kundenbestätigung</span>}
      </div>
    </article>;
@@ -476,6 +486,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  <ServiceRequestOfficeModal open={Boolean(serviceRequest)} onClose={()=>setServiceRequest(null)} onDone={live.reload} request={serviceRequest}/>
  <CustomerAdmissionModal open={Boolean(customerRequest)} onClose={()=>setCustomerRequest(null)} onDone={live.reload} request={customerRequest}/>
+ <AppointmentCancelModal open={Boolean(cancelTarget)} onClose={()=>setCancelTarget(null)} onDone={live.reload} appointmentId={cancelTarget?.id} startsAt={cancelTarget?.startsAt} mode="workshop" vehicle={cancelTarget?.vehicle}/>
  </Shell>;
 }
 
