@@ -334,6 +334,35 @@
 .customer-workshop-contact-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
 
 .chat-note.disabled{background:#fff8ed;color:#7d6e50}
+.chat-drawer>header .chat-context-trigger{width:auto;height:auto;min-width:0;flex:1;justify-content:flex-start;padding:0;background:transparent;border-radius:0;display:flex;align-items:center;gap:9px;text-align:left;cursor:pointer}
+.chat-drawer>header .chat-context-trigger:hover{background:transparent}
+.chat-context-trigger-copy{min-width:0;flex:1}
+.chat-context-trigger-copy b,.chat-context-trigger-copy small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-context-trigger>svg{flex:0 0 auto;color:#7f8f96;transition:transform .18s ease}
+.chat-context-trigger>svg.open{transform:rotate(180deg)}
+.chat-drawer>header .chat-close{flex:0 0 32px;width:32px;height:32px;background:#f2f5f6;border-radius:9px}
+.chat-context-panel{align-self:stretch;background:#fff;border:1px solid #dfe7ea;border-radius:14px;padding:14px;box-shadow:0 8px 24px rgba(20,48,60,.08);display:grid;gap:12px}
+.chat-context-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid #edf1f3}
+.chat-context-panel-head>div,.chat-context-section-title{display:flex;align-items:center;gap:9px;min-width:0}
+.chat-context-panel-head>div>svg,.chat-context-section-title>svg{width:28px;height:28px;padding:6px;border-radius:8px;background:var(--brand-soft);color:var(--brand);flex:0 0 28px}
+.chat-context-panel-head small,.chat-context-section-title small{display:block;font-size:7px;font-weight:900;letter-spacing:.7px;color:#8a989f}
+.chat-context-panel-head b,.chat-context-section-title b{display:block;font-size:10px;color:#405762;margin-top:2px;white-space:normal;overflow-wrap:anywhere}
+.chat-context-panel-head em{font-size:8px;color:#85939a;font-style:normal}
+.chat-context-grid{display:grid;gap:10px}
+.chat-context-section{border:1px solid #e6ecef;border-radius:12px;padding:11px;background:#fbfcfd;display:grid;gap:10px}
+.chat-context-section dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.chat-context-section dl>div{min-width:0;border:1px solid #edf1f3;background:#fff;border-radius:9px;padding:8px 9px}
+.chat-context-section dl>div.wide{grid-column:1/-1}
+.chat-context-section dt{font-size:7px;color:#94a0a6;margin-bottom:3px}
+.chat-context-section dd{margin:0;font-size:9px;font-weight:800;color:#455c66;overflow-wrap:anywhere}
+.chat-context-contact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.chat-context-contact>a,.chat-context-contact>div{min-width:0;border:1px solid #edf1f3;background:#fff;border-radius:9px;padding:8px 9px;display:flex;gap:8px;align-items:flex-start;text-decoration:none;color:inherit}
+.chat-context-contact .wide{grid-column:1/-1}
+.chat-context-contact svg{width:15px;flex:0 0 15px;color:var(--brand);margin-top:1px}
+.chat-context-contact span{min-width:0}
+.chat-context-contact small{display:block;font-size:7px;color:#94a0a6}
+.chat-context-contact b{display:block;font-size:9px;color:#455c66;margin-top:2px;overflow-wrap:anywhere}
+.chat-context-error{padding:10px 11px;border:1px solid #eadfd7;background:#fff9f5;border-radius:10px;font-size:8px;line-height:1.45;color:#7d6559}
 .chat-disabled-footer{min-height:68px;border-top:1px solid #e2e8eb;padding:11px 14px;display:flex;align-items:center;gap:10px;background:#fffaf3}
 .chat-disabled-footer>svg{width:20px;color:#8a6c31}
 .chat-disabled-footer b{display:block;font-size:9px;color:#5e625f}
@@ -366,6 +395,17 @@
   .chat-drawer>header b{font-size:12px}
   .chat-drawer>header small{font-size:9px}
   .chat-note{padding:7px 11px;font-size:9px;line-height:1.35}
+  .chat-drawer>header .chat-context-trigger{gap:8px}
+  .chat-context-trigger-copy b{font-size:12px}
+  .chat-context-trigger-copy small{font-size:9px}
+  .chat-context-panel{padding:11px;border-radius:12px;gap:10px}
+  .chat-context-panel-head small,.chat-context-section-title small{font-size:8px}
+  .chat-context-panel-head b,.chat-context-section-title b{font-size:11px}
+  .chat-context-section{padding:10px}
+  .chat-context-section dt,.chat-context-contact small{font-size:9px}
+  .chat-context-section dd,.chat-context-contact b{font-size:11px}
+  .chat-context-contact{grid-template-columns:1fr}
+  .chat-context-contact .wide{grid-column:auto}
   .messages{padding:11px;gap:8px;overscroll-behavior:contain}
   .message{max-width:88%;padding:8px 10px;border-radius:4px 12px 12px 12px}
   .message.mine{border-radius:12px 4px 12px 12px}
