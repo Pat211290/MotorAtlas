@@ -355,6 +355,30 @@ export type ChatMessage={
   attachment_path?:string|null;attachment_name?:string|null;attachment_mime?:string|null;attachment_size?:number|null;created_at:string;
 };
 
+export type ChatContext={
+  threadId:string;
+  workOrderId?:string|null;
+  orderNumber?:string|null;
+  customerUserId:string;
+  customerName:string;
+  customerEmail?:string|null;
+  customerPhone?:string|null;
+  customerStreet?:string|null;
+  customerPostalCode?:string|null;
+  customerCity?:string|null;
+  vehicleId:string;
+  vehicleMake:string;
+  vehicleModel:string;
+  vehicleVariant?:string|null;
+  licensePlate:string;
+  firstRegistration?:string|null;
+  hsn?:string|null;
+  tsn?:string|null;
+  vin?:string|null;
+  mileage?:number|null;
+  photoPath?:string|null;
+};
+
 function chatErrorMessage(error:any){
   const message=String(error?.message??error??'');
   if(message.includes('chat_disabled'))return'Diese Werkstatt hat den MotorAtlas-Chat deaktiviert. Bitte nutze Telefon oder E-Mail.';
@@ -375,6 +399,35 @@ export async function listChatMessages(threadId:string,limit=100){
   const {data,error}=await db().from('chat_messages').select('*').eq('thread_id',threadId).order('created_at',{ascending:false}).limit(limit);
   if(error)throw error;
   return((data??[]) as ChatMessage[]).reverse();
+}
+export async function getChatContext(threadId:string):Promise<ChatContext>{
+  const {data,error}=await db().rpc('get_chat_context',{p_thread_id:threadId});
+  if(error)throw new Error(chatErrorMessage(error));
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  if(!row)throw new Error('Fahrzeug- und Kundendaten konnten nicht geladen werden.');
+  return{
+    threadId:row.thread_id,
+    workOrderId:row.work_order_id??null,
+    orderNumber:row.order_number??null,
+    customerUserId:row.customer_user_id,
+    customerName:row.customer_name??'Kunde',
+    customerEmail:row.customer_email??null,
+    customerPhone:row.customer_phone??null,
+    customerStreet:row.customer_street??null,
+    customerPostalCode:row.customer_postal_code??null,
+    customerCity:row.customer_city??null,
+    vehicleId:row.vehicle_id,
+    vehicleMake:row.vehicle_make??'',
+    vehicleModel:row.vehicle_model??'',
+    vehicleVariant:row.vehicle_variant??null,
+    licensePlate:row.license_plate??'—',
+    firstRegistration:row.first_registration??null,
+    hsn:row.hsn??null,
+    tsn:row.tsn??null,
+    vin:row.vin??null,
+    mileage:row.mileage??null,
+    photoPath:row.photo_path??null
+  };
 }
 export async function sendChatMessage(threadId:string,body:string){
   const text=body.trim();if(!text)throw new Error('Message is empty');
