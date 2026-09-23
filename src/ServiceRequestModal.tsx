@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Camera, CalendarDays, Car, ShieldAlert, X } from 'lucide-react';
 import { createServiceRequestDraft, submitServiceRequest, uploadRequestImage, type CustomerVehicle, type CustomerWorkshop } from './api';
 
@@ -18,6 +18,12 @@ export function ServiceRequestModal({
   const [image,setImage]=useState<File|null>(null);
   const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);
   const preview=useMemo(()=>image?URL.createObjectURL(image):null,[image]);
+
+  useEffect(()=>{
+    if(!open)return;
+    const nextPrimary=workshops.find(w=>w.isPrimary)??workshops[0];
+    if(!workshopId&&nextPrimary)setWorkshopId(nextPrimary.workshopId);
+  },[open,workshops,workshopId]);
 
   if(!open)return null;
   const reset=()=>{setVehicleId('');setComplaint('');setNotes('');setDesired('');setDriveable('yes');setWarning('unknown');setImage(null);setError(null)};
