@@ -5,34 +5,42 @@
 - Source: GitHub repository `Pat211290/MotorAtlas`
 - Frontend: React + TypeScript + Vite
 - Backend: Supabase project `wicnjwqkurpqqrozrblq`
-- PWA: same frontend, installable on iPhone/iPad/Android-capable browsers
+- Production hosting: GitHub Pages
+- Canonical production domain: `https://motoratlas.de`
+- Optional alias: `https://www.motoratlas.de`
+- PWA: same frontend, installable on supported mobile browsers
 - Android: Capacitor container prepared for APK generation
 
-## CI
+## CI and deployment
 
-Every push to `main` runs a full dependency install, TypeScript check and production build.
+Every push to `main` runs the TypeScript check and production build.
 
-## Preview
+The GitHub Pages workflow under `.github/workflows/pages.yml` builds `dist/` and deploys it through GitHub Pages. The repository includes `public/CNAME` with `motoratlas.de`, so the deployed artifact contains the production custom-domain marker.
 
-A GitHub Pages workflow is included under `.github/workflows/pages.yml`.
+The production build uses the MotorAtlas Supabase publishable client configuration. No service-role secret is exposed.
 
-For the first publication, GitHub Pages must be enabled once in the repository settings and its source set to **GitHub Actions**. After that, every push to `main` republishes the preview automatically.
+## Production DNS
 
-The preview build uses the MotorAtlas Supabase publishable client configuration. No service-role secret is exposed.
+The apex domain `motoratlas.de` is published directly through GitHub Pages using the official GitHub Pages A records:
 
-## Production motoratlas.de
+- `185.199.108.153`
+- `185.199.109.153`
+- `185.199.110.153`
+- `185.199.111.153`
 
-The production cutover should happen only after the preview has been accepted.
+The optional `www.motoratlas.de` alias uses a CNAME to `Pat211290.github.io`.
 
-Recommended production sequence:
+The previous Cloudflare Tunnel for the public `motoratlas.de` website is no longer part of the production path.
 
-1. Preview acceptance
-2. Confirm production hosting target
-3. Build with the same Supabase client variables
-4. Upload `dist/` to production host
-5. Verify HTTPS and service-worker scope
-6. Verify customer/workshop login
-7. Smoke-test request → appointment → diagnosis → quote → approval → repair → invoice
-8. Switch DNS or document root only after smoke tests pass
+## Production verification
 
-Do not point `motoratlas.de` at the preview blindly; keep the current public site available until the final production build is validated.
+After each production deployment verify:
+
+1. `https://motoratlas.de/`
+2. `https://motoratlas.de/anmelden`
+3. `https://motoratlas.de/bestaetigung`
+4. `https://motoratlas.de/passwort-zuruecksetzen`
+5. HTTPS certificate and redirect behavior
+6. PWA manifest/service worker
+7. Customer and workshop authentication
+8. Request → appointment → diagnosis → quote → approval → repair → invoice workflow
