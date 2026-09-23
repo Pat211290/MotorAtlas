@@ -4,6 +4,14 @@ import { decideCustomerRequest, declineServiceRequest, proposeAppointment, type 
 import { QuarterHourDateTime } from './QuarterHourDateTime';
 import { VehiclePhoto } from './VehicleModal';
 
+function requestIntentLabel(intent:WorkshopServiceRequest['requestIntent']){
+  if(intent==='direct_work')return'Direktauftrag – Leistung ausführen';
+  if(intent==='diagnosis_then_quote')return'Diagnose + Kostenvoranschlag';
+  if(intent==='diagnosis_only')return'Nur Diagnose / Prüfung';
+  if(intent==='diagnosis_then_decide')return'Diagnose – danach entscheidet der Kunde';
+  return'Kostenvoranschlag vor Arbeitsbeginn';
+}
+
 export function CustomerAdmissionModal({
   open,onClose,onDone,request
 }:{
@@ -87,6 +95,7 @@ export function ServiceRequestOfficeModal({
           <span><MapPin size={13}/> {[request.customerStreet,request.customerPostalCode,request.customerCity].filter(Boolean).join(', ')||'Keine Anschrift hinterlegt'}</span>
         </div>
       </div>
+      <div className="service-intent-office"><small>GEWÜNSCHTER AUFTRAGSWEG</small><b>{requestIntentLabel(request.requestIntent)}</b><span>{request.requestIntent==='direct_work'?'Kein automatischer Kostenvoranschlag erforderlich. Zusatzarbeiten brauchen eine neue Freigabe.':request.requestIntent==='diagnosis_only'?'Nach der Diagnose endet der technische Auftrag ohne automatische Reparatur.':request.requestIntent==='diagnosis_then_decide'?'Nach der Diagnose wird der nächste Schritt offen festgelegt.':request.requestIntent==='quote_before_work'?'Vor der Reparatur ist ein Kostenvoranschlag vorgesehen.':'Nach der Diagnose wird ein Kostenvoranschlag erstellt und freigegeben.'}</span></div>
       <div className="service-request-summary"><Car/><div><small>KUNDENWUNSCH / BEANSTANDUNG</small><b>{request.complaint}</b><span>{request.driveable===false?'Nicht fahrbereit':request.driveable===true?'Fahrbereit':'Fahrbereitschaft unklar'} · Warnleuchte: {request.warningLevel==='red'?'rot':request.warningLevel==='yellow'?'gelb':request.warningLevel==='none'?'keine':'unklar'}</span></div></div>
       {request.desiredStart&&<div className="desired-slot"><small>WUNSCH DES KUNDEN</small><b>{new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b></div>}
       <div className="form-two">
