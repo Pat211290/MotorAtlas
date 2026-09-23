@@ -389,6 +389,9 @@ export type WorkshopIdentity={
   workshopName:string;
   brandPrimary?:string|null;
   brandSecondary?:string|null;
+  brandSoft?:string|null;
+  brandRgb?:string|null;
+  logoPath?:string|null;
   operatingMode?:'solo'|'team';
   chatEnabled:boolean;
 };
@@ -411,7 +414,7 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
   if(error)throw error;
   if(!member)return null;
   const {data:workshop,error:workshopError}=await client.from('workshops')
-    .select('id,name,brand_primary,brand_secondary,operating_mode,chat_enabled')
+    .select('id,name,brand_primary,brand_secondary,brand_soft,brand_rgb,logo_path,operating_mode,chat_enabled')
     .eq('id',member.workshop_id).single();
   if(workshopError)throw workshopError;
   return{
@@ -423,6 +426,9 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
     workshopName:workshop.name,
     brandPrimary:workshop.brand_primary,
     brandSecondary:workshop.brand_secondary,
+    brandSoft:workshop.brand_soft,
+    brandRgb:workshop.brand_rgb,
+    logoPath:workshop.logo_path,
     operatingMode:(workshop.operating_mode??'solo') as 'solo'|'team',
     chatEnabled:workshop.chat_enabled!==false
   };
@@ -955,14 +961,14 @@ export async function getVehicleImageUrl(path:string,expiresIn=900){
   if(error)throw error;return data.signedUrl;
 }
 
-export async function uploadWorkshopLogo(input:{workshopId:string;file:File;primary:string;secondary:string}){
+export async function uploadWorkshopLogo(input:{workshopId:string;file:File;primary:string;secondary:string;soft:string;rgb:string}){
   if(!input.file.type.startsWith('image/'))throw new Error('Bitte eine Bilddatei auswählen.');
   const client=db(),safeName=input.file.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
   const path=input.workshopId+'/logo/'+crypto.randomUUID()+'-'+safeName;
   const {error:uploadError}=await client.storage.from('workshop-branding').upload(path,input.file,{upsert:false,contentType:input.file.type});
   if(uploadError)throw uploadError;
   const {data,error}=await client.from('workshops').update({
-    logo_path:path,brand_primary:input.primary,brand_secondary:input.secondary
+    logo_path:path,brand_primary:input.primary,brand_secondary:input.secondary,brand_soft:input.soft,brand_rgb:input.rgb
   }).eq('id',input.workshopId).select().single();
   if(error){await client.storage.from('workshop-branding').remove([path]);throw error}
   return data;
@@ -1063,7 +1069,7 @@ export async function listPendingCustomerRequests(workshopId:string){
 
 export async function getWorkshopProfile(workshopId:string){
   const {data,error}=await db().from('workshops')
-    .select('id,name,legal_name,street,postal_code,city,phone,email,website,chat_enabled,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_mode,verification_requested_at,verification_review_note')
+    .select('id,name,legal_name,street,postal_code,city,phone,email,website,chat_enabled,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,brand_soft,brand_rgb,listed_publicly,verified_at,verification_status,verification_mode,verification_requested_at,verification_review_note')
     .eq('id',workshopId).single();
   if(error)throw error;return data;
 }
