@@ -239,8 +239,10 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
        const created=await createWorkshop({name,slug:slugBase+'-'+crypto.randomUUID().slice(0,6),street,postalCode,city,legalName,description});
        workshopId=created.id;
      }
-     await updateWorkshopProfile({workshopId,name,legalName,street,postalCode,city,description,operatingMode:mode,acceptsNewCustomers:accepts});
-     if(logoFile&&palette)await uploadWorkshopLogo({workshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
+     if(!workshopId)throw new Error('Werkstatt konnte nicht angelegt werden.');
+     const resolvedWorkshopId:string=workshopId;
+     await updateWorkshopProfile({workshopId:resolvedWorkshopId,name,legalName,street,postalCode,city,description,operatingMode:mode,acceptsNewCustomers:accepts});
+     if(logoFile&&palette)await uploadWorkshopLogo({workshopId:resolvedWorkshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
      await live.reload();setView('office');
    }catch(err){setError(err instanceof Error?err.message:'Werkstattprofil konnte nicht gespeichert werden.')}
    finally{setBusy(false)}
