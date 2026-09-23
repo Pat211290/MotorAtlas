@@ -118,6 +118,38 @@ export async function proposeAppointment(input:{serviceRequestId:string;startsAt
 export async function respondAppointment(appointmentId:string,decision:'confirmed'|'declined'){
   const {data,error}=await db().rpc('respond_appointment',{p_appointment_id:appointmentId,p_decision:decision});if(error)throw error;return data;
 }
+
+export async function cancelAppointmentAsCustomer(appointmentId:string,reason?:string){
+  const {data,error}=await db().rpc('cancel_appointment_as_customer',{
+    p_appointment_id:appointmentId,p_reason:reason?.trim()||null
+  });
+  if(error){
+    const message=error.message.includes('customer_cancellation_window_closed')
+      ?'Online-Stornierung ist nur bis spätestens 12 Stunden vor dem Termin möglich. Bitte kläre eine kurzfristige Absage telefonisch mit der Werkstatt.'
+      :error.message.includes('appointment_already_started')
+        ?'Der Termin hat bereits begonnen bzw. das Fahrzeug wurde schon angenommen. Bitte kontaktiere die Werkstatt direkt.'
+        :error.message.includes('appointment_not_confirmed')
+          ?'Dieser Termin ist nicht mehr als bestätigter Termin stornierbar.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
+
+export async function cancelAppointmentAsWorkshop(appointmentId:string,reason?:string){
+  const {data,error}=await db().rpc('cancel_appointment_as_workshop',{
+    p_appointment_id:appointmentId,p_reason:reason?.trim()||null
+  });
+  if(error){
+    const message=error.message.includes('appointment_already_started')
+      ?'Das Fahrzeug wurde bereits angenommen. Der laufende Werkstattauftrag muss separat bearbeitet werden.'
+      :error.message.includes('appointment_not_cancellable')
+        ?'Dieser Termin kann nicht mehr storniert werden.'
+        :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
 export async function declineServiceRequest(serviceRequestId:string,reason?:string){
   const {data,error}=await db().rpc('decline_service_request',{p_service_request_id:serviceRequestId,p_reason:reason?.trim()||null});
   if(error)throw error;return data;
@@ -405,6 +437,7 @@ export type CustomerRelationshipRequest={
 };
 export type CustomerAppointment={
   id:string;serviceRequestId:string;workshopId:string;startsAt:string;endsAt?:string|null;status:string;note?:string|null;
+  cancelledAt?:string|null;cancellationReason?:string|null;cancellationActor?:'customer'|'workshop'|null;
 };
 
 export async function loadCustomerWorkspace():Promise<{
@@ -425,7 +458,7 @@ export async function loadCustomerWorkspace():Promise<{
 
   const requestResult=await client.from('service_requests')
       .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
-      .eq('customer_user_id',auth.user.id).not('status','in','("draft","cancelled")').order('created_at',{ascending:false});
+      .eq('customer_user_id',auth.user.id).neq('status','draft').order('created_at',{ascending:false});
   if(requestResult.error)throw requestResult.error;
 
   const relationshipRequestResult=await client.from('workshop_customer_requests')
@@ -453,7 +486,7 @@ export async function loadCustomerWorkspace():Promise<{
     ...((orderResult.data??[]) as any[]).map(order=>order.service_request_id).filter(Boolean)
   ])];
   const appointmentResult=requestIds.length
-    ?await client.from('appointments').select('id,service_request_id,workshop_id,starts_at,ends_at,status,note').in('service_request_id',requestIds).not('status','eq','cancelled').order('created_at',{ascending:false})
+    ?await client.from('appointments').select('id,service_request_id,workshop_id,starts_at,ends_at,status,note,cancelled_at,cancellation_reason,cancellation_actor').in('service_request_id',requestIds).order('created_at',{ascending:false})
     :{data:[],error:null} as any;
   if(appointmentResult.error)throw appointmentResult.error;
 
@@ -479,7 +512,8 @@ export async function loadCustomerWorkspace():Promise<{
       declineReason:r.decline_reason,declinedAt:r.declined_at,createdAt:r.created_at
     })),
     appointments:((appointmentResult.data??[]) as any[]).map(a=>({
-      id:a.id,serviceRequestId:a.service_request_id,workshopId:a.workshop_id,startsAt:a.starts_at,endsAt:a.ends_at,status:a.status,note:a.note
+      id:a.id,serviceRequestId:a.service_request_id,workshopId:a.workshop_id,startsAt:a.starts_at,endsAt:a.ends_at,status:a.status,note:a.note,
+      cancelledAt:a.cancelled_at,cancellationReason:a.cancellation_reason,cancellationActor:a.cancellation_actor
     })),
     relationshipRequests:((relationshipRequestResult.data??[]) as any[]).map(r=>({
       id:r.id,workshopId:r.workshop_id,workshopName:(workshopMap.get(r.workshop_id) as any)?.name??'Werkstatt',
@@ -499,6 +533,7 @@ export type WorkshopServiceRequest={
 export type WorkshopAppointment={
   id:string;serviceRequestId:string;workOrderId?:string|null;orderNumber?:string|null;startsAt:string;endsAt?:string|null;
   status:string;note?:string|null;rawOrderStage?:string|null;arrivedAt?:string|null;
+  cancelledAt?:string|null;cancellationReason?:string|null;cancellationActor?:'customer'|'workshop'|null;
   customerUserId:string;customerName:string;customerEmail?:string|null;customerPhone?:string|null;customerStreet?:string|null;
   customerPostalCode?:string|null;customerCity?:string|null;
   vehicleId:string;vehicle:string;plate:string;make?:string|null;model?:string|null;variant?:string|null;
@@ -545,7 +580,7 @@ export async function listWorkshopServiceRequests(workshopId:string):Promise<Wor
 export async function listWorkshopAppointments(workshopId:string):Promise<WorkshopAppointment[]>{
   const client=db();
   const {data:appointments,error}=await client.from('appointments')
-    .select('id,service_request_id,starts_at,ends_at,status,note')
+    .select('id,service_request_id,starts_at,ends_at,status,note,cancelled_at,cancellation_reason,cancellation_actor')
     .eq('workshop_id',workshopId)
     .in('status',['proposed','confirmed'])
     .order('starts_at',{ascending:true});
@@ -582,6 +617,7 @@ export async function listWorkshopAppointments(workshopId:string):Promise<Worksh
     return{
       id:row.id,serviceRequestId:row.service_request_id,workOrderId:order?.id??null,orderNumber:order?.order_number??null,
       startsAt:row.starts_at,endsAt:row.ends_at,status:row.status,note:row.note,rawOrderStage:order?.stage??null,arrivedAt:order?.arrived_at??null,
+      cancelledAt:row.cancelled_at??null,cancellationReason:row.cancellation_reason??null,cancellationActor:row.cancellation_actor??null,
       customerUserId:request?.customer_user_id??'',customerName:profile?.full_name??'Kunde',customerEmail:profile?.email??null,customerPhone:profile?.phone??null,
       customerStreet:profile?.street??null,customerPostalCode:profile?.postal_code??null,customerCity:profile?.city??null,
       vehicleId:request?.vehicle_id??'',vehicle:vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug',
