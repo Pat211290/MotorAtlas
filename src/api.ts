@@ -86,13 +86,33 @@ export async function uploadRequestImage(serviceRequestId:string,file:File){
   }catch(error){await client.storage.from('request-media').remove([path]);throw error;}
 }
 export async function submitServiceRequest(serviceRequestId:string){
-  const {data,error}=await db().rpc('submit_service_request',{p_service_request_id:serviceRequestId});if(error)throw error;return data;
+  const {data,error}=await db().rpc('submit_service_request',{p_service_request_id:serviceRequestId});
+  if(error){
+    const message=error.message.includes('workshop_relationship_not_active')
+      ?'Diese Werkstatt hat deine Kundenaufnahme noch nicht bestätigt.'
+      :error.message.includes('service_request_not_found')
+        ?'Die Anfrage konnte nicht gefunden werden.'
+        :error.message.includes('request_not_draft')
+          ?'Diese Anfrage wurde bereits gesendet oder bearbeitet.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function proposeAppointment(input:{serviceRequestId:string;startsAt:string;endsAt?:string;note?:string}){
   const {data,error}=await db().rpc('propose_appointment',{
     p_service_request_id:input.serviceRequestId,p_starts_at:input.startsAt,p_ends_at:input.endsAt??null,p_note:input.note?.trim()||null
-  });if(error)throw error;return data;
+  });
+  if(error){
+    const message=error.message.includes('appointment_must_use_15_minute_slots')
+      ?'Termine können nur in 15-Minuten-Schritten gewählt werden.'
+      :error.message.includes('invalid_appointment_range')
+        ?'Das voraussichtliche Ende muss nach dem Terminbeginn liegen.'
+        :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 export async function respondAppointment(appointmentId:string,decision:'confirmed'|'declined'){
   const {data,error}=await db().rpc('respond_appointment',{p_appointment_id:appointmentId,p_decision:decision});if(error)throw error;return data;
@@ -401,7 +421,7 @@ export async function loadCustomerWorkspace():Promise<{
 
   const requestResult=await client.from('service_requests')
       .select('id,workshop_id,vehicle_id,complaint,status,desired_start,desired_end,warning_level,driveable,decline_reason,declined_at,created_at')
-      .eq('customer_user_id',auth.user.id).not('status','in','("cancelled","converted")').order('created_at',{ascending:false});
+      .eq('customer_user_id',auth.user.id).not('status','in','("draft","cancelled","converted")').order('created_at',{ascending:false});
   if(requestResult.error)throw requestResult.error;
 
   const relationshipRequestResult=await client.from('workshop_customer_requests')
