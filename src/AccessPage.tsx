@@ -19,12 +19,22 @@ async function resolveSignedInView():Promise<AppView>{
   return'customer';
 }
 
-type Tab='login'|'customer'|'workshop';
+type Tab='start'|'login'|'customer'|'workshop';
 
 const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{icon:any;title:string;text:string}>}>={
+  start:{
+    kicker:'MOTORATLAS STARTEN',
+    title:'Für Autofahrer und Werkstätten. Gemeinsam besser verbunden.',
+    text:'Wähle, wie du MotorAtlas nutzen möchtest. Beide Seiten arbeiten später am selben aktuellen Fahrzeugvorgang – jeweils mit der passenden Oberfläche.',
+    items:[
+      {icon:Car,title:'Autofahrer',text:'Zeit sparen, Kosten besser kontrollieren, schneller Hilfe bekommen und jederzeit den aktuellen Stand sehen.'},
+      {icon:Building2,title:'Werkstatt',text:'Personal entlasten, Abläufe beschleunigen, professioneller auftreten und mehr Umsatzpotenzial nutzen.'},
+      {icon:MessageCircle,title:'Gemeinsam verbunden',text:'Fahrzeug, Auftrag, Chat, Freigaben und Dokumente bleiben sauber zusammen.'}
+    ]
+  },
   login:{
-    kicker:'MOTORATLAS ACCESS',
-    title:'Ein Login. Deine komplette Fahrzeug- oder Werkstattwelt.',
+    kicker:'MOTORATLAS ANMELDEN',
+    title:'Ein Login. Die passende Fahrzeug- oder Werkstattwelt.',
     text:'MotorAtlas erkennt nach der Anmeldung automatisch, ob du Autofahrer, Büro, Mechaniker oder Inhaber bist.',
     items:[
       {icon:Gauge,title:'Immer aktuell',text:'Status, Nachrichten und Freigaben erscheinen dort, wo du sie brauchst.'},
@@ -54,8 +64,14 @@ const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{i
   }
 };
 
+function initialTab():Tab{
+  const mode=sessionStorage.getItem('motoratlas_access_mode');
+  sessionStorage.removeItem('motoratlas_access_mode');
+  return mode==='login'||mode==='customer'||mode==='workshop'||mode==='start'?mode:'start';
+}
+
 export function AccessPage({setView}:{setView:(view:AppView)=>void}){
-  const [tab,setTab]=useState<Tab>('login');
+  const [tab,setTabState]=useState<Tab>(initialTab);
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
   const [name,setName]=useState('');
@@ -66,11 +82,13 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
 
+  const setTab=(next:Tab)=>{setMessage('');setTabState(next)};
   const benefit=benefits[tab];
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();
     setMessage('');
+    if(tab==='start')return;
     if(!backendConfigured||!supabase){
       setMessage('Die Backend-Verbindung ist in dieser Vorschau nicht verfügbar.');
       return;
@@ -132,36 +150,59 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           <button className={tab==='workshop'?'active':''} onClick={()=>setTab('workshop')}>Werkstatt</button>
         </div>
 
-        <div className="access-card-head">
-          <span>{tab==='login'?'WILLKOMMEN ZURÜCK':tab==='customer'?'KOSTENLOS STARTEN':'WERKSTATT EINRICHTEN'}</span>
-          <h2>{tab==='login'?'Bei MotorAtlas anmelden':tab==='customer'?'Deine digitale Garage starten':'MotorAtlas für deine Werkstatt starten'}</h2>
-          <p>{tab==='login'
-            ?'Ein Konto – automatisch die richtige Arbeitsoberfläche.'
-            :tab==='customer'
-              ?'Fahrzeuge hinterlegen, Werkstatt finden und künftige Vorgänge an einem Ort behalten.'
-              :'Werkstattprofil, Team, Kundenanfragen und Werkstattablauf in einer Oberfläche zusammenführen.'}</p>
-        </div>
+        {tab==='start'?<>
+          <div className="access-card-head">
+            <span>KOSTENLOS STARTEN</span>
+            <h2>Wie möchtest du MotorAtlas nutzen?</h2>
+            <p>Wähle deinen Einstieg. Beide Seiten bleiben später über den jeweiligen Fahrzeugauftrag miteinander verbunden.</p>
+          </div>
 
-        <form onSubmit={submit}>
-          {tab!=='login'&&<label><span>{tab==='workshop'?'Ansprechpartner':'Vor- und Nachname'}</span><div><UserRound/><input value={name} onChange={e=>setName(e.target.value)} required placeholder={tab==='workshop'?'Max Mustermann':'Vor- und Nachname'}/></div></label>}
+          <div className="access-choice">
+            <button onClick={()=>setTab('customer')}>
+              <i><Car/></i>
+              <span><small>ICH BIN</small><b>Autofahrer</b><p>Fahrzeuge verwalten, Werkstatt finden, Anfrage senden und Reparaturstatus verfolgen.</p></span>
+              <ArrowRight/>
+            </button>
+            <button onClick={()=>setTab('workshop')}>
+              <i><Building2/></i>
+              <span><small>WIR SIND EINE</small><b>Werkstatt</b><p>Werkstattprofil aufbauen, Kundenanfragen erhalten und den Werkstattablauf digital verbinden.</p></span>
+              <ArrowRight/>
+            </button>
+          </div>
 
-          {tab==='customer'&&<div className="access-address">
-            <label><span>Straße & Hausnummer</span><div><MapPin/><input value={street} onChange={e=>setStreet(e.target.value)} required placeholder="Musterstraße 12"/></div></label>
-            <div>
-              <label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value.replace(/\D/g,'').slice(0,5))} required inputMode="numeric" placeholder="92421"/></label>
-              <label><span>Ort</span><input value={city} onChange={e=>setCity(e.target.value)} required placeholder="Schwandorf"/></label>
-            </div>
-          </div>}
+          <button className="access-existing" onClick={()=>setTab('login')}>Schon registriert? <b>Jetzt anmelden</b></button>
+        </>:<>
+          <div className="access-card-head">
+            <span>{tab==='login'?'WILLKOMMEN ZURÜCK':tab==='customer'?'KOSTENLOS STARTEN':'WERKSTATT EINRICHTEN'}</span>
+            <h2>{tab==='login'?'Bei MotorAtlas anmelden':tab==='customer'?'Deine digitale Garage starten':'MotorAtlas für deine Werkstatt starten'}</h2>
+            <p>{tab==='login'
+              ?'Ein Konto – automatisch die richtige Arbeitsoberfläche.'
+              :tab==='customer'
+                ?'Fahrzeuge hinterlegen, Werkstatt finden und künftige Vorgänge an einem Ort behalten.'
+                :'Werkstattprofil, Team, Kundenanfragen und Werkstattablauf in einer Oberfläche zusammenführen.'}</p>
+          </div>
 
-          <label><span>E-Mail</span><div><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@beispiel.de"/></div></label>
-          <label><span>Passwort</span><div><LockKeyhole/><input type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required placeholder="••••••••••••"/><button type="button" className="access-show" onClick={()=>setShow(!show)}>{show?<EyeOff/>:<Eye/>}</button></div></label>
+          <form onSubmit={submit}>
+            {tab!=='login'&&<label><span>{tab==='workshop'?'Ansprechpartner':'Vor- und Nachname'}</span><div><UserRound/><input value={name} onChange={e=>setName(e.target.value)} required placeholder={tab==='workshop'?'Max Mustermann':'Vor- und Nachname'}/></div></label>}
 
-          {message&&<div className="access-message">{message}</div>}
+            {tab==='customer'&&<div className="access-address">
+              <label><span>Straße & Hausnummer</span><div><MapPin/><input value={street} onChange={e=>setStreet(e.target.value)} required placeholder="Musterstraße 12"/></div></label>
+              <div>
+                <label><span>PLZ</span><input value={postalCode} onChange={e=>setPostalCode(e.target.value.replace(/\D/g,'').slice(0,5))} required inputMode="numeric" placeholder="92421"/></label>
+                <label><span>Ort</span><input value={city} onChange={e=>setCity(e.target.value)} required placeholder="Schwandorf"/></label>
+              </div>
+            </div>}
 
-          <button className="btn primary xl full access-submit" disabled={busy}>
-            {busy?'Bitte einen Moment …':tab==='login'?'Sicher anmelden':tab==='customer'?'Kundenkonto erstellen':'Werkstattkonto starten'} <ArrowRight/>
-          </button>
-        </form>
+            <label><span>E-Mail</span><div><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@beispiel.de"/></div></label>
+            <label><span>Passwort</span><div><LockKeyhole/><input type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required placeholder="••••••••••••"/><button type="button" className="access-show" onClick={()=>setShow(!show)}>{show?<EyeOff/>:<Eye/>}</button></div></label>
+
+            {message&&<div className="access-message">{message}</div>}
+
+            <button className="btn primary xl full access-submit" disabled={busy}>
+              {busy?'Bitte einen Moment …':tab==='login'?'Sicher anmelden':tab==='customer'?'Autofahrer-Konto erstellen':'Werkstattkonto starten'} <ArrowRight/>
+            </button>
+          </form>
+        </>}
 
         <div className="access-trust">
           <span><ShieldCheck/> Rollenbasierter Zugriff</span>
