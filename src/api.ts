@@ -899,7 +899,7 @@ export async function listPendingCustomerRequests(workshopId:string){
   const rows=(data??[]) as any[];if(!rows.length)return[];
   const ids=[...new Set(rows.map(row=>row.customer_user_id))];
   const {data:profiles,error:profileError}=await client.from('profiles')
-    .select('id,full_name,street,postal_code,city').in('id',ids);
+    .select('id,full_name,phone,street,postal_code,city').in('id',ids);
   if(profileError)throw profileError;
   const map=new Map(((profiles??[]) as any[]).map(profile=>[profile.id,profile]));
   return rows.map(row=>({ ...row, profile:map.get(row.customer_user_id)??null }));
