@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
+import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -162,29 +162,53 @@ function appointmentCountdownText(startsAt:string,now:Date){
   return `Du bist seit ${parts.join(' ')} überfällig.`;
 }
 
-function customerOrderTitle(rawStage:string){
+function customerOrderTitle(rawStage:string,commercialState?:string|null){
   if(rawStage==='appointment_confirmed')return'Bevorstehender Werkstatttermin';
   if(rawStage==='waiting_diagnosis')return'Dein Fahrzeug ist eingetroffen';
   if(rawStage==='diagnosing')return'Diagnose läuft';
-  if(rawStage==='awaiting_quote')return'Diagnose abgeschlossen';
+  if(rawStage==='awaiting_quote')return'Kostenvoranschlag wird vorbereitet';
+  if(rawStage==='awaiting_customer_decision')return'Deine Entscheidung ist gefragt';
   if(rawStage==='awaiting_customer_approval')return'Deine Freigabe wird benötigt';
   if(rawStage==='ready_for_repair')return'Reparatur ist freigegeben';
   if(rawStage==='repairing')return'Reparatur läuft';
-  if(rawStage==='repair_complete')return'Reparatur abgeschlossen';
+  if(rawStage==='repair_complete'){
+    if(commercialState==='no_repair')return'Ohne Reparatur abgeschlossen';
+    if(commercialState==='deferred')return'Reparatur auf später verschoben';
+    if(commercialState==='diagnosis_only')return'Diagnose abgeschlossen';
+    return'Arbeiten abgeschlossen';
+  }
   if(rawStage==='ready_for_pickup')return'Dein Fahrzeug ist abholbereit';
   return'Aktueller Werkstattauftrag';
 }
 
-function customerOrderDetail(rawStage:string){
+function customerOrderDetail(rawStage:string,commercialState?:string|null){
   if(rawStage==='waiting_diagnosis')return'Die Werkstatt hat dein Fahrzeug angenommen. Es wartet jetzt auf die Zuordnung zur Diagnose.';
   if(rawStage==='diagnosing')return'Die Diagnose wurde einem Mitarbeiter zugeordnet und hat begonnen.';
-  if(rawStage==='awaiting_quote')return'Die Diagnose ist abgeschlossen. Der Kostenvoranschlag wird vorbereitet.';
+  if(rawStage==='awaiting_quote')return'Die Werkstatt bereitet den Kostenvoranschlag bzw. den nächsten vereinbarten Schritt vor.';
+  if(rawStage==='awaiting_customer_decision')return'Die Diagnose ist abgeschlossen. Du kannst jetzt einen Kostenvoranschlag anfordern, auf die Reparatur verzichten oder sie auf später verschieben.';
   if(rawStage==='awaiting_customer_approval')return'Prüfe den Kostenvoranschlag und entscheide über die Reparatur.';
-  if(rawStage==='ready_for_repair')return'Du hast die Reparatur freigegeben. Die Werkstatt ordnet die Arbeit jetzt einem Mitarbeiter zu.';
+  if(rawStage==='ready_for_repair')return commercialState==='direct_order'
+    ?'Du hast die beschriebene Leistung direkt beauftragt. Die Werkstatt ordnet die Arbeit jetzt einem Mitarbeiter zu.'
+    :commercialState==='external_approved'
+      ?'Die außerhalb von MotorAtlas getroffene Vereinbarung ist dokumentiert. Die Werkstatt kann die Arbeit starten.'
+      :'Die Reparatur ist freigegeben. Die Werkstatt ordnet die Arbeit jetzt einem Mitarbeiter zu.';
   if(rawStage==='repairing')return'Die Reparatur wurde einem Mitarbeiter zugeordnet und wird durchgeführt.';
-  if(rawStage==='repair_complete')return'Die Reparatur ist abgeschlossen. Rechnung und Abholung werden vorbereitet.';
+  if(rawStage==='repair_complete'){
+    if(commercialState==='no_repair')return'Der Auftrag endet ohne Reparatur. Eine eventuelle Diagnose- oder Prüfungsrechnung und die Abholung werden vorbereitet.';
+    if(commercialState==='deferred')return'Die Reparatur wird in diesem Auftrag nicht durchgeführt. Du kannst sie später als neuen Auftrag planen.';
+    if(commercialState==='diagnosis_only')return'Die gewünschte Diagnose/Prüfung ist beendet. Eine Reparatur wurde nicht automatisch beauftragt.';
+    return'Die Arbeiten sind abgeschlossen. Rechnung und Abholung werden vorbereitet.';
+  }
   if(rawStage==='ready_for_pickup')return'Dein Fahrzeug ist fertig und kann abgeholt werden.';
   return'Der Status wird automatisch mit der Werkstatt synchronisiert.';
+}
+
+function requestIntentLabel(intent?:ServiceRequestIntent|null){
+  if(intent==='direct_work')return'Direktauftrag';
+  if(intent==='diagnosis_only')return'Nur Diagnose / Prüfung';
+  if(intent==='diagnosis_then_decide')return'Diagnose · danach entscheiden';
+  if(intent==='quote_before_work')return'Kostenvoranschlag vor Arbeit';
+  return'Diagnose + Kostenvoranschlag';
 }
 
 function documentTypeLabel(type:string){
@@ -652,7 +676,8 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    switch(job.rawStage){
      case'waiting_diagnosis':return{label:'Eingetroffen',detail:'Wartet auf Diagnose-Zuordnung',tone:'waiting'};
      case'diagnosing':return{label:'Diagnose läuft',detail:job.assignee?'Bei '+job.assignee:'In Arbeit',tone:'active'};
-     case'awaiting_quote':return{label:'Diagnose fertig',detail:'Kostenvoranschlag wird vorbereitet',tone:'office'};
+     case'awaiting_quote':return{label:'Nächster Schritt',detail:'Kostenvoranschlag oder externe Vereinbarung festlegen',tone:'office'};
+     case'awaiting_customer_decision':return{label:'Entscheidung offen',detail:'Kunde entscheidet über das weitere Vorgehen',tone:'office'};
      case'awaiting_customer_approval':return{label:'Freigabe offen',detail:'Wartet auf Kundenentscheidung',tone:'office'};
      case'ready_for_repair':return{label:'Reparatur bereit',detail:'Wartet auf Reparatur-Zuordnung',tone:'waiting'};
      case'repairing':return{label:'Reparatur läuft',detail:job.assignee?'Bei '+job.assignee:'In Arbeit',tone:'active'};
@@ -850,13 +875,21 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    catch(err){setActionError(err instanceof Error?err.message:'Dokument konnte nicht geöffnet werden.')}
  };
 
- const approveQuote=async()=>{
+ const answerQuote=async(decision:'approved'|'declined'|'question_requested'|'deferred')=>{
    if(!activeOrder||!quote||busy)return;
    setBusy(true);setActionError(null);
    try{
-     await recordApproval({workOrderId:activeOrder.id,quoteDocumentId:quote.id,decision:'approved',method:'portal'});
+     await recordApproval({workOrderId:activeOrder.id,quoteDocumentId:quote.id,decision,method:'portal'});
      await live.reload();
-   }catch(err){setActionError(err instanceof Error?err.message:'Freigabe konnte nicht gespeichert werden.')}
+   }catch(err){setActionError(err instanceof Error?err.message:'Entscheidung konnte nicht gespeichert werden.')}
+   finally{setBusy(false)}
+ };
+
+ const decideAfterDiagnosis=async(decision:'quote'|'no_repair'|'deferred')=>{
+   if(!activeOrder||busy)return;
+   setBusy(true);setActionError(null);
+   try{await customerResolveAfterDiagnosis(activeOrder.id,decision);await live.reload()}
+   catch(err){setActionError(err instanceof Error?err.message:'Entscheidung konnte nicht gespeichert werden.')}
    finally{setBusy(false)}
  };
 
@@ -911,11 +944,11 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
              <span>{isAppointment?'BEVORSTEHENDER TERMIN':`AUFTRAG #${activeOrder.orderNumber}`}</span>
              {isAppointment?<b className={overdue?'late':''}>{overdue?'VERSPÄTET':'BESTÄTIGT'}</b>:<Status stage={activeOrder.stage}/>}
            </div>
-           <h2>{isAppointment&&appointment?appointmentCountdownText(appointment.startsAt,now):customerOrderTitle(activeOrder.rawStage)}</h2>
+           <h2>{isAppointment&&appointment?appointmentCountdownText(appointment.startsAt,now):customerOrderTitle(activeOrder.rawStage,activeOrder.commercialState)}</h2>
            {isAppointment&&appointment?<>
              <p className="customer-focus-date">{relativeDayLabel(new Date(appointment.startsAt),now)} · {new Date(appointment.startsAt).toLocaleString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})} Uhr</p>
              <p>{workshop?.name??'Werkstatt'} erwartet dein Fahrzeug. Erst der Check-in vor Ort setzt den Status auf „eingetroffen“.</p>
-           </>:<p>{customerOrderDetail(activeOrder.rawStage)}</p>}
+           </>:<p>{customerOrderDetail(activeOrder.rawStage,activeOrder.commercialState)}</p>}
            <div className="customer-focus-vehicle">
              <Car/><span><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}</b><small>{vehicle?.licensePlate??'—'}{activeOrder.orderNumber?` · Auftrag #${activeOrder.orderNumber}`:''}</small></span>
            </div>
@@ -961,9 +994,18 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
          </>}
        </section>}
 
+       {activeOrder.rawStage==='awaiting_customer_decision'&&<section className="panel customer-decision-card">
+         <div className="customer-decision-copy"><ShieldCheck/><span><small>DIAGNOSE ABGESCHLOSSEN</small><b>Wie soll es weitergehen?</b><p>Du musst jetzt keine Reparatur beauftragen. Wähle nur den nächsten Schritt für diesen Auftrag.</p></span></div>
+         <div className="customer-decision-actions">
+           <button className="btn primary" disabled={busy} onClick={()=>void decideAfterDiagnosis('quote')}><FileText size={15}/> Kostenvoranschlag anfordern</button>
+           <button className="btn secondary" disabled={busy} onClick={()=>void decideAfterDiagnosis('no_repair')}>Keine Reparatur</button>
+           <button className="btn secondary" disabled={busy} onClick={()=>void decideAfterDiagnosis('deferred')}>Später reparieren</button>
+         </div>
+       </section>}
+
        {quote&&activeOrder.rawStage==='awaiting_customer_approval'&&<section className="panel customer-priority-card">
          <div><FileText/><span><small>DEINE ENTSCHEIDUNG</small><b>Kostenvoranschlag liegt vor</b><p>{quote.amount_total!=null?Number(quote.amount_total).toLocaleString('de-DE',{style:'currency',currency:quote.currency||'EUR'}):'Betrag im Dokument'}</p></span></div>
-         <div><button className="btn secondary" onClick={()=>void openDocument(quote)}>Angebot öffnen</button>{activeWorkshop?.chatEnabled!==false&&<button className="btn secondary" onClick={()=>setChatTarget('order')}>Rückfrage</button>}<button className="btn primary" disabled={busy} onClick={()=>void approveQuote()}>{busy?'Speichert …':'Reparatur freigeben'}</button></div>
+         <div><button className="btn secondary" onClick={()=>void openDocument(quote)}>Angebot öffnen</button>{activeWorkshop?.chatEnabled!==false&&<button className="btn secondary" disabled={busy} onClick={()=>void answerQuote('question_requested')}>Rückfrage</button>}<button className="btn secondary" disabled={busy} onClick={()=>void answerQuote('declined')}>Keine Reparatur</button><button className="btn secondary" disabled={busy} onClick={()=>void answerQuote('deferred')}>Später</button><button className="btn primary" disabled={busy} onClick={()=>void answerQuote('approved')}>{busy?'Speichert …':'Reparatur freigeben'}</button></div>
        </section>}
 
        {invoice&&<section className="panel customer-priority-card invoice">
@@ -982,6 +1024,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
          <div className="customer-focus-kicker"><span>WERKSTATTANFRAGE</span><b>{requestStatusLabel(activeRequest.status)}</b></div>
          <h2>{activeRequest.status==='declined'?'Die Werkstatt hat deine Anfrage abgelehnt.':'Deine Anfrage läuft.'}</h2>
          <p>{requestStatusText(activeRequest)}</p>
+         <span className="customer-request-intent">{requestIntentLabel(activeRequest.requestIntent)}</span>
          <div className="customer-focus-vehicle"><Car/><span><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}</b><small>{vehicle?.licensePlate??'—'} · {workshop?.name??'Werkstatt'}</small></span></div>
          <div className="customer-focus-actions"><button className="btn primary" onClick={()=>setSection('Termine')}><CalendarDays size={16}/> Anfrage ansehen</button>{workshop?.phone&&<a className="btn secondary" href={phoneHref(workshop.phone)}><Phone size={16}/> Werkstatt anrufen</a>}</div>
        </div>
@@ -1019,7 +1062,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
            <span>{relativeDayLabel(start,now)}</span><b>{start.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</b><small>{start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr</small>
          </div>
          <div className="customer-appointment-main">
-           <div className="customer-appointment-title"><div><small>{arrived?'FAHRZEUG EINGETROFFEN':proposed?'TERMINVORSCHLAG':cancelled?'STORNIERT':'BESTÄTIGTER TERMIN'}</small><h3>{request?.complaint&&request.complaint!=='Keine Fehlerbeschreibung angegeben.'?request.complaint:'Werkstatttermin'}</h3></div><span>{arrived?'Eingetroffen':proposed?'Antwort nötig':cancelled?'Storniert':'Bestätigt'}</span></div>
+           <div className="customer-appointment-title"><div><small>{arrived?'FAHRZEUG EINGETROFFEN':proposed?'TERMINVORSCHLAG':cancelled?'STORNIERT':'BESTÄTIGTER TERMIN'}</small><h3>{request?.complaint&&request.complaint!=='Keine Fehlerbeschreibung angegeben.'?request.complaint:'Werkstatttermin'}</h3>{request&&<em className="request-intent-inline">{requestIntentLabel(request.requestIntent)}</em>}</div><span>{arrived?'Eingetroffen':proposed?'Antwort nötig':cancelled?'Storniert':'Bestätigt'}</span></div>
            <p>{arrived
              ?<>Dein Fahrzeug <b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</b> wurde am <b>{new Date(arrivedAt!).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</b> von der Werkstatt als eingetroffen erfasst. Der Termin ist damit abgeschlossen; der weitere Fortschritt läuft über den Auftrag.</>
              :confirmed
@@ -1044,7 +1087,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        const workshop=live.workshops.find(item=>item.workshopId===request.workshopId)??primaryWorkshop;
        return <article className={'panel customer-request-clean '+request.status} key={request.id}>
          <div className="customer-request-icon"><Car/></div>
-         <div><small>{requestStatusLabel(request.status).toUpperCase()}</small><h3>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</h3><p>{request.complaint==='Keine Fehlerbeschreibung angegeben.'?'Keine zusätzliche Beschreibung angegeben.':request.complaint}</p><span>{requestStatusText(request)} · {workshop?.name??'Werkstatt'}</span></div>
+         <div><small>{requestStatusLabel(request.status).toUpperCase()}</small><h3>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'} · {vehicle?.licensePlate??'—'}</h3><p>{request.complaint==='Keine Fehlerbeschreibung angegeben.'?'Keine zusätzliche Beschreibung angegeben.':request.complaint}</p><span>{requestStatusText(request)} · {requestIntentLabel(request.requestIntent)} · {workshop?.name??'Werkstatt'}</span></div>
        </article>;
      })}
 
