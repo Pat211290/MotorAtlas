@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Car, FileText, Image as ImageIcon, MessageCircle, Paperclip, Send, ShieldCheck, X } from 'lucide-react';
+import { Car, ChevronDown, FileText, Image as ImageIcon, Mail, MapPin, MessageCircle, Paperclip, Phone, Send, ShieldCheck, UserRound, X } from 'lucide-react';
 import {
-  ensureVehicleChat,ensureWorkOrderChat,getChatAttachmentUrl,getSignedInUserId,listChatMessages,markChatRead,
-  sendChatAttachment,sendChatMessage,subscribeChat,type ChatMessage
+  ensureVehicleChat,ensureWorkOrderChat,getChatAttachmentUrl,getChatContext,getSignedInUserId,listChatMessages,markChatRead,
+  sendChatAttachment,sendChatMessage,subscribeChat,type ChatContext,type ChatMessage
 } from './api';
 import { backendConfigured } from './lib';
 
@@ -38,6 +38,10 @@ export function VehicleChat({
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [threadId,setThreadId]=useState<string|null>(null);
   const [userId,setUserId]=useState<string|null>(null);
+  const [context,setContext]=useState<ChatContext|null>(null);
+  const [contextOpen,setContextOpen]=useState(false);
+  const [contextBusy,setContextBusy]=useState(false);
+  const [contextError,setContextError]=useState<string|null>(null);
   const [text,setText]=useState('');
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null);
@@ -54,11 +58,12 @@ export function VehicleChat({
     let unsubscribe:undefined|(()=>void);
     let cancelled=false;
     const run=async()=>{
+      setContextOpen(false);setContext(null);setContextError(null);
       if(!isLive){
         setThreadId(null);setUserId(null);setMessages(demoMessages);setError(null);return;
       }
       try{
-        setMessages([]);setThreadId(null);setError(null);
+        setMessages([]);setThreadId(null);setError(null);setContextBusy(true);
         const uid=await getSignedInUserId();
         if(!uid)throw new Error('Bitte zuerst anmelden.');
         const resolvedThreadId=chatThreadId&&uuid.test(chatThreadId)
@@ -66,16 +71,22 @@ export function VehicleChat({
           :workOrderId&&uuid.test(workOrderId)
             ?(await ensureWorkOrderChat(workOrderId)).id
             :(await ensureVehicleChat(workshopId!,vehicleId!)).id;
-        const initial=await listChatMessages(resolvedThreadId);
+        const [initial,details]=await Promise.all([
+          listChatMessages(resolvedThreadId),
+          getChatContext(resolvedThreadId).catch(err=>{
+            if(!cancelled)setContextError(err instanceof Error?err.message:'Fahrzeug- und Kundendaten konnten nicht geladen werden.');
+            return null;
+          })
+        ]);
         if(cancelled)return;
-        setUserId(uid);setThreadId(resolvedThreadId);setMessages(initial);setError(null);
+        setUserId(uid);setThreadId(resolvedThreadId);setMessages(initial);setContext(details);setContextBusy(false);setError(null);
         await markChatRead(resolvedThreadId);
         unsubscribe=subscribeChat(resolvedThreadId,message=>{
           setMessages(current=>current.some(item=>item.id===message.id)?current:[...current,message]);
           void markChatRead(resolvedThreadId);
         });
       }catch(err){
-        if(!cancelled)setError(err instanceof Error?err.message:'Chat konnte nicht geladen werden.');
+        if(!cancelled){setContextBusy(false);setError(err instanceof Error?err.message:'Chat konnte nicht geladen werden.')}
       }
     };
     void run();
@@ -133,14 +144,59 @@ export function VehicleChat({
     }catch(err){setError(err instanceof Error?err.message:'Anhang konnte nicht geöffnet werden.')}
   };
 
+  const toggleContext=()=>{
+    setContextOpen(current=>{
+      const next=!current;
+      if(next)requestAnimationFrame(()=>{if(messagesRef.current)messagesRef.current.scrollTop=0});
+      return next;
+    });
+  };
+
+  const contextVehicle=context
+    ?[context.vehicleMake,context.vehicleModel,context.vehicleVariant].filter(Boolean).join(' ')
+    :vehicleLabel;
+  const contextAddress=context
+    ?[context.customerStreet,[context.customerPostalCode,context.customerCity].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    :'';
+
   return <div className="drawer-backdrop" onMouseDown={onClose}>
     <aside className="chat-drawer" onMouseDown={event=>event.stopPropagation()}>
       <header>
-        <div><span className="chat-vehicle"><Car size={17}/></span><div><b>{vehicleLabel}</b><small>{plate} · {workOrderId?`Auftrag #${orderNumber}`:'Werkstattchat'}</small></div></div>
-        <button onClick={onClose} aria-label="Chat schließen"><X/></button>
+        <button className="chat-context-trigger" type="button" onClick={toggleContext} aria-expanded={contextOpen} title="Fahrzeug- und Kundendaten anzeigen">
+          <span className="chat-vehicle"><Car size={17}/></span>
+          <span className="chat-context-trigger-copy"><b>{vehicleLabel}</b><small>{plate} · {workOrderId?`Auftrag #${orderNumber}`:'Werkstattchat'} · Daten anzeigen</small></span>
+          <ChevronDown className={contextOpen?'open':''} size={15}/>
+        </button>
+        <button className="chat-close" onClick={onClose} aria-label="Chat schließen"><X/></button>
       </header>
       <div className={'chat-note '+(!chatEnabled?'disabled':'')}>{chatEnabled?<ShieldCheck size={14}/>:<MessageCircle size={14}/>} {chatEnabled?'Der Verlauf bleibt auch nach erneutem Login erhalten. Reparaturfreigaben bleiben davon getrennt.':'Diese Werkstatt hat den MotorAtlas-Chat deaktiviert. Vorhandene Nachrichten bleiben lesbar.'}</div>
       <div className="messages" ref={messagesRef}>
+        {contextOpen&&<section className="chat-context-panel">
+          <div className="chat-context-panel-head"><div><Car/><span><small>FAHRZEUG & KUNDE</small><b>{contextVehicle||vehicleLabel}</b></span></div>{contextBusy&&<em>Lädt …</em>}</div>
+          {contextError&&<div className="chat-context-error">{contextError}</div>}
+          {!contextBusy&&context&&<div className="chat-context-grid">
+            <section className="chat-context-section">
+              <div className="chat-context-section-title"><Car/><span><small>FAHRZEUG</small><b>{contextVehicle||'Fahrzeug'}</b></span></div>
+              <dl>
+                <div><dt>Kennzeichen</dt><dd>{context.licensePlate||'—'}</dd></div>
+                <div><dt>Erstzulassung</dt><dd>{context.firstRegistration?new Date(context.firstRegistration).toLocaleDateString('de-DE'):'—'}</dd></div>
+                <div><dt>Kilometer</dt><dd>{context.mileage!=null?context.mileage.toLocaleString('de-DE')+' km':'—'}</dd></div>
+                <div><dt>HSN / TSN</dt><dd>{[context.hsn,context.tsn].filter(Boolean).join(' / ')||'—'}</dd></div>
+                <div className="wide"><dt>FIN / VIN</dt><dd>{context.vin||'—'}</dd></div>
+                {context.orderNumber&&<div className="wide"><dt>Auftrag</dt><dd>#{context.orderNumber}</dd></div>}
+              </dl>
+            </section>
+            <section className="chat-context-section">
+              <div className="chat-context-section-title"><UserRound/><span><small>KUNDE</small><b>{context.customerName||'Kunde'}</b></span></div>
+              <div className="chat-context-contact">
+                {context.customerPhone?<a href={'tel:'+context.customerPhone.replace(/[^+\d]/g,'')}><Phone/><span><small>Telefon</small><b>{context.customerPhone}</b></span></a>:<div><Phone/><span><small>Telefon</small><b>Nicht hinterlegt</b></span></div>}
+                {context.customerEmail?<a href={'mailto:'+context.customerEmail}><Mail/><span><small>E-Mail</small><b>{context.customerEmail}</b></span></a>:<div><Mail/><span><small>E-Mail</small><b>Nicht hinterlegt</b></span></div>}
+                <div className="wide"><MapPin/><span><small>Anschrift</small><b>{contextAddress||'Nicht hinterlegt'}</b></span></div>
+              </div>
+            </section>
+          </div>}
+          {!contextBusy&&!context&&!contextError&&<div className="chat-context-error">Für diesen Chat sind noch keine Detaildaten verfügbar.</div>}
+        </section>}
         {messages.length===0&&<div className="chat-empty"><b>Noch keine Nachrichten.</b><span>Dieser Verlauf bleibt direkt am Fahrzeug bzw. Auftrag.</span></div>}
         {messages.map(message=>{
           const own=mine(message);
