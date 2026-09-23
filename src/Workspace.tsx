@@ -96,6 +96,40 @@ type DisplayJob=Job&{orderNumber?:string;rawStage?:string;vehicleId?:string;cust
 const toneFor=(id:string)=>[...id].reduce((sum,char)=>sum+char.charCodeAt(0),0)%5;
 function JobCard({job}:{job:DisplayJob}){return <article className="job-card"><div className="job-car">{job.photoPath?<VehiclePhoto path={job.photoPath} alt={job.vehicle}/>:<CarArt tone={toneFor(job.id)}/>}<div><b>{job.vehicle}</b><small>{job.plate}{job.mileage?` · ${job.mileage.toLocaleString('de-DE')} km`:''}</small></div></div><p>{job.complaint}</p><footer><span>#{job.orderNumber??job.id.slice(-6)}</span><Status stage={job.stage}/></footer></article>}
 
+type AppointmentView='day'|'week'|'month';
+type AppointmentPhase='proposed'|'planned'|'today'|'late'|'arrived';
+
+function appointmentPhase(item:WorkshopAppointment,now=new Date()):AppointmentPhase{
+  if(item.status==='proposed')return'proposed';
+  if(item.arrivedAt||item.rawOrderStage&&item.rawOrderStage!=='appointment_confirmed')return'arrived';
+  const start=new Date(item.startsAt);
+  const sameDay=start.getFullYear()===now.getFullYear()&&start.getMonth()===now.getMonth()&&start.getDate()===now.getDate();
+  if(start.getTime()<now.getTime())return'late';
+  if(sameDay)return'today';
+  return'planned';
+}
+
+function appointmentPhaseLabel(phase:AppointmentPhase){
+  if(phase==='proposed')return'Terminvorschlag offen';
+  if(phase==='planned')return'Geplant';
+  if(phase==='today')return'Heute erwartet';
+  if(phase==='late')return'Verspätet';
+  return'Eingetroffen';
+}
+
+function startOfToday(){
+  const now=new Date();return new Date(now.getFullYear(),now.getMonth(),now.getDate());
+}
+
+function requestStatusLabel(status:string){
+  const labels:Record<string,string>={
+    submitted:'Anfrage gesendet',accepted:'Von Werkstatt angenommen',appointment_pending:'Terminabstimmung',
+    appointment_confirmed:'Termin bestätigt',declined:'Von Werkstatt abgelehnt',converted:'Auftrag angelegt',
+    cancelled:'Storniert',draft:'Entwurf'
+  };
+  return labels[status]??status;
+}
+
 export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const live=useWorkshopWorkspace();
  const displayJobs=(live.isLive?live.jobs:jobs) as DisplayJob[];
