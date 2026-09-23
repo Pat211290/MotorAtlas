@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Building2, CheckCircle2, MapPin, Search, ShieldCheck, X } from 'lucide-react';
 import {
-  getWorkshopLogoPublicUrl,listPublicWorkshops,requestWorkshop,setPrimaryWorkshop,
+  geocodePublicWorkshop,getWorkshopLogoPublicUrl,hasWorkshopCoordinates,listPublicWorkshops,requestWorkshop,setPrimaryWorkshop,
   type CustomerWorkshop,type PublicWorkshop
 } from './api';
 
@@ -29,6 +29,25 @@ export function WorkshopDirectoryModal({
     return()=>{cancelled=true};
   },[open]);
 
+  useEffect(()=>{
+    if(!open)return;
+    const missing=workshops.filter(workshop=>!hasWorkshopCoordinates(workshop));
+    if(!missing.length)return;
+    let cancelled=false;
+    void(async()=>{
+      for(let index=0;index<missing.length;index++){
+        const workshop=missing[index];
+        try{
+          const coords=await geocodePublicWorkshop(workshop);
+          if(cancelled)return;
+          setWorkshops(current=>current.map(item=>item.id===workshop.id?{...item,latitude:coords.latitude,longitude:coords.longitude}:item));
+        }catch{}
+        if(index<missing.length-1)await new Promise(resolve=>setTimeout(resolve,1100));
+      }
+    })();
+    return()=>{cancelled=true};
+  },[open,workshops.length]);
+
   const filtered=useMemo(()=>{
     const needle=query.trim().toLocaleLowerCase('de-DE');
     if(!needle)return workshops;
@@ -49,8 +68,8 @@ export function WorkshopDirectoryModal({
     const map=mapRef.current;
     markersRef.current.forEach(marker=>marker.remove());markersRef.current.clear();
     filtered.forEach(workshop=>{
+      if(!hasWorkshopCoordinates(workshop))return;
       const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
-      if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
       const marker=L.marker([lat,lng],{
         icon:L.divIcon({className:'motoratlas-map-marker',html:'<span></span>',iconSize:[30,38],iconAnchor:[15,35]})
       }).addTo(map);
@@ -84,8 +103,10 @@ export function WorkshopDirectoryModal({
 
   const focusWorkshop=(workshop:PublicWorkshop)=>{
     setSelected(workshop.id);
-    const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
-    if(Number.isFinite(lat)&&Number.isFinite(lng))mapRef.current?.flyTo([lat,lng],12,{duration:.7});
+    if(hasWorkshopCoordinates(workshop)){
+      const lat=Number(workshop.latitude),lng=Number(workshop.longitude);
+      mapRef.current?.flyTo([lat,lng],12,{duration:.7});
+    }
   };
 
   return <div className="directory-modal-backdrop">
@@ -110,7 +131,7 @@ export function WorkshopDirectoryModal({
             }):<div className="directory-empty"><MapPin/><b>Keine Werkstatt gefunden.</b><span>Versuche einen anderen Ort oder eine andere PLZ.</span></div>}
           </div>
         </aside>
-        <div className="directory-map-wrap"><div ref={mapEl} className="directory-map"/><div className="map-legend"><span><i/> Verifizierte MotorAtlas-Werkstatt</span><small>Werkstätten ohne hinterlegte Kartenposition erscheinen weiterhin in der Ergebnisliste.</small></div></div>
+        <div className="directory-map-wrap"><div ref={mapEl} className="directory-map"/><div className="map-legend"><span><i/> Verifizierte MotorAtlas-Werkstatt</span><small>Fehlende Kartenpositionen werden automatisch aus der verifizierten Werkstattadresse ermittelt.</small></div></div>
       </div>
     </section>
   </div>;
