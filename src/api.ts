@@ -274,8 +274,9 @@ export async function ensureWorkOrderChat(workOrderId:string){
   if(error)throw new Error(chatErrorMessage(error));return data as ChatThread;
 }
 export async function listChatMessages(threadId:string,limit=100){
-  const {data,error}=await db().from('chat_messages').select('*').eq('thread_id',threadId).order('created_at',{ascending:true}).limit(limit);
-  if(error)throw error;return(data??[])as ChatMessage[];
+  const {data,error}=await db().from('chat_messages').select('*').eq('thread_id',threadId).order('created_at',{ascending:false}).limit(limit);
+  if(error)throw error;
+  return((data??[]) as ChatMessage[]).reverse();
 }
 export async function sendChatMessage(threadId:string,body:string){
   const text=body.trim();if(!text)throw new Error('Message is empty');
@@ -293,7 +294,7 @@ export async function sendChatAttachment(threadId:string,file:File,body?:string)
     const {data,error}=await client.from('chat_messages').insert({
       id:messageId,thread_id:threadId,sender_user_id:auth.user.id,kind:image?'image':'file',body:body?.trim()||null,
       attachment_path:path,attachment_name:file.name,attachment_mime:file.type||'application/octet-stream',attachment_size:file.size
-    }).select().single();if(error)throw error;return data as ChatMessage;
+    }).select().single();if(error)throw new Error(chatErrorMessage(error));return data as ChatMessage;
   }catch(err){await client.storage.from('chat-media').remove([path]);throw err;}
 }
 export async function markChatRead(threadId:string){
