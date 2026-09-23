@@ -1063,7 +1063,7 @@ export async function listPendingCustomerRequests(workshopId:string){
 
 export async function getWorkshopProfile(workshopId:string){
   const {data,error}=await db().from('workshops')
-    .select('id,name,legal_name,street,postal_code,city,phone,email,website,chat_enabled,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_requested_at,verification_review_note')
+    .select('id,name,legal_name,street,postal_code,city,phone,email,website,chat_enabled,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_mode,verification_requested_at,verification_review_note')
     .eq('id',workshopId).single();
   if(error)throw error;return data;
 }
