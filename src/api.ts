@@ -8,7 +8,7 @@ export async function signUpCustomer(
 ){
   const {data,error}=await db().auth.signUp({
     email,password,
-    options:{data:{
+    options:{emailRedirectTo:typeof window!=='undefined'?window.location.origin+'/?app=1':undefined,data:{
       full_name:fullName.trim(),
       account_intent:input?.accountIntent??'customer',
       street:input?.street?.trim()||null,
@@ -666,4 +666,38 @@ export async function getWorkshopProfile(workshopId:string){
     .select('id,name,legal_name,street,postal_code,city,description,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at')
     .eq('id',workshopId).single();
   if(error)throw error;return data;
+}
+
+
+export async function inviteWorkshopMember(input:{
+  workshopId:string;email:string;role:'office'|'mechanic'|'custom';displayName?:string;permissions?:Record<string,boolean>;
+}){
+  const {data,error}=await db().functions.invoke('invite-workshop-member',{body:input});
+  if(error)throw error;
+  if(data?.error)throw new Error(data.error);
+  return data;
+}
+
+export async function listWorkshopMembers(workshopId:string){
+  const {data,error}=await db().from('workshop_members')
+    .select('id,user_id,role,permissions,display_name,active,created_at')
+    .eq('workshop_id',workshopId).order('created_at',{ascending:true});
+  if(error)throw error;return data??[];
+}
+
+export async function listWorkshopMemberInvites(workshopId:string){
+  const {data,error}=await db().from('workshop_member_invites')
+    .select('id,email,role,permissions,display_name,status,created_at,accepted_at')
+    .eq('workshop_id',workshopId).order('created_at',{ascending:false});
+  if(error)throw error;return data??[];
+}
+
+export async function revokeWorkshopMember(workshopId:string,userId:string){
+  const {data,error}=await db().rpc('revoke_workshop_member',{p_workshop_id:workshopId,p_user_id:userId});
+  if(error)throw error;return data;
+}
+
+export async function claimMyWorkshopInvites(){
+  const {data,error}=await db().rpc('claim_my_workshop_invites');
+  if(error)throw error;return data??[];
 }
