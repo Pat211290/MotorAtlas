@@ -628,7 +628,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [busy,setBusy]=useState(false);
 
  const activeOrder=live.isLive?live.orders.find(order=>order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
- const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>!['cancelled','converted'].includes(request.status)):null;
+ const activeRequest=live.isLive&&!activeOrder?live.requests.find(request=>['submitted','accepted','appointment_pending'].includes(request.status)):null;
  const activeOrderAppointment=activeOrder?.serviceRequestId
    ?live.appointments.find(item=>item.serviceRequestId===activeOrder.serviceRequestId&&item.status==='confirmed')
    :null;
