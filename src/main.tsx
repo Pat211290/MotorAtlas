@@ -6,6 +6,7 @@ import './marketing.css';
 import './public-header.css';
 import './access.css';
 import './finder.css';
+import './workshop-profile.css';
 import './marketing-pages.css';
 import './workspace.css';
 

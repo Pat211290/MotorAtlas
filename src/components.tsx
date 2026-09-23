@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowRight, BadgeCheck, Car, Check, CircleCheck, ShieldCheck } from 'lucide-react';
 import type { Stage } from './demo';
 
-export type AppView='home'|'customer-info'|'workshop-info'|'security-info'|'finder'|'login'|'office'|'workshop'|'customer'|'branding';
+export type AppView='home'|'customer-info'|'workshop-info'|'security-info'|'finder'|'workshop-profile'|'login'|'office'|'workshop'|'customer'|'branding';
 
 export const stageLabels:Record<Stage,string>={
   arrived:'Eingetroffen',diagnosis:'Diagnose',approval:'Freigabe',repair:'Reparatur',pickup:'Abholung'

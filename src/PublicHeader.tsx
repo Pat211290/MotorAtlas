@@ -20,7 +20,7 @@ export function PublicHeader({
       <nav className={open?'open':''} aria-label="Hauptnavigation">
         {navItems.map(item=><button
           key={item.view}
-          className={view===item.view?'active':''}
+          className={(view===item.view||(view==='workshop-profile'&&item.view==='finder'))?'active':''}
           onClick={()=>go(item.view)}
         >{item.label}</button>)}
       </nav>

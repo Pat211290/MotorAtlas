@@ -99,9 +99,17 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
 
   useEffect(()=>()=>{mapRef.current?.remove();mapRef.current=null;markersRef.current.clear()},[]);
 
-  const choose=(workshop:PublicWorkshop)=>{
+  const remember=(workshop:PublicWorkshop)=>{
     sessionStorage.setItem('motoratlas_selected_workshop',workshop.id);
+    sessionStorage.setItem('motoratlas_selected_workshop_slug',workshop.slug);
+  };
+  const choose=(workshop:PublicWorkshop)=>{
+    remember(workshop);
     setView('login');
+  };
+  const openProfile=(workshop:PublicWorkshop)=>{
+    remember(workshop);
+    setView('workshop-profile');
   };
 
   return <div className="finder-page">
@@ -157,7 +165,7 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
                   {workshop.description&&<p className="finder-description">{workshop.description}</p>}
                   {services.length>0&&<div className="finder-services">{services.map(service=><span key={service}>{service}</span>)}</div>}
                   <div className="finder-card-footer">
-                    <button className="btn secondary small" onClick={event=>{event.stopPropagation();setSelectedId(workshop.id)}}>Auf Karte zeigen</button>
+                    <button className="btn secondary small" onClick={event=>{event.stopPropagation();openProfile(workshop)}}>Werkstatt ansehen</button>
                     <button className="btn primary small" disabled={!workshop.accepts_new_customers} onClick={event=>{event.stopPropagation();choose(workshop)}}>
                       {workshop.accepts_new_customers?'Werkstatt anfragen':'Derzeit geschlossen'} <ArrowRight size={14}/>
                     </button>

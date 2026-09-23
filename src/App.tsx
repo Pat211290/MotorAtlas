@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Marketing } from './Marketing';
 import { WorkshopFinder } from './WorkshopFinder';
+import { PublicWorkshopProfile } from './WorkshopProfile';
 import { PublicHeader } from './PublicHeader';
 import { AccessPage } from './AccessPage';
 import { CustomerMarketingPage, SecurityMarketingPage, WorkshopMarketingPage } from './MarketingPages';
@@ -98,6 +99,7 @@ const viewHashes:Record<AppView,string>={
   'workshop-info':'#/werkstaetten',
   'security-info':'#/sicherheit',
   finder:'#/werkstatt-finden',
+  'workshop-profile':'#/werkstattprofil',
   login:'#/anmelden',
   office:'#/app/buero',
   workshop:'#/app/werkstatt',
@@ -106,6 +108,10 @@ const viewHashes:Record<AppView,string>={
 };
 
 function viewFromHash(hash:string):AppView|null{
+  if(hash.startsWith('#/werkstatt/')){
+    sessionStorage.setItem('motoratlas_selected_workshop_slug',decodeURIComponent(hash.slice('#/werkstatt/'.length)));
+    return 'workshop-profile';
+  }
   const entry=(Object.entries(viewHashes) as Array<[AppView,string]>).find(([,value])=>value===hash);
   return entry?.[0]??null;
 }
@@ -115,7 +121,8 @@ export default function App(){
 
   const navigate=(next:AppView)=>{
     setView(next);
-    const target=viewHashes[next];
+    const profileSlug=next==='workshop-profile'?sessionStorage.getItem('motoratlas_selected_workshop_slug'):null;
+    const target=next==='workshop-profile'&&profileSlug?'#/werkstatt/'+encodeURIComponent(profileSlug):viewHashes[next];
     if(location.hash!==target)history.pushState({motorAtlasView:next},'',target);
     window.scrollTo({top:0,behavior:'auto'});
   };
@@ -149,12 +156,13 @@ export default function App(){
       'workshop-info':'MotorAtlas für Werkstätten – Digitaler Werkstattablauf',
       'security-info':'MotorAtlas – Sicherheit & Transparenz',
       finder:'MotorAtlas – Werkstatt finden',
+      'workshop-profile':'MotorAtlas – Werkstattprofil',
       login:'MotorAtlas – Anmelden'
     };
     if(titles[view])document.title=titles[view]!;
   },[view]);
 
-  const showPublicHeader=['home','customer-info','workshop-info','security-info','finder','login'].includes(view);
+  const showPublicHeader=['home','customer-info','workshop-info','security-info','finder','workshop-profile','login'].includes(view);
   return <div className="site">
     <Splash/>
     {showPublicHeader&&<PublicHeader view={view} setView={navigate}/>} 
@@ -163,6 +171,7 @@ export default function App(){
     {view==='workshop-info'&&<WorkshopMarketingPage setView={navigate}/>}
     {view==='security-info'&&<SecurityMarketingPage setView={navigate}/>}
     {view==='finder'&&<WorkshopFinder setView={navigate}/>}
+    {view==='workshop-profile'&&<PublicWorkshopProfile setView={navigate}/>}
     {view==='login'&&<AccessPage setView={navigate}/>}
     {view==='office'&&<OfficeDashboard setView={navigate}/>}
     {view==='workshop'&&<WorkshopBoard setView={navigate}/>}
