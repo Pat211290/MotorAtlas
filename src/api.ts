@@ -503,7 +503,7 @@ export type WorkshopAppointment={
 };
 
 export type AppNotification={
-  id:string;title:string;body?:string|null;kind:string;workOrderId?:string|null;readAt?:string|null;createdAt:string;
+  id:string;workshopId?:string|null;title:string;body?:string|null;kind:string;workOrderId?:string|null;readAt?:string|null;createdAt:string;
 };
 
 export async function listWorkshopServiceRequests(workshopId:string):Promise<WorkshopServiceRequest[]>{
@@ -592,12 +592,12 @@ export async function listMyWorkshopNotifications(workshopId:string,limit=30):Pr
   const client=db();
   const {data:auth}=await client.auth.getUser();if(!auth.user)return[];
   const {data,error}=await client.from('notifications')
-    .select('id,title,body,kind,work_order_id,read_at,created_at')
+    .select('id,workshop_id,title,body,kind,work_order_id,read_at,created_at')
     .eq('user_id',auth.user.id).eq('workshop_id',workshopId)
     .order('created_at',{ascending:false}).limit(limit);
   if(error)throw error;
   return((data??[]) as any[]).map(n=>({
-    id:n.id,title:n.title,body:n.body,kind:n.kind,workOrderId:n.work_order_id,readAt:n.read_at,createdAt:n.created_at
+    id:n.id,workshopId:n.workshop_id,title:n.title,body:n.body,kind:n.kind,workOrderId:n.work_order_id,readAt:n.read_at,createdAt:n.created_at
   }));
 }
 
