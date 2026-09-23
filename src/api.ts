@@ -555,3 +555,11 @@ export async function listPendingCustomerRequests(workshopId:string){
     .eq('workshop_id',workshopId).eq('status','pending').order('created_at',{ascending:true});
   if(error)throw error;return data??[];
 }
+
+
+export async function getWorkshopProfile(workshopId:string){
+  const {data,error}=await db().from('workshops')
+    .select('id,name,legal_name,street,postal_code,city,description,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at')
+    .eq('id',workshopId).single();
+  if(error)throw error;return data;
+}
