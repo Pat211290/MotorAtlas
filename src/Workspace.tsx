@@ -11,6 +11,7 @@ import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
 import { ServiceRequestModal } from './ServiceRequestModal';
+import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeRequestModals';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
 
 function Shell({children,title,mode,active,onHome}:{children:React.ReactNode;title:string;mode:string;active:string;onHome:()=>void}){
@@ -30,6 +31,8 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const displayJobs=(live.isLive?live.jobs:jobs) as DisplayJob[];
  const [chat,setChat]=useState(false); const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
+ const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
+ const [customerRequest,setCustomerRequest]=useState<any|null>(null);
  const [busy,setBusy]=useState(false); const [actionError,setActionError]=useState<string|null>(null);
  const selected=displayJobs.find(job=>job.id===selectedId)??displayJobs[0];
  const counts=useMemo(()=>Object.fromEntries(orderStages.map(stage=>[stage,displayJobs.filter(job=>job.stage===stage).length])),[displayJobs]);
@@ -69,14 +72,23 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    await live.reload();
  };
 
- return <Shell onHome={()=>setView('home')} title={title} mode="Büro" active="Übersicht"><div className="page"><PageHead title="Werkstattübersicht" subtitle={live.isLive?'Live-Daten deiner Werkstatt – Änderungen erscheinen auf allen Geräten.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}><div className="head-actions"><span className="realtime"><i/> {live.isLive?'Echtzeit verbunden':'Demo-Modus'}</span><button className="btn primary"><Plus size={16}/> Neue Annahme</button></div></PageHead>
+ return <Shell onHome={()=>setView('home')} title={title} mode="Büro" active="Übersicht"><div className="page">
+ <PageHead title="Werkstattübersicht" subtitle={live.isLive?'Live-Daten deiner Werkstatt – Änderungen erscheinen auf allen Geräten.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}><div className="head-actions"><span className="realtime"><i/> {live.isLive?'Echtzeit verbunden':'Demo-Modus'}</span><button className="btn primary"><Plus size={16}/> Neue Annahme</button></div></PageHead>
  {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
- <div className="metrics"><article><small>AKTIVE VORGÄNGE</small><b>{displayJobs.length}</b><span>gesamt</span></article><article><small>ANNAHME / DIAGNOSE</small><b>{counts.arrived??0}</b><span>offen</span></article><article><small>FREIGABEN</small><b>{counts.approval??0}</b><span>offen</span></article><article><small>ABHOLBEREIT</small><b>{counts.pickup??0}</b><span>Fahrzeuge</span></article></div>
+ <div className="metrics"><article><small>AKTIVE VORGÄNGE</small><b>{displayJobs.length}</b><span>gesamt</span></article><article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>Termin prüfen</span></article><article><small>KUNDENAUFNAHME</small><b>{live.isLive?live.customerRequests.length:1}</b><span>offen</span></article><article><small>FREIGABEN</small><b>{counts.approval??0}</b><span>beim Kunden</span></article></div>
+
+ {live.isLive&&<div className="office-inbox-grid">
+   <section className="panel office-inbox"><header><div><span className="overline">WERKSTATTANFRAGEN</span><h3>Termin abstimmen</h3></div><b>{live.serviceRequests.length}</b></header>{live.serviceRequests.length?live.serviceRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}><span className="inbox-icon"><CalendarDays/></span><span><b>{request.vehicle}</b><small>{request.plate} · {request.customerName}</small><p>{request.complaint}</p></span><strong>{request.desiredStart?new Date(request.desiredStart).toLocaleDateString('de-DE'):'Termin offen'}</strong></button>):<div className="inbox-empty">Keine neuen Werkstattanfragen.</div>}</section>
+   <section className="panel office-inbox"><header><div><span className="overline">NEUE KUNDEN</span><h3>Aufnahme freigeben</h3></div><b>{live.customerRequests.length}</b></header>{live.customerRequests.length?live.customerRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}><span className="inbox-icon"><Users/></span><span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?`${request.profile.postal_code??''} ${request.profile.city??''}`:'Profilanfrage'}</small><p>{request.message||'Möchte Kunde dieser Werkstatt werden.'}</p></span><strong>Prüfen</strong></button>):<div className="inbox-empty">Keine offenen Kundenaufnahmen.</div>}</section>
+ </div>}
+
  <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
  <div className="lower-grid">{selected?<section className="panel focus-card"><div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button><button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button></div></section>:<section className="panel focus-card"><div><span className="overline">KEINE AKTIVEN VORGÄNGE</span><h3>Die Werkstatt-Queue ist leer.</h3><small>Neue bestätigte Termine erscheinen hier automatisch.</small></div></section>}
- <section className="panel incoming"><div><span className="overline">{live.isLive?'KUNDENAUFNAHME':'NEUE KUNDENANFRAGE'}</span><h3>{live.isLive?'Freigaben bleiben beim Büro':'Anna Meier'}</h3><p>{live.isLive?'Neue Kundenanfragen werden getrennt von Werkstattaufträgen bearbeitet.':'möchte Kunde bei Carplus Service Center werden.'}</p></div>{!live.isLive&&<div><button className="btn secondary">Ablehnen</button><button className="btn primary">Annehmen</button></div>}</section></div></div>
+ {!live.isLive&&<section className="panel incoming"><div><span className="overline">NEUE KUNDENANFRAGE</span><h3>Anna Meier</h3><p>möchte Kunde bei Carplus Service Center werden.</p></div><div><button className="btn secondary">Ablehnen</button><button className="btn primary">Annehmen</button></div></section>}</div></div>
  {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)}/>}
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
+ <ServiceRequestOfficeModal open={Boolean(serviceRequest)} onClose={()=>setServiceRequest(null)} onDone={live.reload} request={serviceRequest}/>
+ <CustomerAdmissionModal open={Boolean(customerRequest)} onClose={()=>setCustomerRequest(null)} onDone={live.reload} request={customerRequest}/>
  </Shell>;
 }
 
