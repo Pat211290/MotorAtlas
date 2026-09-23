@@ -1,0 +1,83 @@
+name: MotorAtlas Production Smoke
+
+on:
+  workflow_run:
+    workflows: ["MotorAtlas Web Preview"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PREVIEW_URL: https://pat211290.github.io/MotorAtlas/
+      SUPABASE_URL: https://wicnjwqkurpqqrozrblq.supabase.co
+      SUPABASE_KEY: sb_publishable_zErgPkOSZM2nJtASZAakHQ_X0JS1ku6
+    steps:
+      - name: Wait for GitHub Pages propagation
+        shell: bash
+        run: |
+          set -e
+          for n in {1..12}; do
+            if curl --fail --silent --show-error --location "$PREVIEW_URL" -o /tmp/motoratlas.html; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Preview did not become reachable."
+          exit 1
+
+      - name: Verify public application shell
+        shell: bash
+        run: |
+          set -e
+          grep -q 'id="root"' /tmp/motoratlas.html
+          curl --fail --silent --show-error --location "${PREVIEW_URL}manifest.webmanifest" -o /tmp/manifest.json
+          node -e "const m=require('/tmp/manifest.json'); if(!m.name || !m.start_url) process.exit(1); console.log('PWA manifest:', m.name)"
+
+      - name: Verify Supabase Auth health
+        shell: bash
+        run: |
+          set -e
+          curl --fail --silent --show-error "${SUPABASE_URL}/auth/v1/health" >/tmp/auth-health.json
+          cat /tmp/auth-health.json
+
+      - name: Inspect public Auth settings
+        shell: bash
+        run: |
+          set -e
+          curl --fail --silent --show-error             -H "apikey: ${SUPABASE_KEY}"             "${SUPABASE_URL}/auth/v1/settings" >/tmp/auth-settings.json
+          node <<'NODE'
+          const fs=require('fs');
+          const s=JSON.parse(fs.readFileSync('/tmp/auth-settings.json','utf8'));
+          const summary={
+            disable_signup:s.disable_signup,
+            mailer_autoconfirm:s.mailer_autoconfirm,
+            phone_autoconfirm:s.phone_autoconfirm,
+            password_min_length:s.password_min_length,
+          };
+          console.log('Auth settings:', JSON.stringify(summary));
+          if(s.disable_signup===true){
+            console.error('Signup is disabled.');
+            process.exit(1);
+          }
+          if(s.mailer_autoconfirm===true){
+            console.error('Email confirmation is disabled (mailer_autoconfirm=true).');
+            process.exit(1);
+          }
+          NODE
+
+      - name: Verify public workshop directory API
+        shell: bash
+        run: |
+          set -e
+          curl --fail --silent --show-error             -H "apikey: ${SUPABASE_KEY}"             "${SUPABASE_URL}/rest/v1/workshops?select=id,slug,name&limit=1" >/tmp/workshops.json
+          node -e "const x=require('/tmp/workshops.json'); if(!Array.isArray(x)) process.exit(1); console.log('Public workshop API reachable; rows:', x.length)"
+
+      - name: Summary
+        run: echo "MotorAtlas preview + Auth + public workshop API smoke test passed."
