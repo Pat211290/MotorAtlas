@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      PREVIEW_URL: https://pat211290.github.io/MotorAtlas/
+      PREVIEW_URL: https://motoratlas.de/
       SUPABASE_URL: https://wicnjwqkurpqqrozrblq.supabase.co
       SUPABASE_KEY: sb_publishable_zErgPkOSZM2nJtASZAakHQ_X0JS1ku6
     steps:
@@ -79,4 +79,4 @@ jobs:
           NODE
 
       - name: Summary
-        run: echo "MotorAtlas preview + Supabase Auth smoke test passed."
+        run: echo "MotorAtlas production domain + Supabase Auth smoke test passed."
