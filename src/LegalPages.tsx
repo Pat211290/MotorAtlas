@@ -16,14 +16,20 @@ function LegalBack({setView}:{setView:(view:AppView)=>void}){
   return <button className="legal-back" onClick={()=>setView('home')}><ArrowLeft/> Zur Startseite</button>;
 }
 
-function LegalFooter({setView}:{setView:(view:AppView)=>void}){
+export function PublicLegalStrip({setView}:{setView:(view:AppView)=>void}){
   return <div className="legal-bottom">
+    <span>© 2026 MotorAtlas</span>
+    <span>·</span>
     <button onClick={()=>setView('imprint')}>Impressum</button>
     <span>·</span>
     <button onClick={()=>setView('privacy')}>Datenschutz</button>
     <span>·</span>
     <button onClick={()=>setView('security-info')}>Sicherheit</button>
   </div>;
+}
+
+function LegalFooter({setView}:{setView:(view:AppView)=>void}){
+  return <PublicLegalStrip setView={setView}/>;
 }
 
 export function ImprintPage({setView}:{setView:(view:AppView)=>void}){
