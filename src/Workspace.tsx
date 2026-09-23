@@ -15,6 +15,8 @@ import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeReque
 import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
 import { DiagnosisModal, DocumentUploadModal } from './WorkflowModals';
 import { TeamManager } from './TeamManager';
+import { VerificationPanel } from './VerificationPanel';
+import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente';
 
@@ -410,6 +412,9 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
  const [mode,setMode]=useState<'solo'|'team'>('solo'); const [name,setName]=useState(''); const [legalName,setLegalName]=useState('');
  const [street,setStreet]=useState(''); const [postalCode,setPostalCode]=useState(''); const [city,setCity]=useState('');
  const [description,setDescription]=useState(''); const [accepts,setAccepts]=useState(true); const [verified,setVerified]=useState(false);
+ const [services,setServices]=useState<string[]>([]);
+ const [verificationStatus,setVerificationStatus]=useState<string>('not_requested');
+ const [verificationReviewNote,setVerificationReviewNote]=useState<string|null>(null);
  const [busy,setBusy]=useState(false); const [error,setError]=useState<string|null>(null);
 
  useEffect(()=>{
@@ -420,6 +425,9 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
      setName(profile.name??'');setLegalName(profile.legal_name??'');setStreet(profile.street??'');setPostalCode(profile.postal_code??'');
      setCity(profile.city??'');setDescription(profile.description??'');setMode((profile.operating_mode??'solo') as 'solo'|'team');
      setAccepts(Boolean(profile.accepts_new_customers));setVerified(Boolean(profile.verified_at));
+     setServices(Array.isArray(profile.services)?profile.services.filter((item:unknown):item is string=>typeof item==='string'):[]);
+     setVerificationStatus(profile.verification_status??(profile.verified_at?'verified':'not_requested'));
+     setVerificationReviewNote(profile.verification_review_note??null);
      if(profile.logo_path)setUrl(getWorkshopLogoPublicUrl(profile.logo_path));
      if(profile.brand_primary){
        const primary=profile.brand_primary as string,secondary=(profile.brand_secondary as string|null)??primary;
@@ -434,24 +442,46 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
    if(url&&url.startsWith('blob:'))URL.revokeObjectURL(url);setUrl(URL.createObjectURL(file));
  };
 
+ const persistProfile=async(navigateAfter:boolean)=>{
+   if(!name.trim()||!street.trim()||!postalCode.trim()||!city.trim())throw new Error('Name und vollständige Werkstattanschrift sind erforderlich.');
+   let workshopId=live.identity?.workshopId;
+   if(!workshopId){
+     const slugBase=name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,45)||'werkstatt';
+     const created=await createWorkshop({name,slug:slugBase+'-'+crypto.randomUUID().slice(0,6),street,postalCode,city,legalName,description});
+     workshopId=created.id;
+   }
+   if(!workshopId)throw new Error('Werkstatt konnte nicht angelegt werden.');
+   const resolvedWorkshopId:string=workshopId;
+   await updateWorkshopProfile({
+     workshopId:resolvedWorkshopId,name,legalName,street,postalCode,city,description,
+     operatingMode:mode,acceptsNewCustomers:accepts,services
+   });
+   if(logoFile&&palette)await uploadWorkshopLogo({workshopId:resolvedWorkshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
+   await live.reload();
+   if(navigateAfter)setView('office');
+   return resolvedWorkshopId;
+ };
+
  const save=async()=>{
    if(busy)return;
-   if(!name.trim()||!street.trim()||!postalCode.trim()||!city.trim()){setError('Name und vollständige Werkstattanschrift sind erforderlich.');return}
    setBusy(true);setError(null);
-   try{
-     let workshopId=live.identity?.workshopId;
-     if(!workshopId){
-       const slugBase=name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,45)||'werkstatt';
-       const created=await createWorkshop({name,slug:slugBase+'-'+crypto.randomUUID().slice(0,6),street,postalCode,city,legalName,description});
-       workshopId=created.id;
-     }
-     if(!workshopId)throw new Error('Werkstatt konnte nicht angelegt werden.');
-     const resolvedWorkshopId:string=workshopId;
-     await updateWorkshopProfile({workshopId:resolvedWorkshopId,name,legalName,street,postalCode,city,description,operatingMode:mode,acceptsNewCustomers:accepts});
-     if(logoFile&&palette)await uploadWorkshopLogo({workshopId:resolvedWorkshopId,file:logoFile,primary:palette.primary,secondary:palette.dark});
-     await live.reload();setView('office');
-   }catch(err){setError(err instanceof Error?err.message:'Werkstattprofil konnte nicht gespeichert werden.')}
+   try{await persistProfile(true)}
+   catch(err){setError(err instanceof Error?err.message:'Werkstattprofil konnte nicht gespeichert werden.')}
    finally{setBusy(false)}
+ };
+
+ const saveBeforeVerification=async()=>{
+   setError(null);
+   try{await persistProfile(false)}
+   catch(err){
+     const message=err instanceof Error?err.message:'Werkstattprofil konnte nicht gespeichert werden.';
+     setError(message);
+     throw err;
+   }
+ };
+
+ const toggleService=(code:string)=>{
+   setServices(current=>current.includes(code)?current.filter(item=>item!==code):[...current,code]);
  };
 
  const title=name.trim()||'Deine Werkstatt';
@@ -463,6 +493,31 @@ export function BrandingPage({setView}:{setView:(v:AppView)=>void}){
   <div className="branding-stack"><section className="panel"><span className="overline">ADAPTIVES BRANDING</span><h3>Logo rein. Premium-Farbsystem raus.</h3><p>MotorAtlas analysiert die dominante Markenfarbe und erzeugt daraus kontraststarke, dezente UI-Akzente.</p><label className="logo-upload"><Sparkles/><b>{url?'Logo ändern':'Werkstattlogo hochladen'}</b><span>PNG, JPG oder WebP</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>void logo(e.target.files?.[0])}/></label><div className="swatches"><i/><i/><i/></div></section>
   <section className="panel preview"><span className="overline">LIVE-VORSCHAU</span><div className="profile-preview"><div className="preview-logo">{url?<img src={url} alt="Werkstattlogo"/>:<span>{title.slice(0,2).toUpperCase()}</span>}</div><div><b>{title}</b><small className={verified?'verified-copy':'pending-copy'}><ShieldCheck size={14}/> {verified?'Verifizierte Werkstatt':'Verifizierung ausstehend'}</small></div></div><div className="preview-order"><Status stage="repair"/><h3>BMW X3 3.0i</h3><small>Auftrag #184 · Reparatur freigegeben</small><button className="btn primary full">Auftrag öffnen</button></div></section></div>
  </div>
+ <section className="panel service-selection">
+   <span className="overline">LEISTUNGSUMFANG</span>
+   <h3>Was bietet deine Werkstatt tatsächlich an?</h3>
+   <p>Der Leistungsumfang steuert automatisch, welche fachlichen Nachweise MotorAtlas für die Verifizierung verlangt.</p>
+   <div className="service-option-grid">
+     {WORKSHOP_SERVICE_OPTIONS.map(service=><button
+       type="button"
+       key={service.code}
+       className={services.includes(service.code)?'selected':''}
+       onClick={()=>toggleService(service.code)}
+     >
+       <span>{services.includes(service.code)?'✓':'+'}</span>
+       <div><b>{service.label}</b><small>{service.description}</small></div>
+       {service.qualificationScope!=='none'&&<em>Fachnachweis</em>}
+     </button>)}
+   </div>
+   <small className="service-legal-note">MotorAtlas nutzt diese Einstufung als Prüfregel. Die endgültige handwerksrechtliche Berechtigung wird bei zulassungspflichtigen Tätigkeiten anhand des Handwerksrollen-/HWK-Nachweises geprüft.</small>
+ </section>
+ {live.identity?.role==='owner'&&<VerificationPanel
+   workshopId={live.identity.workshopId}
+   services={services}
+   initialStatus={verificationStatus}
+   reviewNote={verificationReviewNote}
+   onBeforeSubmit={saveBeforeVerification}
+ />}
  <section className="panel org-mode"><span className="overline">ORGANISATION</span><h3>Die Oberfläche passt sich an deinen Betrieb an.</h3><div><button className={mode==='solo'?'selected':''} onClick={()=>setMode('solo')}><Building2/><b>Einzelbetrieb</b><span>Eine Person sieht Büro und Werkstatt in einem flüssigen Ablauf.</span></button><button className={mode==='team'?'selected':''} onClick={()=>setMode('team')}><Users/><b>Team-Betrieb</b><span>Büro, Mechaniker und individuelle Berechtigungen arbeiten synchron.</span></button></div></section>
  {live.identity?.role==='owner'&&mode==='team'&&<TeamManager workshopId={live.identity.workshopId} currentUserId={live.identity.userId}/>}
  </div></Shell>;
