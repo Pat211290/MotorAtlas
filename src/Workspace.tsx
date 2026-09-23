@@ -19,7 +19,7 @@ function Shell({children,title,mode,active,onHome}:{children:React.ReactNode;tit
 function PageHead({title,subtitle,children}:{title:string;subtitle:string;children?:React.ReactNode}){return <div className="page-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
 
 const orderStages:Stage[]=['arrived','diagnosis','approval','repair','pickup'];
-type DisplayJob=Job&{orderNumber?:string;rawStage?:string;vehicleId?:string;customerUserId?:string;serviceRequestId?:string|null;updatedAt?:string};
+type DisplayJob=Job&{orderNumber?:string;rawStage?:string;vehicleId?:string;customerUserId?:string;serviceRequestId?:string|null;updatedAt?:string;assigneeUserId?:string|null};
 const toneFor=(id:string)=>[...id].reduce((sum,char)=>sum+char.charCodeAt(0),0)%5;
 function JobCard({job}:{job:DisplayJob}){return <article className="job-card"><div className="job-car"><CarArt tone={toneFor(job.id)}/><div><b>{job.vehicle}</b><small>{job.plate}{job.mileage?` · ${job.mileage.toLocaleString('de-DE')} km`:''}</small></div></div><p>{job.complaint}</p><footer><span>#{job.orderNumber??job.id.slice(-6)}</span><Status stage={job.stage}/></footer></article>}
 
