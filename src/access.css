@@ -51,3 +51,14 @@
 .access-verify-actions button b{color:var(--brand)}
 .access-verify-actions button:hover b{text-decoration:underline}
 @media(max-width:520px){.access-verify-icon{width:68px;height:68px;border-radius:20px}.access-verify h2{font-size:27px}.access-verify-lead{font-size:11px}}
+
+.access-verify-paths{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;text-align:left}
+.access-verify-paths article{border:1px solid #dce7ea;background:#f7fbfb;border-radius:15px;padding:14px}
+.access-verify-paths article.existing{background:#fff8ed;border-color:#efddb9}
+.access-verify-paths article>span{display:block;font-size:7px;letter-spacing:1.1px;font-weight:900;color:var(--brand);margin-bottom:5px}
+.access-verify-paths article.existing>span{color:#8b6a26}
+.access-verify-paths article>b{display:block;font-size:10px;color:#36515d;margin-bottom:5px}
+.access-verify-paths article>p{font-size:8px;line-height:1.55;color:#70818a;margin:0}
+.access-verify-paths article>div{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.access-verify-paths article>div button{border:1px solid #e5d3ae;background:#fff;border-radius:9px;padding:7px 9px;font-size:8px;font-weight:800;color:#70561f}
+@media(max-width:520px){.access-verify-paths{grid-template-columns:1fr}}

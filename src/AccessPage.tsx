@@ -278,9 +278,18 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
             <div className="access-verify-email"><Mail/><span>{pendingEmail||email}</span></div>
 
-            <div className="access-verify-notice">
-              <b>Wichtig</b>
-              <p>Wenn diese Adresse noch nicht bei MotorAtlas registriert war, wurde eine Bestätigungsmail versendet. Aus Sicherheitsgründen zeigt MotorAtlas nicht an, ob eine Adresse bereits zu einem bestehenden Konto gehört.</p>
+            <div className="access-verify-paths">
+              <article>
+                <span>NEU REGISTRIERT?</span>
+                <b>Bestätigungsmail prüfen</b>
+                <p>Wenn die Adresse neu ist, sollte eine MotorAtlas-Mail zur Bestätigung ankommen. Bitte auch Spam/Junk prüfen.</p>
+              </article>
+              <article className="existing">
+                <span>SCHON EIN KONTO?</span>
+                <b>Es kommt keine neue Bestätigungsmail</b>
+                <p>Bei bereits registrierten Adressen verschickt Supabase aus Sicherheitsgründen keine neue Signup-Mail. Nutze dann Anmeldung oder Passwort zurücksetzen.</p>
+                <div><button onClick={()=>setTab('login')}>Anmelden</button><button onClick={()=>setTab('reset')}>Passwort vergessen</button></div>
+              </article>
             </div>
 
             <div className="access-verify-steps">
@@ -295,8 +304,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
             {resendStatus&&<div className="access-resend-status">{resendStatus}</div>}
 
             <div className="access-verify-actions">
-              <button onClick={()=>setTab('login')}>Schon bestätigt? <b>Anmelden</b></button>
-              <button onClick={()=>setTab('reset')}>Keine Mail und Konto vorhanden? <b>Passwort vergessen</b></button>
+              <button onClick={()=>setTab('login')}>Zur <b>Anmeldung</b></button>
             </div>
           </div>
         </>:tab==='reset'?<>
