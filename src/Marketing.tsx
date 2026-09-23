@@ -6,15 +6,6 @@ import {
 import { jobs, type Stage } from './demo';
 import { Brand, CarArt, CheckLine, Feature, SectionIntro, Status, TrustPill, Verified, type AppView } from './components';
 
-function Header({setView}:{setView:(v:AppView)=>void}){
-  const [open,setOpen]=useState(false);
-  return <header className="marketing-header"><div className="marketing-nav wrap">
-    <button className="brand-button" onClick={()=>{setView('home');scrollTo({top:0,behavior:'smooth'})}}><Brand/></button>
-    <nav className={open?'open':''}><button onClick={()=>{setOpen(false);setView('customer-info')}}>Für Autofahrer</button><button onClick={()=>{setOpen(false);setView('workshop-info')}}>Für Werkstätten</button><button onClick={()=>{setOpen(false);setView('finder')}}>Werkstatt finden</button><button onClick={()=>{setOpen(false);setView('security-info')}}>Sicherheit</button></nav>
-    <div className="nav-actions"><button className="link-button" onClick={()=>setView('login')}>Anmelden</button><button className="btn primary" onClick={()=>setView('login')}>Als Werkstatt starten <ArrowRight size={15}/></button><button className="menu" aria-label="Menü" onClick={()=>setOpen(!open)}>{open?<X/>:<Menu/>}</button></div>
-  </div></header>;
-}
-
 function ProductWindow({setView}:{setView:(v:AppView)=>void}){
   const stages:Stage[]=['arrived','diagnosis','approval','repair','pickup'];
   return <div className="product-window">
@@ -34,7 +25,7 @@ function CustomerPhone(){return <div className="phone"><div className="phone-bar
 function GermanyMap(){return <div className="map-card"><div className="map-search"><Search size={17}/><span>PLZ oder Ort eingeben</span></div><div className="germany-shape"><i className="pin p1"/><i className="pin p2"/><i className="pin p3"/><i className="pin p4"/><div className="map-outline">DE</div></div><div className="map-result"><div className="shop-logo">CS</div><div><b>Carplus Service Center</b><small><MapPin size={12}/> Schwandorf · nimmt Kunden an</small></div><Verified/></div></div>}
 
 export function Marketing({setView}:{setView:(v:AppView)=>void}){
- return <><Header setView={setView}/><main className="marketing">
+ return <><main className="marketing">
   <section className="hero"><div className="ambient a"/><div className="ambient b"/><div className="wrap hero-grid"><div className="hero-copy"><div className="eyebrow"><span>NEU</span> DIE DIGITALE VERBINDUNG ZUR WERKSTATT</div><h1>Werkstattservice mit <em>Überblick statt Umwegen.</em></h1><p>Fahrzeug auswählen. Problem melden. Termin abstimmen. Diagnose erhalten. Kostenvoranschlag freigeben. Rechnung wiederfinden. <strong>Eine klare Verbindung zwischen Kunde und Werkstatt.</strong></p><div className="hero-actions"><button className="btn primary xl" onClick={()=>setView('finder')}><Search size={18}/> Werkstatt finden</button><button className="btn glass xl" onClick={()=>setView('workshop-info')}>Für Werkstätten <ArrowRight size={18}/></button></div><div className="trust-row"><TrustPill>Nur PKW</TrustPill><TrustPill>PC · Tablet · Smartphone</TrustPill><TrustPill>Dokumente direkt am Auftrag</TrustPill></div></div><ProductWindow setView={setView}/></div></section>
 
   <section className="process-line wrap"><p>Ein Fahrzeug. Ein Vorgang. Eine nachvollziehbare Geschichte.</p><div><span>ANFRAGE</span><i/><span>TERMIN</span><i/><span>DIAGNOSE</span><i/><span>FREIGABE</span><i/><span>REPARATUR</span><i/><span>RECHNUNG</span></div></section>

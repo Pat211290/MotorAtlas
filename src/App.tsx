@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Marketing } from './Marketing';
 import { WorkshopFinder } from './WorkshopFinder';
+import { PublicHeader } from './PublicHeader';
 import { CustomerMarketingPage, SecurityMarketingPage, WorkshopMarketingPage } from './MarketingPages';
 import { BrandingPage, CustomerPortal, OfficeDashboard, WorkshopBoard } from './Workspace';
 import { Brand, type AppView } from './components';
@@ -152,8 +153,10 @@ export default function App(){
     if(titles[view])document.title=titles[view]!;
   },[view]);
 
+  const showPublicHeader=['home','customer-info','workshop-info','security-info','finder','login'].includes(view);
   return <div className="site">
     <Splash/>
+    {showPublicHeader&&<PublicHeader view={view} setView={navigate}/>} 
     {view==='home'&&<Marketing setView={navigate}/>}
     {view==='customer-info'&&<CustomerMarketingPage setView={navigate}/>}
     {view==='workshop-info'&&<WorkshopMarketingPage setView={navigate}/>}

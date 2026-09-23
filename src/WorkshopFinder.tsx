@@ -105,16 +105,6 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
   };
 
   return <div className="finder-page">
-    <header className="finder-header">
-      <div className="wrap finder-nav">
-        <button className="brand-button" onClick={()=>setView('home')}><Brand/></button>
-        <div className="finder-nav-actions">
-          <button className="finder-back" onClick={()=>setView('home')}><ArrowLeft/> Zur Startseite</button>
-          <button className="btn primary" onClick={()=>setView('login')}>Anmelden <ArrowRight size={15}/></button>
-        </div>
-      </div>
-    </header>
-
     <main>
       <section className="finder-hero">
         <div className="finder-glow a"/><div className="finder-glow b"/>
@@ -146,7 +136,7 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
           </div>
 
           {error&&<div className="finder-state error"><b>Werkstattsuche derzeit nicht verfügbar.</b><span>{error}</span></div>}
-          {!error&&!loading&&filtered.length===0&&<div className="finder-state"><MapPin/><b>Keine passende Werkstatt gefunden.</b><span>Ändere den Suchbegriff oder deaktiviere den Neukundenfilter.</span></div>}
+          {!error&&!loading&&filtered.length===0&&<div className="finder-state"><MapPin/><b>{workshops.length===0?'Noch keine verifizierten Werkstätten veröffentlicht.':'Keine passende Werkstatt gefunden.'}</b><span>{workshops.length===0?'Die Suche ist aktiv. Neue öffentlich verifizierte MotorAtlas-Werkstätten erscheinen hier automatisch.':'Ändere den Suchbegriff oder deaktiviere den Neukundenfilter.'}</span></div>}
 
           <div className="finder-list">
             {filtered.map(workshop=>{

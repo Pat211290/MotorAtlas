@@ -41,7 +41,6 @@ function DeviceRibbon(){
 
 export function CustomerMarketingPage({setView}:{setView:(view:AppView)=>void}){
   return <div className="mp-page">
-    <PublicTop setView={setView}/>
     <main>
       <section className="mp-hero customer"><div className="mp-orb one"/><div className="mp-orb two"/><div className="wrap mp-hero-grid">
         <div><BackHome setView={setView}/><span className="mp-kicker"><Sparkles/> MOTORATLAS FÜR AUTOFAHRER</span><h1>Dein Fahrzeug. Deine Werkstatt. <em>Ein klarer Verlauf.</em></h1><p>Vom ersten Problem bis zur Rechnung bleibt alles am richtigen Fahrzeug: Anfrage, Termin, Diagnose, Rückfragen, Freigabe, Reparatur und Dokumente.</p><div className="mp-actions"><button className="btn primary xl" onClick={()=>setView('finder')}><Search size={17}/> Werkstatt finden</button><button className="btn secondary xl" onClick={()=>setView('login')}>Kundenkonto erstellen <ArrowRight size={17}/></button></div></div>
@@ -68,7 +67,6 @@ export function CustomerMarketingPage({setView}:{setView:(view:AppView)=>void}){
 
 export function WorkshopMarketingPage({setView}:{setView:(view:AppView)=>void}){
   return <div className="mp-page">
-    <PublicTop setView={setView}/>
     <main>
       <section className="mp-hero workshop"><div className="mp-orb one"/><div className="mp-orb two"/><div className="wrap mp-hero-grid">
         <div><BackHome setView={setView}/><span className="mp-kicker"><Sparkles/> MOTORATLAS FÜR WERKSTÄTTEN</span><h1>Weniger Rückfragen. Mehr Überblick. <em>Ohne mehr Bürokratie.</em></h1><p>MotorAtlas verbindet Anfrage, Termin, Fahrzeugannahme, Diagnose, Kostenvoranschlag, Kundenfreigabe, Reparatur und Rechnung in einem Echtzeit-Ablauf.</p><div className="mp-actions"><button className="btn primary xl" onClick={()=>setView('login')}>Als Werkstatt starten <ArrowRight size={17}/></button><button className="btn secondary xl" onClick={()=>setView('office')}>Produktdemo öffnen</button></div></div>
@@ -95,7 +93,6 @@ export function WorkshopMarketingPage({setView}:{setView:(view:AppView)=>void}){
 
 export function SecurityMarketingPage({setView}:{setView:(view:AppView)=>void}){
   return <div className="mp-page security-page">
-    <PublicTop setView={setView}/>
     <main>
       <section className="mp-hero security"><div className="mp-orb one"/><div className="mp-orb two"/><div className="wrap mp-hero-grid">
         <div><BackHome setView={setView}/><span className="mp-kicker"><ShieldCheck/> SICHERHEIT & TRANSPARENZ</span><h1>Klare Rechte. Klare Entscheidungen. <em>Klare Historie.</em></h1><p>MotorAtlas trennt Kommunikation, operative Arbeit, Freigaben und Dokumente bewusst voneinander. Das reduziert Fehlinterpretationen und unnötige Datenzugriffe.</p></div>
