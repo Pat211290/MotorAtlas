@@ -524,16 +524,15 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
        <div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small>{selected.workflowPath&&<span className="workflow-path-label">{selected.workflowPath==='direct_work'?'Direktauftrag':selected.workflowPath==='diagnosis_only'?'Nur Diagnose':selected.workflowPath==='diagnosis_then_decide'?'Diagnose → Entscheidung':selected.workflowPath==='quote_before_work'?'Kostenvoranschlag vor Arbeit':'Diagnose → Kostenvoranschlag'}</span>}</div>
        <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button>{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
        {['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<div className="workflow-next-steps">
-         <div className="workflow-next-head"><small>NÄCHSTER SCHRITT</small><b>{selected.rawStage==='awaiting_customer_decision'?'Wie möchte der Kunde weiter vorgehen?':'Wie geht es mit dem Auftrag weiter?'}</b></div>
          <div className="workflow-choice-grid">
            <button className="workflow-choice primary" onClick={async()=>{setBusy(true);setActionError(null);try{if(selected.rawStage==='awaiting_customer_decision')await resolveWorkOrderNextStep({workOrderId:selected.id,decision:'motoratlas_quote'});setDocType('quote');await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Kostenvoranschlag konnte nicht vorbereitet werden.')}finally{setBusy(false)}}>
              <FileText/><span><b>KVA in MotorAtlas</b><small>Kostenvoranschlag hier erstellen und freigeben lassen</small></span>
            </button>
            <button className="workflow-choice" onClick={()=>setWorkDecision('external_approved')}>
-             <ShieldCheck/><span><b>Extern vereinbart</b><small>Freigabe liegt bereits per Telefon, E-Mail oder persönlich vor</small></span>
+             <ShieldCheck/><span><b>Bereits extern vereinbart</b><small>Freigabe liegt bereits per Telefon, E-Mail oder persönlich vor</small></span>
            </button>
            <button className="workflow-choice" onClick={()=>setWorkDecision('external_waiting')}>
-             <Clock3/><span><b>Entscheidung offen</b><small>Angebot oder Abstimmung erfolgte extern</small></span>
+             <Clock3/><span><b>Externes Angebot · Entscheidung offen</b><small>Angebot oder Abstimmung erfolgte extern</small></span>
            </button>
            <button className="workflow-choice" onClick={()=>setWorkDecision('no_repair')}>
              <Car/><span><b>Keine Reparatur</b><small>Auftrag ohne weitere Reparatur abschließen</small></span>
