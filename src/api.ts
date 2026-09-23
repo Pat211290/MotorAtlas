@@ -367,3 +367,103 @@ export async function getChatAttachmentUrl(path:string,expiresIn=300){
   if(error)throw error;
   return data.signedUrl;
 }
+
+
+export type WorkOrderDocument={
+  id:string;
+  work_order_id:string;
+  workshop_id:string;
+  customer_user_id:string;
+  document_type:'quote'|'invoice'|'credit_note'|'other';
+  document_number?:string|null;
+  title?:string|null;
+  currency:string;
+  amount_total?:number|null;
+  status:'draft'|'published'|'superseded'|'cancelled';
+  published_at?:string|null;
+  created_at:string;
+};
+
+export type DocumentVersion={
+  id:string;
+  document_id:string;
+  version_number:number;
+  storage_path:string;
+  file_name:string;
+  mime_type:string;
+  sha256:string;
+  byte_size?:number|null;
+  invoice_format?:'pdf'|'zugferd'|'xrechnung'|'xml'|'other'|null;
+  created_at:string;
+};
+
+export async function createDocumentDraft(input:{
+  workOrderId:string;
+  documentType:'quote'|'invoice'|'credit_note'|'other';
+  documentNumber:string;
+  title:string;
+  amountTotal?:number|null;
+  currency?:string;
+}){
+  const {data,error}=await db().rpc('create_document_draft',{
+    p_work_order_id:input.workOrderId,
+    p_document_type:input.documentType,
+    p_document_number:input.documentNumber.trim(),
+    p_title:input.title.trim(),
+    p_amount_total:input.amountTotal??null,
+    p_currency:input.currency??'EUR'
+  });
+  if(error)throw error;
+  return data as WorkOrderDocument;
+}
+
+export async function listWorkOrderDocuments(workOrderId:string){
+  const client=db();
+  const {data:documents,error}=await client.from('documents')
+    .select('*').eq('work_order_id',workOrderId).order('created_at',{ascending:false});
+  if(error)throw error;
+  const docs=(documents??[]) as WorkOrderDocument[];
+  if(!docs.length)return[] as Array<WorkOrderDocument&{versions:DocumentVersion[]}>;
+  const ids=docs.map(item=>item.id);
+  const {data:versions,error:versionError}=await client.from('document_versions')
+    .select('*').in('document_id',ids).order('version_number',{ascending:false});
+  if(versionError)throw versionError;
+  const grouped=new Map<string,DocumentVersion[]>();
+  for(const version of (versions??[]) as DocumentVersion[]){
+    grouped.set(version.document_id,[...(grouped.get(version.document_id)??[]),version]);
+  }
+  return docs.map(document=>({...document,versions:grouped.get(document.id)??[]}));
+}
+
+export async function getDocumentVersionUrl(storagePath:string,expiresIn=300){
+  const {data,error}=await db().storage.from('documents').createSignedUrl(storagePath,expiresIn);
+  if(error)throw error;
+  return data.signedUrl;
+}
+
+export async function uploadOfficialDocument(input:{
+  workOrderId:string;
+  workshopId:string;
+  documentType:'quote'|'invoice';
+  documentNumber:string;
+  title:string;
+  amountTotal:number;
+  file:File;
+  invoiceFormat?:'pdf'|'zugferd'|'xrechnung'|'xml'|'other';
+}){
+  const document=await createDocumentDraft({
+    workOrderId:input.workOrderId,documentType:input.documentType,documentNumber:input.documentNumber,
+    title:input.title,amountTotal:input.amountTotal,currency:'EUR'
+  });
+  const versionId=crypto.randomUUID();
+  try{
+    await uploadDocumentVersion({
+      workshopId:input.workshopId,documentId:document.id,versionId,versionNumber:1,file:input.file,
+      invoiceFormat:input.invoiceFormat
+    });
+    const published=await publishDocument(document.id);
+    return published as WorkOrderDocument;
+  }catch(error){
+    throw error;
+  }
+}
