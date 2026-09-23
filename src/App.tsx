@@ -134,7 +134,16 @@ function viewFromLocation():AppView|null{
   return viewFromHash(location.hash);
 }
 
+function normalizeSignupCallback(){
+  const raw=location.hash.startsWith('#')?location.hash.slice(1):'';
+  if(!raw)return;
+  const params=new URLSearchParams(raw);
+  if(params.get('type')!=='signup')return;
+  history.replaceState({},'',authPath('bestaetigung'));
+}
+
 export default function App(){
+  normalizeSignupCallback();
   const [view,setView]=useState<AppView>(()=>viewFromLocation()??'home');
 
   const navigate=(next:AppView)=>{
