@@ -24,12 +24,13 @@ const statusText:Record<VerificationStatus,string>={
 };
 
 export function VerificationPanel({
-  workshopId,services,initialStatus='not_requested',reviewNote
+  workshopId,services,initialStatus='not_requested',reviewNote,onBeforeSubmit
 }:{
   workshopId:string;
   services:string[];
   initialStatus?:VerificationStatus|string|null;
   reviewNote?:string|null;
+  onBeforeSubmit?:()=>Promise<void>;
 }){
   const scopes=useMemo(()=>qualificationScopesForServices(services),[services]);
   const regulated=scopes.length>0;
@@ -108,6 +109,7 @@ export function VerificationPanel({
     if(!ready||busy)return;
     setBusy(true);setError('');setMessage('');
     try{
+      if(onBeforeSubmit)await onBeforeSubmit();
       const result:any=await requestWorkshopVerification(workshopId);
       setStatus((result?.verification_status as VerificationStatus)||'pending');
       setMessage('Verifizierung wurde eingereicht. MotorAtlas prüft jetzt Betrieb, Tätigkeit und Nachweise.');
