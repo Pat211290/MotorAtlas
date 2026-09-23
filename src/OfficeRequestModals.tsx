@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarDays, Car, MapPin, Phone, UserRound, X } from 'lucide-react';
+import { CalendarDays, Car, Mail, MapPin, Phone, UserRound, X } from 'lucide-react';
 import { decideCustomerRequest, declineServiceRequest, proposeAppointment, type WorkshopServiceRequest } from './api';
 import { QuarterHourDateTime } from './QuarterHourDateTime';
 import { VehiclePhoto } from './VehicleModal';
@@ -83,6 +83,7 @@ export function ServiceRequestOfficeModal({
       <div className="service-customer-card">
         <UserRound/><div><small>KUNDE</small><b>{request.customerName}</b>
           <span>{request.customerPhone?<><Phone size={13}/> {request.customerPhone}</>:<>Keine Telefonnummer hinterlegt</>}</span>
+          {request.customerEmail&&<span><Mail size={13}/> {request.customerEmail}</span>}
           <span><MapPin size={13}/> {[request.customerStreet,request.customerPostalCode,request.customerCity].filter(Boolean).join(', ')||'Keine Anschrift hinterlegt'}</span>
         </div>
       </div>
