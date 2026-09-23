@@ -19,6 +19,7 @@ async function resolveSignedInView():Promise<AppView>{
   if(!supabase)return'customer';
   const {data:user}=await supabase.auth.getUser();
   if(!user.user)return'login';
+  await supabase.rpc('claim_my_workshop_invites').catch(()=>undefined);
   const {data:member}=await supabase.from('workshop_members').select('role').eq('user_id',user.user.id).eq('active',true).limit(1).maybeSingle();
   if(member?.role==='mechanic')return'workshop';
   if(member)return'office';
@@ -92,7 +93,7 @@ export default function App(){
   useEffect(()=>{
     if(!supabase)return;
     supabase.auth.getSession().then(async({data})=>{
-      if(data.session&&location.hash==='#app')setView(await resolveSignedInView());
+      if(data.session&&(location.hash==='#app'||new URLSearchParams(location.search).get('app')==='1'))setView(await resolveSignedInView());
     });
   },[]);
   return <div className="site">
