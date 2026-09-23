@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapPin, Phone, UserRound, X } from 'lucide-react';
+import { Mail, MapPin, Phone, UserRound, X } from 'lucide-react';
 import { getMyProfile, updateMyProfile, type CustomerProfile } from './api';
 
 export function CustomerProfileModal({
@@ -57,6 +57,7 @@ export function CustomerProfileModal({
       </header>
       <form onSubmit={save}>
         <label><span>Vor- und Nachname</span><input value={fullName} onChange={e=>setFullName(e.target.value)} required/></label>
+        {profile?.email&&<label><span><Mail size={14}/> E-Mail</span><input value={profile.email} readOnly className="readonly-input"/></label>}
         <label><span><Phone size={14}/> Telefonnummer</span><input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} required placeholder="+49 170 1234567"/></label>
         <label><span><MapPin size={14}/> Straße & Hausnummer</span><input value={street} onChange={e=>setStreet(e.target.value)} required/></label>
         <div className="form-two">
