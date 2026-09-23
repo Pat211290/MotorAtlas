@@ -489,7 +489,7 @@ export async function loadCustomerWorkspace():Promise<{
 }
 
 export type WorkshopServiceRequest={
-  id:string;customerUserId:string;customerName:string;customerPhone?:string|null;customerStreet?:string|null;
+  id:string;customerUserId:string;customerName:string;customerEmail?:string|null;customerPhone?:string|null;customerStreet?:string|null;
   customerPostalCode?:string|null;customerCity?:string|null;vehicleId:string;vehicle:string;plate:string;
   make?:string|null;model?:string|null;variant?:string|null;firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;
   vin?:string|null;mileage?:number|null;photoPath?:string|null;complaint:string;status:string;
@@ -499,7 +499,7 @@ export type WorkshopServiceRequest={
 export type WorkshopAppointment={
   id:string;serviceRequestId:string;workOrderId?:string|null;orderNumber?:string|null;startsAt:string;endsAt?:string|null;
   status:string;note?:string|null;rawOrderStage?:string|null;arrivedAt?:string|null;
-  customerUserId:string;customerName:string;customerPhone?:string|null;customerStreet?:string|null;
+  customerUserId:string;customerName:string;customerEmail?:string|null;customerPhone?:string|null;customerStreet?:string|null;
   customerPostalCode?:string|null;customerCity?:string|null;
   vehicleId:string;vehicle:string;plate:string;make?:string|null;model?:string|null;variant?:string|null;
   firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;vin?:string|null;mileage?:number|null;photoPath?:string|null;
@@ -521,7 +521,7 @@ export async function listWorkshopServiceRequests(workshopId:string):Promise<Wor
   const customerIds=[...new Set(rows.map(row=>row.customer_user_id))];
   const [vehicleResult,profileResult]=await Promise.all([
     client.from('vehicles').select('id,make,model,variant,first_registration,license_plate,hsn,tsn,vin,mileage,photo_path').in('id',vehicleIds),
-    client.from('profiles').select('id,full_name,phone,street,postal_code,city').in('id',customerIds)
+    client.from('profiles').select('id,full_name,email,phone,street,postal_code,city').in('id',customerIds)
   ]);
   if(vehicleResult.error)throw vehicleResult.error;if(profileResult.error)throw profileResult.error;
   const vehicleMap=new Map(((vehicleResult.data??[]) as any[]).map(v=>[v.id,v]));
@@ -531,7 +531,7 @@ export async function listWorkshopServiceRequests(workshopId:string):Promise<Wor
     const p=profileMap.get(row.customer_user_id) as any;
     return{
       id:row.id,customerUserId:row.customer_user_id,customerName:p?.full_name??'Kunde',
-      customerPhone:p?.phone??null,customerStreet:p?.street??null,customerPostalCode:p?.postal_code??null,customerCity:p?.city??null,
+      customerEmail:p?.email??null,customerPhone:p?.phone??null,customerStreet:p?.street??null,customerPostalCode:p?.postal_code??null,customerCity:p?.city??null,
       vehicleId:row.vehicle_id,vehicle:v?[v.make,v.model,v.variant].filter(Boolean).join(' '):'Fahrzeug',
       plate:v?.license_plate??'—',make:v?.make??null,model:v?.model??null,variant:v?.variant??null,
       firstRegistration:v?.first_registration??null,hsn:v?.hsn??null,tsn:v?.tsn??null,vin:v?.vin??null,
@@ -562,7 +562,7 @@ export async function listWorkshopAppointments(workshopId:string):Promise<Worksh
 
   const [vehicleResult,profileResult,orderResult]=await Promise.all([
     client.from('vehicles').select('id,make,model,variant,first_registration,license_plate,hsn,tsn,vin,mileage,photo_path').in('id',vehicleIds),
-    client.from('profiles').select('id,full_name,phone,street,postal_code,city').in('id',customerIds),
+    client.from('profiles').select('id,full_name,email,phone,street,postal_code,city').in('id',customerIds),
     client.from('work_orders').select('id,order_number,service_request_id,stage,arrived_at').eq('workshop_id',workshopId).in('service_request_id',requestIds)
   ]);
   if(vehicleResult.error)throw vehicleResult.error;
@@ -582,7 +582,7 @@ export async function listWorkshopAppointments(workshopId:string):Promise<Worksh
     return{
       id:row.id,serviceRequestId:row.service_request_id,workOrderId:order?.id??null,orderNumber:order?.order_number??null,
       startsAt:row.starts_at,endsAt:row.ends_at,status:row.status,note:row.note,rawOrderStage:order?.stage??null,arrivedAt:order?.arrived_at??null,
-      customerUserId:request?.customer_user_id??'',customerName:profile?.full_name??'Kunde',customerPhone:profile?.phone??null,
+      customerUserId:request?.customer_user_id??'',customerName:profile?.full_name??'Kunde',customerEmail:profile?.email??null,customerPhone:profile?.phone??null,
       customerStreet:profile?.street??null,customerPostalCode:profile?.postal_code??null,customerCity:profile?.city??null,
       vehicleId:request?.vehicle_id??'',vehicle:vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug',
       plate:vehicle?.license_plate??'—',make:vehicle?.make??null,model:vehicle?.model??null,variant:vehicle?.variant??null,
@@ -755,17 +755,17 @@ export async function uploadOfficialDocument(input:{
 
 
 export type CustomerProfile={
-  id:string;fullName:string;phone?:string|null;street?:string|null;postalCode?:string|null;city?:string|null;countryCode:string;
+  id:string;fullName:string;email?:string|null;phone?:string|null;street?:string|null;postalCode?:string|null;city?:string|null;countryCode:string;
 };
 
 export async function getMyProfile():Promise<CustomerProfile>{
   const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Bitte zuerst anmelden.');
   const {data,error}=await client.from('profiles')
-    .select('id,full_name,phone,street,postal_code,city,country_code')
+    .select('id,full_name,email,phone,street,postal_code,city,country_code')
     .eq('id',auth.user.id).single();
   if(error)throw error;
   return{
-    id:data.id,fullName:data.full_name,phone:data.phone,street:data.street,postalCode:data.postal_code,
+    id:data.id,fullName:data.full_name,email:data.email,phone:data.phone,street:data.street,postalCode:data.postal_code,
     city:data.city,countryCode:data.country_code??'DE'
   };
 }
@@ -903,7 +903,7 @@ export async function listPendingCustomerRequests(workshopId:string){
   const rows=(data??[]) as any[];if(!rows.length)return[];
   const ids=[...new Set(rows.map(row=>row.customer_user_id))];
   const {data:profiles,error:profileError}=await client.from('profiles')
-    .select('id,full_name,phone,street,postal_code,city').in('id',ids);
+    .select('id,full_name,email,phone,street,postal_code,city').in('id',ids);
   if(profileError)throw profileError;
   const map=new Map(((profiles??[]) as any[]).map(profile=>[profile.id,profile]));
   return rows.map(row=>({ ...row, profile:map.get(row.customer_user_id)??null }));
