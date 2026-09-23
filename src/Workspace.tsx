@@ -137,12 +137,15 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    const saved=sessionStorage.getItem('motoratlas_office_section') as ShellSection|null;
    return saved&&['Übersicht','Termine','Kunden','Fahrzeuge','Dokumente'].includes(saved)?saved:'Übersicht';
  });
+ const [scheduleRange,setScheduleRange]=useState<AppointmentView>('week');
+ const [now,setNow]=useState(()=>new Date());
  const [chat,setChat]=useState(false);
  const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
  const [customerRequest,setCustomerRequest]=useState<any|null>(null);
  const [busy,setBusy]=useState(false);
+ const [arrivalBusy,setArrivalBusy]=useState<string|null>(null);
  const [actionError,setActionError]=useState<string|null>(null);
  const [documents,setDocuments]=useState<any[]>([]);
  const [documentsBusy,setDocumentsBusy]=useState(false);
@@ -150,12 +153,53 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const counts=useMemo(()=>Object.fromEntries(orderStages.map(stage=>[stage,displayJobs.filter(job=>job.stage===stage).length])),[displayJobs]);
  const title=live.identity?.workshopName??'Carplus Service';
 
+ useEffect(()=>{
+   const timer=window.setInterval(()=>setNow(new Date()),60_000);
+   return()=>window.clearInterval(timer);
+ },[]);
+
  const openSection=(next:ShellSection)=>{
    if(next==='Werkstatt'){setView('workshop');return;}
    sessionStorage.setItem('motoratlas_office_section',next);
    setSection(next);
    window.scrollTo({top:0,behavior:'auto'});
  };
+
+ const appointmentStats=useMemo(()=>{
+   const stats={today:0,late:0,planned:0,proposed:0,arrived:0};
+   for(const item of live.appointments){
+     const phase=appointmentPhase(item,now);
+     if(phase==='today')stats.today++;
+     else if(phase==='late')stats.late++;
+     else if(phase==='planned')stats.planned++;
+     else if(phase==='proposed')stats.proposed++;
+     else stats.arrived++;
+   }
+   return stats;
+ },[live.appointments,now]);
+
+ const visibleAppointments=useMemo(()=>{
+   const begin=startOfToday();
+   const endDate=new Date(begin);
+   endDate.setDate(endDate.getDate()+(scheduleRange==='day'?1:scheduleRange==='week'?7:31));
+   return live.appointments
+     .filter(item=>{
+       const phase=appointmentPhase(item,now);
+       if(phase==='late')return true;
+       const startDate=new Date(item.startsAt);
+       return startDate>=begin&&startDate<endDate;
+     })
+     .sort((a,b)=>new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime());
+ },[live.appointments,scheduleRange,now]);
+
+ const appointmentGroups=useMemo(()=>{
+   const groups=new Map<string,WorkshopAppointment[]>();
+   for(const item of visibleAppointments){
+     const key=new Date(item.startsAt).toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+     groups.set(key,[...(groups.get(key)??[]),item]);
+   }
+   return[...groups.entries()];
+ },[visibleAppointments]);
 
  useEffect(()=>{
    if(section!=='Dokumente'||!live.isLive){setDocuments([]);return;}
@@ -175,7 +219,6 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const actionLabel=()=>{
    if(!live.isLive||!selected)return'Vorgang öffnen';
    switch(selected.rawStage){
-     case'appointment_confirmed':return'Fahrzeug eingetroffen';
      case'awaiting_quote':return'Kostenvoranschlag hochladen';
      case'awaiting_customer_approval':return'Wartet auf Kundenfreigabe';
      case'repair_complete':return'Rechnung hochladen';
@@ -185,19 +228,25 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  };
 
  const runPrimary=async()=>{
-   if(!selected||busy)return;
-   if(!live.isLive)return;
+   if(!selected||busy||!live.isLive)return;
    setActionError(null);
    if(selected.rawStage==='awaiting_quote'){setDocType('quote');return;}
    if(selected.rawStage==='repair_complete'){setDocType('invoice');return;}
    if(selected.rawStage==='awaiting_customer_approval')return;
    setBusy(true);
    try{
-     if(selected.rawStage==='appointment_confirmed')await markVehicleArrived(selected.id);
-     else if(selected.rawStage==='ready_for_pickup')await closeWorkOrder(selected.id);
+     if(selected.rawStage==='ready_for_pickup')await closeWorkOrder(selected.id);
      await live.reload();
    }catch(err){setActionError(err instanceof Error?err.message:'Aktion konnte nicht ausgeführt werden.')}
    finally{setBusy(false)}
+ };
+
+ const markArrived=async(item:WorkshopAppointment)=>{
+   if(!item.workOrderId||arrivalBusy)return;
+   setArrivalBusy(item.id);setActionError(null);
+   try{await markVehicleArrived(item.workOrderId);await live.reload();setSelectedId(item.workOrderId);openSection('Übersicht')}
+   catch(err){setActionError(err instanceof Error?err.message:'Fahrzeug konnte nicht als eingetroffen markiert werden.')}
+   finally{setArrivalBusy(null)}
  };
 
  const documentDone=async()=>{
@@ -209,34 +258,71 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const openDocument=async(document:any)=>{
    const version=document.versions?.[0];
    if(!version)return;
-   try{
-     const url=await getDocumentVersionUrl(version.storage_path);
-     window.open(url,'_blank','noopener,noreferrer');
-   }catch(err){setActionError(err instanceof Error?err.message:'Dokument konnte nicht geöffnet werden.')}
+   try{const url=await getDocumentVersionUrl(version.storage_path);window.open(url,'_blank','noopener,noreferrer')}
+   catch(err){setActionError(err instanceof Error?err.message:'Dokument konnte nicht geöffnet werden.')}
  };
 
  const vehicles=useMemo(()=>{
-   const map=new Map<string,{id:string;vehicle:string;plate:string;job?:DisplayJob;request?:any}>();
+   const map=new Map<string,{id:string;vehicle:string;plate:string;job?:DisplayJob;request?:any;appointment?:WorkshopAppointment}>();
    for(const job of displayJobs)if(job.vehicleId)map.set(job.vehicleId,{id:job.vehicleId,vehicle:job.vehicle,plate:job.plate,job});
    for(const request of live.serviceRequests)if(!map.has(request.vehicleId))map.set(request.vehicleId,{id:request.vehicleId,vehicle:request.vehicle,plate:request.plate,request});
+   for(const appointment of live.appointments)if(!map.has(appointment.vehicleId))map.set(appointment.vehicleId,{id:appointment.vehicleId,vehicle:appointment.vehicle,plate:appointment.plate,appointment});
    return[...map.values()];
- },[displayJobs,live.serviceRequests]);
+ },[displayJobs,live.serviceRequests,live.appointments]);
 
  const customers=useMemo(()=>{
    const map=new Map<string,{id:string;name:string;detail:string;request?:any}>();
-   for(const request of live.serviceRequests)map.set(request.customerUserId,{id:request.customerUserId,name:request.customerName,detail:'Werkstattanfrage vorhanden'});
+   for(const request of live.serviceRequests)map.set(request.customerUserId,{id:request.customerUserId,name:request.customerName,detail:request.customerPhone||'Werkstattanfrage vorhanden'});
+   for(const appointment of live.appointments)if(!map.has(appointment.customerUserId))map.set(appointment.customerUserId,{id:appointment.customerUserId,name:appointment.customerName,detail:appointment.customerPhone||[appointment.customerPostalCode,appointment.customerCity].filter(Boolean).join(' ')||'Termin vorhanden'});
    for(const request of live.customerRequests){
      const name=request.profile?.full_name||'Kundenanfrage';
-     const detail=request.profile?[request.profile.postal_code,request.profile.city].filter(Boolean).join(' '):'Aufnahme angefragt';
+     const detail=request.profile?.phone||[request.profile?.postal_code,request.profile?.city].filter(Boolean).join(' ')||'Aufnahme angefragt';
      map.set(request.customer_user_id,{id:request.customer_user_id,name,detail,request});
    }
    return[...map.values()];
- },[live.serviceRequests,live.customerRequests]);
+ },[live.serviceRequests,live.appointments,live.customerRequests]);
+
+ const openNotification=(notification:AppNotification)=>{
+   if(notification.kind==='customer_request'){openSection('Kunden');return}
+   if(notification.kind==='request'||notification.kind==='appointment'){openSection('Termine');return}
+   openSection('Übersicht');
+ };
+
+ const appointmentCard=(item:WorkshopAppointment)=>{
+   const phase=appointmentPhase(item,now);
+   const canArrive=item.status==='confirmed'&&!item.arrivedAt&&item.rawOrderStage==='appointment_confirmed'&&Boolean(item.workOrderId);
+   return <article key={item.id} className={'schedule-card '+phase}>
+     <div className="schedule-photo"><VehiclePhoto path={item.photoPath} alt={item.vehicle}/></div>
+     <div className="schedule-time"><b>{new Date(item.startsAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</b><small>{item.endsAt?'bis '+new Date(item.endsAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Termin'}</small></div>
+     <div className="schedule-main">
+       <div className="schedule-title"><div><b>{item.vehicle}</b><small>{item.plate} · {item.customerName}</small></div><span className={'schedule-status '+phase}>{phase==='late'&&<AlertTriangle/>}{appointmentPhaseLabel(phase)}</span></div>
+       <p>{item.complaint}</p>
+       <div className="schedule-contact">
+         <span><Phone/> {item.customerPhone||'Keine Telefonnummer hinterlegt'}</span>
+         <span><MapPin/> {[item.customerStreet,item.customerPostalCode,item.customerCity].filter(Boolean).join(', ')||'Keine Anschrift hinterlegt'}</span>
+       </div>
+       <div className="schedule-vehicle-data">
+         <span>EZ <b>{item.firstRegistration?new Date(item.firstRegistration).toLocaleDateString('de-DE'):'—'}</b></span>
+         <span>km <b>{item.mileage!=null?item.mileage.toLocaleString('de-DE'):'—'}</b></span>
+         <span>HSN/TSN <b>{[item.hsn,item.tsn].filter(Boolean).join('/')||'—'}</b></span>
+         <span>VIN <b>{item.vin||'—'}</b></span>
+       </div>
+     </div>
+     <div className="schedule-actions">
+       {canArrive&&<button className="btn primary" disabled={arrivalBusy===item.id} onClick={()=>void markArrived(item)}>{arrivalBusy===item.id?'Speichert …':'Fahrzeug eingetroffen'}</button>}
+       {phase==='arrived'&&item.workOrderId&&<button className="btn secondary" onClick={()=>{setSelectedId(item.workOrderId!);openSection('Übersicht')}}>Auftrag öffnen</button>}
+       {phase==='proposed'&&<span className="waiting-customer">Wartet auf Kundenbestätigung</span>}
+     </div>
+   </article>;
+ };
 
  return <Shell
    onHome={()=>setView('home')}
    onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined}
    onNavigate={openSection}
+   notifications={live.notifications}
+   onNotificationOpen={openNotification}
+   onNotificationsChanged={live.reload}
    title={title}
    mode="Büro"
    active={section}
@@ -244,37 +330,70 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    {(live.error||actionError)&&<div className="workspace-alert">{live.error??actionError}</div>}
 
    {section==='Übersicht'&&<>
-     <PageHead title="Werkstattübersicht" subtitle={live.isLive?'Live-Daten deiner Werkstatt – Änderungen erscheinen auf allen Geräten.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}>
+     <PageHead title="Werkstattübersicht" subtitle={live.isLive?'Was jetzt wichtig ist: Ankünfte, offene Arbeit und neue Kundenaktionen.':'Produktdemo – so sieht der Echtzeitbetrieb später aus.'}>
        <div className="head-actions">
          <span className="realtime"><i/> {live.isLive?'Echtzeit verbunden':'Demo-Modus'}</span>
-         <button className="btn primary" onClick={()=>openSection('Termine')}><Plus size={16}/> Neue Annahme</button>
+         <button className="btn primary" onClick={()=>openSection('Termine')}><CalendarDays size={16}/> Terminplanung</button>
        </div>
      </PageHead>
-     <div className="metrics"><article><small>AKTIVE VORGÄNGE</small><b>{displayJobs.length}</b><span>gesamt</span></article><article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>Termin prüfen</span></article><article><small>KUNDENAUFNAHME</small><b>{live.isLive?live.customerRequests.length:1}</b><span>offen</span></article><article><small>FREIGABEN</small><b>{counts.approval??0}</b><span>beim Kunden</span></article></div>
+     <div className="metrics">
+       <article><small>IN DER WERKSTATT</small><b>{displayJobs.length}</b><span>aktive Fahrzeuge</span></article>
+       <article className={appointmentStats.today?'attention':''}><small>HEUTE ERWARTET</small><b>{appointmentStats.today}</b><span>noch nicht eingetroffen</span></article>
+       <article className={appointmentStats.late?'danger':''}><small>VERSPÄTET</small><b>{appointmentStats.late}</b><span>Termin überschritten</span></article>
+       <article><small>NEUE ANFRAGEN</small><b>{live.isLive?live.serviceRequests.length:3}</b><span>zu bearbeiten</span></article>
+     </div>
+
+     {live.isLive&&<section className="panel today-arrivals">
+       <header><div><span className="overline">HEUTE & ÜBERFÄLLIG</span><h3>Anstehende Fahrzeugannahmen</h3></div><button className="btn secondary" onClick={()=>openSection('Termine')}>Alle Termine</button></header>
+       <div>{live.appointments.filter(item=>['today','late'].includes(appointmentPhase(item,now))).sort((a,b)=>new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime()).slice(0,5).map(appointmentCard)}</div>
+       {!live.appointments.some(item=>['today','late'].includes(appointmentPhase(item,now)))&&<div className="inbox-empty">Aktuell keine fälligen Fahrzeugannahmen.</div>}
+     </section>}
 
      {live.isLive&&<div className="office-inbox-grid">
-       <section className="panel office-inbox"><header><div><span className="overline">WERKSTATTANFRAGEN</span><h3>Termin abstimmen</h3></div><b>{live.serviceRequests.length}</b></header>{live.serviceRequests.length?live.serviceRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}><span className="inbox-icon"><CalendarDays/></span><span><b>{request.vehicle}</b><small>{request.plate} · {request.customerName}</small><p>{request.complaint}</p></span><strong>{request.desiredStart?new Date(request.desiredStart).toLocaleDateString('de-DE'):'Termin offen'}</strong></button>):<div className="inbox-empty">Keine neuen Werkstattanfragen.</div>}</section>
-       <section className="panel office-inbox"><header><div><span className="overline">NEUE KUNDEN</span><h3>Aufnahme freigeben</h3></div><b>{live.customerRequests.length}</b></header>{live.customerRequests.length?live.customerRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}><span className="inbox-icon"><Users/></span><span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?`${request.profile.postal_code??''} ${request.profile.city??''}`:'Profilanfrage'}</small><p>{request.message||'Möchte Kunde dieser Werkstatt werden.'}</p></span><strong>Prüfen</strong></button>):<div className="inbox-empty">Keine offenen Kundenaufnahmen.</div>}</section>
+       <section className="panel office-inbox"><header><div><span className="overline">NEUE WERKSTATTANFRAGEN</span><h3>Termin abstimmen</h3></div><b>{live.serviceRequests.length}</b></header>{live.serviceRequests.length?live.serviceRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}><span className="inbox-icon"><CalendarDays/></span><span><b>{request.vehicle}</b><small>{request.plate} · {request.customerName}{request.customerPhone?' · '+request.customerPhone:''}</small><p>{request.complaint}</p></span><strong>{request.desiredStart?new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}):'Termin offen'}</strong></button>):<div className="inbox-empty">Keine neuen Werkstattanfragen.</div>}</section>
+       <section className="panel office-inbox"><header><div><span className="overline">NEUE KUNDEN</span><h3>Aufnahme freigeben</h3></div><b>{live.customerRequests.length}</b></header>{live.customerRequests.length?live.customerRequests.slice(0,4).map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}><span className="inbox-icon"><Users/></span><span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?.phone||[request.profile?.postal_code,request.profile?.city].filter(Boolean).join(' ')||'Profilanfrage'}</small><p>{request.message||'Möchte Kunde dieser Werkstatt werden.'}</p></span><strong>Prüfen</strong></button>):<div className="inbox-empty">Keine offenen Kundenaufnahmen.</div>}</section>
      </div>}
 
      <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
-     <div className="lower-grid">{selected?<section className="panel focus-card"><div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button><button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button></div></section>:<section className="panel focus-card"><div><span className="overline">KEINE AKTIVEN VORGÄNGE</span><h3>Die Werkstatt-Queue ist leer.</h3><small>Neue bestätigte Termine erscheinen hier automatisch.</small></div></section>}</div>
+     <div className="lower-grid">{selected?<section className="panel focus-card"><div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button><button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button></div></section>:<section className="panel focus-card"><div><span className="overline">KEINE FAHRZEUGE IN DER WERKSTATT</span><h3>Die Werkstatt-Queue ist leer.</h3><small>Bestätigte Termine bleiben in der Terminplanung, bis das Fahrzeug tatsächlich eintrifft.</small></div></section>}</div>
    </>}
 
    {section==='Termine'&&<>
-     <PageHead title="Termine & Anfragen" subtitle="Offene Werkstattanfragen und Terminwünsche an einem Ort."/>
-     <section className="panel office-inbox">
-       <header><div><span className="overline">OFFENE ANFRAGEN</span><h3>{live.serviceRequests.length} Vorgänge warten auf Bearbeitung</h3></div></header>
+     <PageHead title="Terminplanung & Auslastung" subtitle="Bestätigte Termine bleiben geplant. Erst der echte Check-in verschiebt das Fahrzeug in die Werkstatt.">
+       <div className="schedule-range">
+         <button className={scheduleRange==='day'?'active':''} onClick={()=>setScheduleRange('day')}>Heute</button>
+         <button className={scheduleRange==='week'?'active':''} onClick={()=>setScheduleRange('week')}>7 Tage</button>
+         <button className={scheduleRange==='month'?'active':''} onClick={()=>setScheduleRange('month')}>31 Tage</button>
+       </div>
+     </PageHead>
+
+     <div className="schedule-summary">
+       <article><CalendarDays/><div><small>IM ZEITRAUM</small><b>{visibleAppointments.length}</b></div></article>
+       <article><Clock3/><div><small>HEUTE ERWARTET</small><b>{appointmentStats.today}</b></div></article>
+       <article className={appointmentStats.late?'late':''}><AlertTriangle/><div><small>VERSPÄTET</small><b>{appointmentStats.late}</b></div></article>
+       <article><ShieldCheck/><div><small>BESTÄTIGT GEPLANT</small><b>{appointmentStats.planned}</b></div></article>
+     </div>
+
+     <section className="panel schedule-panel">
+       <header><div><span className="overline">WERKSTATTAUSLASTUNG</span><h3>{scheduleRange==='day'?'Heute':scheduleRange==='week'?'Nächste 7 Tage':'Nächste 31 Tage'}</h3></div><small>{appointmentStats.proposed?appointmentStats.proposed+' Terminvorschlag/-vorschläge warten noch auf Kundenantwort.':'Alle Vorschläge beantwortet.'}</small></header>
+       <div className="schedule-groups">
+         {appointmentGroups.map(([day,items])=><section className="schedule-day" key={day}><header><b>{day}</b><span>{items.length} {items.length===1?'Termin':'Termine'}</span></header><div>{items.map(appointmentCard)}</div></section>)}
+         {!appointmentGroups.length&&<div className="inbox-empty">Für diesen Zeitraum sind keine Termine geplant.</div>}
+       </div>
+     </section>
+
+     <section className="panel office-inbox requests-under-calendar">
+       <header><div><span className="overline">OFFENE ANFRAGEN</span><h3>{live.serviceRequests.length} Vorgänge warten auf Terminabstimmung</h3></div></header>
        {live.serviceRequests.length?live.serviceRequests.map(request=><button key={request.id} className="inbox-row" onClick={()=>setServiceRequest(request)}>
          <span className="inbox-icon"><CalendarDays/></span>
-         <span><b>{request.customerName} · {request.vehicle}</b><small>{request.plate}</small><p>{request.complaint}</p></span>
+         <span><b>{request.customerName} · {request.vehicle}</b><small>{request.plate}{request.customerPhone?' · '+request.customerPhone:''}</small><p>{request.complaint}</p></span>
          <strong>{request.desiredStart?new Date(request.desiredStart).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Termin offen'}</strong>
        </button>):<div className="inbox-empty">Keine offenen Terminanfragen.</div>}
      </section>
    </>}
 
    {section==='Kunden'&&<>
-     <PageHead title="Kunden" subtitle="Kundenbeziehungen und offene Aufnahmeanfragen deiner Werkstatt."/>
+     <PageHead title="Kunden" subtitle="Kontaktdaten und offene Aufnahmeanfragen deiner Werkstatt."/>
      <section className="panel office-inbox">
        <header><div><span className="overline">KUNDEN</span><h3>{customers.length} aktuelle Kontakte</h3></div></header>
        {customers.length?customers.map(customer=><button key={customer.id} className="inbox-row customer" onClick={()=>customer.request&&setCustomerRequest(customer.request)}>
@@ -286,16 +405,17 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    </>}
 
    {section==='Fahrzeuge'&&<>
-     <PageHead title="Fahrzeuge" subtitle="Fahrzeuge aus laufenden Aufträgen und aktuellen Werkstattanfragen."/>
+     <PageHead title="Fahrzeuge" subtitle="Fahrzeuge aus Werkstatt, Terminplanung und aktuellen Anfragen."/>
      <section className="panel office-inbox">
-       <header><div><span className="overline">FAHRZEUGE</span><h3>{vehicles.length} Fahrzeuge im aktuellen Bestand</h3></div></header>
+       <header><div><span className="overline">FAHRZEUGE</span><h3>{vehicles.length} Fahrzeuge</h3></div></header>
        {vehicles.length?vehicles.map(vehicle=><button key={vehicle.id} className="inbox-row" onClick={()=>{
          if(vehicle.job){setSelectedId(vehicle.job.id);openSection('Übersicht')}
          else if(vehicle.request)setServiceRequest(vehicle.request);
+         else if(vehicle.appointment)openSection('Termine');
        }}>
          <span className="inbox-icon"><Car/></span>
          <span><b>{vehicle.vehicle}</b><small>{vehicle.plate}</small></span>
-         <strong>{vehicle.job?'Auftrag öffnen':'Anfrage öffnen'}</strong>
+         <strong>{vehicle.job?'Auftrag öffnen':vehicle.request?'Anfrage öffnen':'Termin ansehen'}</strong>
        </button>):<div className="inbox-empty">Noch keine Fahrzeuge vorhanden.</div>}
      </section>
    </>}
