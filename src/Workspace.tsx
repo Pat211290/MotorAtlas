@@ -163,24 +163,26 @@ function appointmentCountdownText(startsAt:string,now:Date){
 
 function customerOrderTitle(rawStage:string){
   if(rawStage==='appointment_confirmed')return'Bevorstehender Werkstatttermin';
-  if(rawStage==='arrived')return'Dein Fahrzeug ist eingetroffen';
-  if(rawStage==='diagnosis')return'Diagnose läuft';
+  if(rawStage==='waiting_diagnosis')return'Dein Fahrzeug ist eingetroffen';
+  if(rawStage==='diagnosing')return'Diagnose läuft';
   if(rawStage==='awaiting_quote')return'Diagnose abgeschlossen';
   if(rawStage==='awaiting_customer_approval')return'Deine Freigabe wird benötigt';
-  if(rawStage==='repair')return'Reparatur läuft';
+  if(rawStage==='ready_for_repair')return'Reparatur ist freigegeben';
+  if(rawStage==='repairing')return'Reparatur läuft';
   if(rawStage==='repair_complete')return'Reparatur abgeschlossen';
   if(rawStage==='ready_for_pickup')return'Dein Fahrzeug ist abholbereit';
   return'Aktueller Werkstattauftrag';
 }
 
 function customerOrderDetail(rawStage:string){
-  if(rawStage==='arrived')return'Die Werkstatt hat dein Fahrzeug vor Ort angenommen.';
-  if(rawStage==='diagnosis')return'Die Werkstatt prüft dein Fahrzeug und sucht die Ursache.';
+  if(rawStage==='waiting_diagnosis')return'Die Werkstatt hat dein Fahrzeug angenommen. Es wartet jetzt auf die Zuordnung zur Diagnose.';
+  if(rawStage==='diagnosing')return'Die Diagnose wurde einem Mitarbeiter zugeordnet und hat begonnen.';
   if(rawStage==='awaiting_quote')return'Die Diagnose ist abgeschlossen. Der Kostenvoranschlag wird vorbereitet.';
   if(rawStage==='awaiting_customer_approval')return'Prüfe den Kostenvoranschlag und entscheide über die Reparatur.';
-  if(rawStage==='repair')return'Die freigegebene Reparatur wird durchgeführt.';
-  if(rawStage==='repair_complete')return'Die Reparatur ist abgeschlossen. Die Werkstatt bereitet die Abholung vor.';
-  if(rawStage==='ready_for_pickup')return'Dein Fahrzeug kann abgeholt werden.';
+  if(rawStage==='ready_for_repair')return'Du hast die Reparatur freigegeben. Die Werkstatt ordnet die Arbeit jetzt einem Mitarbeiter zu.';
+  if(rawStage==='repairing')return'Die Reparatur wurde einem Mitarbeiter zugeordnet und wird durchgeführt.';
+  if(rawStage==='repair_complete')return'Die Reparatur ist abgeschlossen. Rechnung und Abholung werden vorbereitet.';
+  if(rawStage==='ready_for_pickup')return'Dein Fahrzeug ist fertig und kann abgeholt werden.';
   return'Der Status wird automatisch mit der Werkstatt synchronisiert.';
 }
 
@@ -866,6 +868,30 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
            </div>
          </div>
        </section>
+
+       {!isAppointment&&activeOrder.progress&&<section className="panel customer-work-progress">
+         <header><div><span className="overline">LIVE-AUFTRAGSVERLAUF</span><h3>Was passiert mit deinem Fahrzeug?</h3></div><span>Auftrag #{activeOrder.orderNumber}</span></header>
+         <div className="customer-progress-steps">
+           <div className={activeOrder.progress.arrivedAt?'done':'pending'}>
+             <i/><div><b>Fahrzeug eingetroffen</b><span>{activeOrder.progress.arrivedAt?new Date(activeOrder.progress.arrivedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch nicht eingetroffen'}</span></div>
+           </div>
+           <div className={activeOrder.progress.diagnosisStartedAt?'done':activeOrder.rawStage==='waiting_diagnosis'?'current':'pending'}>
+             <i/><div><b>Diagnose gestartet</b><span>{activeOrder.progress.diagnosisStartedAt?<>{new Date(activeOrder.progress.diagnosisStartedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}{activeOrder.progress.diagnosisStaffName?' · '+activeOrder.progress.diagnosisStaffName:''}</>:'Wartet auf Zuordnung'}</span></div>
+           </div>
+           <div className={activeOrder.progress.diagnosisCompletedAt?'done':['diagnosing'].includes(activeOrder.rawStage)?'current':'pending'}>
+             <i/><div><b>Diagnose abgeschlossen</b><span>{activeOrder.progress.diagnosisCompletedAt?new Date(activeOrder.progress.diagnosisCompletedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch offen'}</span></div>
+           </div>
+           <div className={activeOrder.progress.repairStartedAt?'done':activeOrder.rawStage==='ready_for_repair'?'current':'pending'}>
+             <i/><div><b>Reparatur gestartet</b><span>{activeOrder.progress.repairStartedAt?<>{new Date(activeOrder.progress.repairStartedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}{activeOrder.progress.repairStaffName?' · '+activeOrder.progress.repairStaffName:''}</>:'Noch nicht gestartet'}</span></div>
+           </div>
+           <div className={activeOrder.progress.repairCompletedAt?'done':activeOrder.rawStage==='repairing'?'current':'pending'}>
+             <i/><div><b>Reparatur abgeschlossen</b><span>{activeOrder.progress.repairCompletedAt?new Date(activeOrder.progress.repairCompletedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch offen'}</span></div>
+           </div>
+           <div className={activeOrder.progress.readyForPickupAt?'done':activeOrder.rawStage==='repair_complete'?'current':'pending'}>
+             <i/><div><b>Abholbereit</b><span>{activeOrder.progress.readyForPickupAt?new Date(activeOrder.progress.readyForPickupAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch nicht freigegeben'}</span></div>
+           </div>
+         </div>
+       </section>}
 
        {isAppointment&&appointment&&<section className="panel customer-action-strip">
          {customerCancellationOpen(appointment.startsAt,now)?<>
