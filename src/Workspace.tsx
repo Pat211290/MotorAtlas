@@ -641,9 +641,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    :activeRequest
      ?live.workshops.find(item=>item.workshopId===activeRequest.workshopId)??primaryWorkshop
      :primaryWorkshop;
- const activeVehicleId=activeOrder?.vehicleId??activeRequest?.vehicleId??activeOrderAppointment
-   ?activeOrder?.vehicleId??activeRequest?.vehicleId
-   :undefined;
+ const activeVehicleId=activeOrder?.vehicleId??activeRequest?.vehicleId??undefined;
  const activeVehicle=(activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):null)??live.vehicles[0]??null;
 
  const customerNav:ShellNavItem[]=[
