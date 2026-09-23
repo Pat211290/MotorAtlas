@@ -6,13 +6,17 @@ import {
 } from 'lucide-react';
 import { Brand, type AppView } from './components';
 import { getWorkshopLogoPublicUrl, listPublicWorkshops, type PublicWorkshop } from './api';
+import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
+function serviceLabel(code:string){
+  return WORKSHOP_SERVICE_OPTIONS.find(item=>item.code===code)?.label??code;
+}
 function servicesOf(value:unknown){
-  if(Array.isArray(value)) return value.filter(item=>typeof item==='string').slice(0,5) as string[];
+  if(Array.isArray(value)) return value.filter(item=>typeof item==='string').map(item=>serviceLabel(item as string)).slice(0,5) as string[];
   if(value&&typeof value==='object'){
     return Object.entries(value as Record<string,unknown>)
       .filter(([,enabled])=>Boolean(enabled))
-      .map(([name])=>name)
+      .map(([name])=>serviceLabel(name))
       .slice(0,5);
   }
   return [] as string[];
@@ -156,7 +160,7 @@ export function WorkshopFinder({setView}:{setView:(view:AppView)=>void}){
                 </div>
                 <div className="finder-card-copy">
                   <div className="finder-card-title">
-                    <div><h3>{workshop.name}</h3><span><ShieldCheck/> Verifiziert</span></div>
+                    <div><h3>{workshop.name}</h3><div className="finder-badges"><span><ShieldCheck/> Verifiziert</span>{workshop.master_workshop_verified_at&&<span className="master"><Sparkles/> Meisterwerkstatt</span>}</div></div>
                     <span className={workshop.accepts_new_customers?'open':'closed'}>
                       {workshop.accepts_new_customers?'Nimmt Neukunden an':'Keine Neukunden'}
                     </span>
