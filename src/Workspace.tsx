@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Bell, Building2, CalendarDays, Car, Clock3, FileText, Home, MapPin, MessageCircle,
+  AlertTriangle, Bell, Building2, CalendarDays, Car, Clock3, FileText, Home, Mail, MapPin, MessageCircle,
   Phone, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, Wrench
 } from 'lucide-react';
 import { jobs, type Job, type Stage } from './demo';
@@ -296,6 +296,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
        <p>{item.complaint}</p>
        <div className="schedule-contact">
          <span><Phone/> {item.customerPhone||'Keine Telefonnummer hinterlegt'}</span>
+         {item.customerEmail&&<span><Mail/> {item.customerEmail}</span>}
          <span><MapPin/> {[item.customerStreet,item.customerPostalCode,item.customerCity].filter(Boolean).join(', ')||'Keine Anschrift hinterlegt'}</span>
        </div>
        <div className="schedule-vehicle-data">
