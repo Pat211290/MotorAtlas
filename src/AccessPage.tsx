@@ -104,10 +104,18 @@ const benefits:Record<Tab,{kicker:string,title:string,text:string;items:Array<{i
   }
 };
 
+function appPath(segment:string){
+  const basePath=new URL(import.meta.env.BASE_URL,location.origin).pathname.replace(/\/+$/,'');
+  return `${basePath}/${segment.replace(/^\/+|\/+$/g,'')}`;
+}
+
 function initialTab():Tab{
   const params=new URLSearchParams(location.search);
-  if(params.get('confirmed')==='1')return'confirmed';
+  const path=location.pathname.replace(/\/+$/,'');
+  if(path.endsWith('/bestaetigung')||params.get('confirmed')==='1')return'confirmed';
+  if(path.endsWith('/passwort-zuruecksetzen'))return params.get('recovery')==='1'?'password':'reset';
   if(params.get('recovery')==='1')return'password';
+  if(path.endsWith('/anmelden'))return'login';
   const mode=sessionStorage.getItem('motoratlas_access_mode');
   sessionStorage.removeItem('motoratlas_access_mode');
   return mode==='login'||mode==='customer'||mode==='workshop'||mode==='start'?mode:'start';
@@ -130,7 +138,18 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [resendBusy,setResendBusy]=useState(false);
   const [resendStatus,setResendStatus]=useState('');
 
-  const setTab=(next:Tab)=>{setMessage('');setResendStatus('');setTabState(next)};
+  const setTab=(next:Tab)=>{
+    setMessage('');
+    setResendStatus('');
+    if(next==='reset'){
+      history.pushState({},'',appPath('passwort-zuruecksetzen'));
+    }else if(next!=='confirmed'&&location.pathname.replace(/\/+$/,'').endsWith('/bestaetigung')){
+      history.pushState({},'',appPath('anmelden'));
+    }else if(next==='login'&&!location.pathname.replace(/\/+$/,'').endsWith('/anmelden')){
+      history.pushState({},'',appPath('anmelden'));
+    }
+    setTabState(next);
+  };
   const benefit=benefits[tab];
 
   useEffect(()=>{
@@ -145,7 +164,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     if(supabase){
       try{await supabase.auth.signOut()}catch{}
     }
-    history.replaceState({},'',location.pathname+'#/anmelden');
+    history.replaceState({},'',appPath('anmelden'));
     setEmail('');
     setPassword('');
     setMessage('');
@@ -161,7 +180,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       const {error}=await supabase.auth.resend({
         type:'signup',
         email:pendingEmail,
-        options:{emailRedirectTo:authReturnUrl('confirmed=1')}
+        options:{emailRedirectTo:authReturnUrl('/bestaetigung')}
       });
       if(error){
         if(error.status===429){
@@ -188,7 +207,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     setBusy(true);
     try{
       if(tab==='reset'){
-        const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:authReturnUrl('recovery=1')});
+        const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:authReturnUrl('/passwort-zuruecksetzen','recovery=1')});
         if(error)throw error;
         setMessage('Wenn zu dieser E-Mail ein Konto existiert, wurde ein Link zum Zurücksetzen des Passworts versendet.');
         return;
@@ -199,8 +218,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
         const {error}=await supabase.auth.updateUser({password:newPassword});
         if(error)throw error;
         await supabase.auth.signOut();
-        const base=new URL('./',document.baseURI);
-        history.replaceState({},'',base.pathname+'#/anmelden');
+        history.replaceState({},'',appPath('anmelden'));
         setMessage('Passwort erfolgreich geändert. Du kannst dich jetzt neu anmelden.');
         setPassword('');
         setNewPassword('');
