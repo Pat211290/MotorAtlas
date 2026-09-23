@@ -428,7 +428,7 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
 
 export type CustomerVehicle={
   id:string;make:string;model:string;variant?:string|null;licensePlate:string;mileage?:number|null;
-  firstRegistration?:string|null;photoPath:string;
+  firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;vin?:string|null;photoPath:string;
 };
 export type CustomerOrder={
   id:string;orderNumber:string;vehicleId:string;serviceRequestId?:string|null;appointmentId?:string|null;
@@ -436,6 +436,7 @@ export type CustomerOrder={
 };
 export type CustomerWorkshop={
   workshopId:string;linkId:string;isPrimary:boolean;name:string;street:string;postalCode:string;city:string;
+  phone?:string|null;email?:string|null;website?:string|null;description?:string|null;
   logoPath?:string|null;acceptsNewCustomers:boolean;
 };
 export type CustomerServiceRequest={
@@ -459,7 +460,7 @@ export async function loadCustomerWorkspace():Promise<{
   const {data:auth}=await client.auth.getUser();
   if(!auth.user)throw new Error('Not signed in');
 
-  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,license_plate,mileage,first_registration,photo_path')
+  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,license_plate,mileage,first_registration,hsn,tsn,vin,photo_path')
       .eq('owner_user_id',auth.user.id).is('archived_at',null).order('created_at',{ascending:true});
   if(vehicleResult.error)throw vehicleResult.error;
 
@@ -488,7 +489,7 @@ export async function loadCustomerWorkspace():Promise<{
     ...((requestResult.data??[]) as any[]).map(request=>request.workshop_id)
   ])];
   const workshopResult=workshopIds.length
-    ?await client.from('workshops').select('id,name,street,postal_code,city,logo_path,accepts_new_customers').in('id',workshopIds)
+    ?await client.from('workshops').select('id,name,street,postal_code,city,phone,email,website,description,logo_path,accepts_new_customers').in('id',workshopIds)
     :{data:[],error:null} as any;
   if(workshopResult.error)throw workshopResult.error;
 
@@ -505,7 +506,7 @@ export async function loadCustomerWorkspace():Promise<{
   return{
     vehicles:((vehicleResult.data??[]) as any[]).map(v=>({
       id:v.id,make:v.make,model:v.model,variant:v.variant,licensePlate:v.license_plate,mileage:v.mileage,
-      firstRegistration:v.first_registration,photoPath:v.photo_path
+      firstRegistration:v.first_registration,hsn:v.hsn,tsn:v.tsn,vin:v.vin,photoPath:v.photo_path
     })),
     orders:((orderResult.data??[]) as any[]).map(o=>({
       id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,serviceRequestId:o.service_request_id,appointmentId:o.appointment_id,
@@ -514,8 +515,9 @@ export async function loadCustomerWorkspace():Promise<{
     workshops:((linkResult.data??[]) as any[]).map(link=>{
       const workshop=workshopMap.get(link.workshop_id) as any;
       return{workshopId:link.workshop_id,linkId:link.id,isPrimary:Boolean(link.is_primary),name:workshop?.name??'Werkstatt',
-        street:workshop?.street??'',postalCode:workshop?.postal_code??'',city:workshop?.city??'',logoPath:workshop?.logo_path??null,
-        acceptsNewCustomers:Boolean(workshop?.accepts_new_customers)};
+        street:workshop?.street??'',postalCode:workshop?.postal_code??'',city:workshop?.city??'',
+        phone:workshop?.phone??null,email:workshop?.email??null,website:workshop?.website??null,description:workshop?.description??null,
+        logoPath:workshop?.logo_path??null,acceptsNewCustomers:Boolean(workshop?.accepts_new_customers)};
     }),
     requests:((requestResult.data??[]) as any[]).map(r=>({
       id:r.id,workshopId:r.workshop_id,vehicleId:r.vehicle_id,complaint:r.complaint,status:r.status,
@@ -780,6 +782,29 @@ export async function listWorkOrderDocuments(workOrderId:string){
   return docs.map(document=>({...document,versions:grouped.get(document.id)??[]}));
 }
 
+export async function listMyCustomerDocuments(){
+  const client=db();
+  const {data:auth}=await client.auth.getUser();
+  if(!auth.user)return[] as Array<WorkOrderDocument&{versions:DocumentVersion[]}>;
+  const {data:documents,error}=await client.from('documents')
+    .select('*')
+    .eq('customer_user_id',auth.user.id)
+    .eq('status','published')
+    .order('created_at',{ascending:false});
+  if(error)throw error;
+  const docs=(documents??[]) as WorkOrderDocument[];
+  if(!docs.length)return[] as Array<WorkOrderDocument&{versions:DocumentVersion[]}>;
+  const ids=docs.map(item=>item.id);
+  const {data:versions,error:versionError}=await client.from('document_versions')
+    .select('*').in('document_id',ids).order('version_number',{ascending:false});
+  if(versionError)throw versionError;
+  const grouped=new Map<string,DocumentVersion[]>();
+  for(const version of (versions??[]) as DocumentVersion[]){
+    grouped.set(version.document_id,[...(grouped.get(version.document_id)??[]),version]);
+  }
+  return docs.map(document=>({...document,versions:grouped.get(document.id)??[]}));
+}
+
 export async function getDocumentVersionUrl(storagePath:string,expiresIn=300){
   const {data,error}=await db().storage.from('documents').createSignedUrl(storagePath,expiresIn);
   if(error)throw error;
@@ -880,12 +905,13 @@ export async function uploadWorkshopLogo(input:{workshopId:string;file:File;prim
 
 export async function updateWorkshopProfile(input:{
   workshopId:string;name:string;legalName?:string;street:string;postalCode:string;city:string;
-  description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;services?:string[];
+  phone?:string;email?:string;website?:string;description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;services?:string[];
 }){
   const client=db();
   const {data,error}=await client.from('workshops').update({
     name:input.name.trim(),legal_name:input.legalName?.trim()||null,street:input.street.trim(),
-    postal_code:input.postalCode.trim(),city:input.city.trim(),description:input.description?.trim()||null,
+    postal_code:input.postalCode.trim(),city:input.city.trim(),phone:input.phone?.trim()||null,
+    email:input.email?.trim()||null,website:input.website?.trim()||null,description:input.description?.trim()||null,
     operating_mode:input.operatingMode,accepts_new_customers:input.acceptsNewCustomers,
     services:input.services??[]
   }).eq('id',input.workshopId).select().single();
@@ -972,7 +998,7 @@ export async function listPendingCustomerRequests(workshopId:string){
 
 export async function getWorkshopProfile(workshopId:string){
   const {data,error}=await db().from('workshops')
-    .select('id,name,legal_name,street,postal_code,city,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_requested_at,verification_review_note')
+    .select('id,name,legal_name,street,postal_code,city,phone,email,website,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_requested_at,verification_review_note')
     .eq('id',workshopId).single();
   if(error)throw error;return data;
 }
