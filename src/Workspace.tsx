@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
+import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -181,7 +181,7 @@ function customerOrderTitle(rawStage:string,commercialState?:string|null){
   return'Aktueller Werkstattauftrag';
 }
 
-function customerOrderDetail(rawStage:string,commercialState?:string|null){
+function customerOrderDetail(rawStage:string,commercialState?:string|null,invoiceRequired=true){
   if(rawStage==='waiting_diagnosis')return'Die Werkstatt hat dein Fahrzeug angenommen. Es wartet jetzt auf die Zuordnung zur Diagnose.';
   if(rawStage==='diagnosing')return'Die Diagnose wurde einem Mitarbeiter zugeordnet und hat begonnen.';
   if(rawStage==='awaiting_quote')return'Die Werkstatt bereitet den Kostenvoranschlag bzw. den nächsten vereinbarten Schritt vor.';
@@ -199,7 +199,9 @@ function customerOrderDetail(rawStage:string,commercialState?:string|null){
     if(commercialState==='diagnosis_only')return'Die gewünschte Diagnose/Prüfung ist beendet. Eine Reparatur wurde nicht automatisch beauftragt.';
     return'Die Arbeiten sind abgeschlossen. Rechnung und Abholung werden vorbereitet.';
   }
-  if(rawStage==='ready_for_pickup')return'Dein Fahrzeug ist fertig und kann abgeholt werden.';
+  if(rawStage==='ready_for_pickup')return invoiceRequired===false
+    ?'Für diesen Auftrag sind keine Kosten entstanden. Dein Fahrzeug ist fertig und kann abgeholt werden.'
+    :'Dein Fahrzeug ist fertig und kann abgeholt werden.';
   return'Der Status wird automatisch mit der Werkstatt synchronisiert.';
 }
 
@@ -264,6 +266,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
  const [workDecision,setWorkDecision]=useState<WorkNextStepDecision|null>(null);
+ const [noCostConfirm,setNoCostConfirm]=useState(false);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
  const [customerRequest,setCustomerRequest]=useState<any|null>(null);
  const [busy,setBusy]=useState(false);
@@ -391,6 +394,20 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    if(!selected)return;
    if(docType==='invoice')await markReadyForPickup(selected.id);
    await live.reload();
+ };
+
+ const confirmNoCosts=async()=>{
+   if(!selected||busy||!live.isLive)return;
+   setBusy(true);setActionError(null);
+   try{
+     await markNoCostsAndReadyForPickup(selected.id);
+     setNoCostConfirm(false);
+     await live.reload();
+   }catch(err){
+     setActionError(err instanceof Error?err.message:'Der Auftrag konnte nicht ohne Rechnung abgeschlossen werden.');
+   }finally{
+     setBusy(false);
+   }
  };
 
  const openDocument=async(document:any)=>{
@@ -522,7 +539,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
      <div className="lower-grid">{selected?<section className="panel focus-card workflow-focus-card">
        <div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small>{selected.workflowPath&&<span className="workflow-path-label">{selected.workflowPath==='direct_work'?'Direktauftrag':selected.workflowPath==='diagnosis_only'?'Nur Diagnose':selected.workflowPath==='diagnosis_then_decide'?'Diagnose → Entscheidung':selected.workflowPath==='quote_before_work'?'Kostenvoranschlag vor Arbeit':'Diagnose → Kostenvoranschlag'}</span>}</div>
-       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button>{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
+       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button>{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
        {['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<div className="workflow-next-steps">
          <div className="workflow-choice-grid">
            <button className="workflow-choice primary" onClick={async()=>{setBusy(true);setActionError(null);try{if(selected.rawStage==='awaiting_customer_decision')await resolveWorkOrderNextStep({workOrderId:selected.id,decision:'motoratlas_quote'});setDocType('quote');await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Kostenvoranschlag konnte nicht vorbereitet werden.')}finally{setBusy(false)}}}>
@@ -539,6 +556,16 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
            </button>
            <button className="workflow-choice" onClick={()=>setWorkDecision('deferred')}>
              <CalendarDays/><span><b>Reparatur später</b><small>Aktuellen Auftrag beenden und später neu planen</small></span>
+           </button>
+         </div>
+       </div>}
+       {selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false&&<div className="workflow-next-steps billing-next-steps">
+         <div className="workflow-choice-grid billing-choice-grid">
+           <button className="workflow-choice primary" disabled={busy} onClick={()=>setDocType('invoice')}>
+             <FileText/><span><b>Rechnung hochladen</b><small>Rechnung bereitstellen und das Fahrzeug anschließend zur Abholung freigeben</small></span>
+           </button>
+           <button className="workflow-choice no-cost-choice" disabled={busy} onClick={()=>{setActionError(null);setNoCostConfirm(true)}}>
+             <ShieldCheck/><span><b>Keine Kosten entstanden</b><small>Keine Rechnung erforderlich – Fahrzeug direkt abholbereit setzen</small></span>
            </button>
          </div>
        </div>}
@@ -623,6 +650,14 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  <VehicleChat open={Boolean(chatInboxTarget)} onClose={()=>setChatInboxTarget(null)} audience="workshop" workshopId={live.identity?.workshopId} vehicleId={chatInboxTarget?.vehicleId} vehicleLabel={chatInboxTarget?.vehicleName??'Fahrzeug'} plate={chatInboxTarget?.plate??'—'} chatEnabled={live.identity?.chatEnabled}/>
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  {selected&&<WorkDecisionModal open={Boolean(workDecision)} onClose={()=>setWorkDecision(null)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle} decision={workDecision}/>}
+ {selected&&noCostConfirm&&<div className="modal-backdrop" onMouseDown={()=>{if(!busy)setNoCostConfirm(false)}}>
+   <section className="workflow-modal no-cost-modal" onMouseDown={event=>event.stopPropagation()}>
+     <header><div className="modal-icon"><ShieldCheck/></div><div><span>ABRECHNUNG</span><h2>Keine Kosten entstanden</h2><small>{selected.vehicle} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><button disabled={busy} onClick={()=>setNoCostConfirm(false)} aria-label="Schließen">×</button></header>
+     <div className="workflow-decision-note"><ShieldCheck/><p>Für diesen Auftrag wird dem Kunden nichts berechnet. Es ist keine Rechnung erforderlich und das Fahrzeug wird direkt auf „abholbereit“ gesetzt.</p></div>
+     {actionError&&<div className="modal-error">{actionError}</div>}
+     <div className="modal-actions"><button type="button" className="btn secondary" disabled={busy} onClick={()=>setNoCostConfirm(false)}>Abbrechen</button><button type="button" className="btn primary" disabled={busy} onClick={()=>void confirmNoCosts()}>{busy?'Wird gespeichert …':'Keine Kosten · abholbereit'}</button></div>
+   </section>
+ </div>}
  <ServiceRequestOfficeModal open={Boolean(serviceRequest)} onClose={()=>setServiceRequest(null)} onDone={live.reload} request={serviceRequest}/>
  <CustomerAdmissionModal open={Boolean(customerRequest)} onClose={()=>setCustomerRequest(null)} onDone={live.reload} request={customerRequest}/>
  <AppointmentCancelModal open={Boolean(cancelTarget)} onClose={()=>setCancelTarget(null)} onDone={live.reload} appointmentId={cancelTarget?.id} startsAt={cancelTarget?.startsAt} mode="workshop" vehicle={cancelTarget?.vehicle}/>
@@ -966,7 +1001,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
            {isAppointment&&appointment?<>
              <p className="customer-focus-date">{relativeDayLabel(new Date(appointment.startsAt),now)} · {new Date(appointment.startsAt).toLocaleString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})} Uhr</p>
              <p>{workshop?.name??'Werkstatt'} erwartet dein Fahrzeug. Erst der Check-in vor Ort setzt den Status auf „eingetroffen“.</p>
-           </>:<p>{customerOrderDetail(activeOrder.rawStage,activeOrder.commercialState)}</p>}
+           </>:<p>{customerOrderDetail(activeOrder.rawStage,activeOrder.commercialState,activeOrder.invoiceRequired)}</p>}
            <div className="customer-focus-vehicle">
              <Car/><span><b>{vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug'}</b><small>{vehicle?.licensePlate??'—'}{activeOrder.orderNumber?` · Auftrag #${activeOrder.orderNumber}`:''}</small></span>
            </div>
