@@ -33,7 +33,9 @@ export function VerificationPanel({
   onBeforeSubmit?:()=>Promise<void>;
 }){
   const scopes=useMemo(()=>qualificationScopesForServices(services),[services]);
-  const regulated=scopes.length>0;
+  const regulated=scopes.includes('kfz_trade')||scopes.includes('tire_trade');
+  const climateRequired=scopes.includes('climate_cert');
+  const reviewRequired=scopes.includes('review');
   const [documents,setDocuments]=useState<WorkshopVerificationDocument[]>([]);
   const [status,setStatus]=useState<VerificationStatus>((initialStatus as VerificationStatus)||'not_requested');
   const [busy,setBusy]=useState(false);
@@ -59,15 +61,24 @@ export function VerificationPanel({
   const businessDoc=documents.find(item=>item.document_type==='business_registration');
   const tradeDoc=documents.find(item=>item.document_type==='handwerksrolle');
   const qualificationDoc=documents.find(item=>['meisterbrief','industriemeister','techniker','other'].includes(item.document_type));
-  const ready=Boolean(businessDoc&&(!regulated||(tradeDoc&&qualificationDoc)));
+  const climateDoc=documents.find(item=>item.document_type==='climate_certificate');
+  const ready=Boolean(
+    businessDoc
+    &&(!regulated||(tradeDoc&&qualificationDoc))
+    &&(!climateRequired||climateDoc)
+  );
 
-  const uploadPlain=async(kind:'business_registration'|'handwerksrolle',file?:File)=>{
+  const uploadPlain=async(kind:'business_registration'|'handwerksrolle'|'climate_certificate',file?:File)=>{
     if(!file||busy)return;
     setBusy(true);setError('');setMessage('');
     try{
       await uploadWorkshopVerificationDocument({workshopId,file,documentType:kind});
       await reload();
-      setMessage(kind==='business_registration'?'Betriebsnachweis gespeichert.':'Handwerksrollen-/Betriebsleiter-Nachweis gespeichert.');
+      setMessage(
+        kind==='business_registration'?'Betriebsnachweis gespeichert.'
+        :kind==='climate_certificate'?'Kfz-Klimasachkundenachweis gespeichert.'
+        :'Handwerksrollen-/Betriebsleiter-Nachweis gespeichert.'
+      );
     }catch(err){setError(err instanceof Error?err.message:'Nachweis konnte nicht gespeichert werden.')}
     finally{setBusy(false)}
   };
@@ -121,7 +132,9 @@ export function VerificationPanel({
           ?'Für die gewählten Tätigkeiten ist ein Qualifikationsnachweis erforderlich.'
           :raw.includes('handwerksrolle evidence required')
             ?'Für die gewählten Tätigkeiten ist zusätzlich der Handwerksrollen-/Betriebsleiter-Nachweis erforderlich.'
-            :raw;
+            :raw.includes('climate certificate required')
+              ?'Für Klimaservice ist ein Kfz-Klimasachkundenachweis erforderlich.'
+              :raw;
       setError(translated);
     }finally{setBusy(false)}
   };
@@ -149,13 +162,34 @@ export function VerificationPanel({
           :<label className="btn secondary verification-upload">Hochladen<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>void uploadPlain('business_registration',e.target.files?.[0])}/></label>}
       </article>
 
+      {reviewRequired&&<article className="optional review">
+        <div className="verification-step-icon"><FileSearch/></div>
+        <div>
+          <span>HANDWERKSRECHTLICHE EINORDNUNG</span>
+          <b>Service-/Diagnoseumfang wird im Gesamtbild geprüft</b>
+          <p>Einfache Einzelarbeiten oder reines Auslesen lösen nicht automatisch einen Meister-/Handwerksrollen-Nachweis aus. Sobald Umfang und Tiefe aber eine wesentliche Tätigkeit des Kfz-Handwerks bilden, kann eine Eintragung erforderlich sein. MotorAtlas behandelt diese Auswahl deshalb nicht pauschal als meisterpflichtig.</p>
+        </div>
+      </article>}
+
+      {climateRequired&&<article className={climateDoc?'done':''}>
+        <div className="verification-step-icon">{climateDoc?<FileCheck2/>:<ShieldCheck/>}</div>
+        <div>
+          <span>KFZ-KLIMASERVICE</span>
+          <b>Sachkundenachweis für Fahrzeug-Klimaanlagen</b>
+          <p>Für Arbeiten mit Kältemittel an Kfz-Klimaanlagen wird ein eigener Sachkundenachweis geprüft. Das ist ein separater Fachnachweis und nicht automatisch ein Meisterbrief.</p>
+        </div>
+        {climateDoc
+          ?<button className="btn secondary" onClick={()=>void openDocument(climateDoc)}>Ansehen</button>
+          :<label className="btn secondary verification-upload">Hochladen<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>void uploadPlain('climate_certificate',e.target.files?.[0])}/></label>}
+      </article>}
+
       {regulated?<article className={qualificationDoc?'done':''}>
         <div className="verification-step-icon">{ocrBusy?<LoaderCircle className="spin"/>:qualificationDoc?<BadgeCheck/>:<FileSearch/>}</div>
         <div>
-          <span>SCHRITT 2 · AUTOMATISCHE ERKENNUNG</span>
+          <span>FACHQUALIFIKATION · AUTOMATISCHE ERKENNUNG</span>
           <b>Meister-, Industriemeister- oder Technikernachweis</b>
           <p>
-            {scopes.includes('kfz_trade')&&'Kfz-relevante Tätigkeiten erkannt. '}
+            {scopes.includes('kfz_trade')&&'Wesentliche Kfz-Tätigkeiten erkannt. '}
             {scopes.includes('tire_trade')&&'Reifen-/Vulkanisationstätigkeit erkannt. '}
             Foto oder PDF wird direkt im Browser ausgelesen.
           </p>
@@ -175,14 +209,14 @@ export function VerificationPanel({
         {qualificationDoc
           ?<button className="btn secondary" onClick={()=>void openDocument(qualificationDoc)}>Ansehen</button>
           :<label className={'btn secondary verification-upload '+(ocrBusy?'disabled':'')}>Scannen<input disabled={ocrBusy} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>void uploadQualification(e.target.files?.[0])}/></label>}
-      </article>:<article className="done optional">
+      </article>:!reviewRequired&&!climateRequired&&<article className="done optional">
         <div className="verification-step-icon"><BadgeCheck/></div>
-        <div><span>FACHNACHWEIS</span><b>Für den gewählten Leistungsumfang nicht erforderlich</b><p>MotorAtlas fordert bei einfachen, nicht als zulassungspflichtig eingestuften Serviceleistungen keinen Meister- oder Technikernachweis.</p></div>
+        <div><span>FACHNACHWEIS</span><b>Für den gewählten Leistungsumfang nicht erforderlich</b><p>Für reine Aufbereitung, Wäsche oder einfachen Rad-/Reifenservice fordert MotorAtlas keinen Meister- oder Technikernachweis.</p></div>
       </article>}
 
       {regulated&&<article className={tradeDoc?'done':''}>
         <div className="verification-step-icon">{tradeDoc?<FileCheck2/>:<Wrench/>}</div>
-        <div><span>SCHRITT 3</span><b>Handwerksrolle / Betriebsleiter</b><p>Der Nachweis bestätigt, dass die Qualifikation für den konkreten Betrieb und das angebotene zulassungspflichtige Handwerk genutzt werden darf.</p></div>
+        <div><span>BETRIEBLICHE BERECHTIGUNG</span><b>Handwerksrolle / Betriebsleiter</b><p>Der Nachweis bestätigt, dass die Qualifikation für den konkreten Betrieb und das angebotene zulassungspflichtige Handwerk genutzt werden darf.</p></div>
         {tradeDoc
           ?<button className="btn secondary" onClick={()=>void openDocument(tradeDoc)}>Ansehen</button>
           :<label className="btn secondary verification-upload">Hochladen<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>void uploadPlain('handwerksrolle',e.target.files?.[0])}/></label>}
@@ -192,7 +226,13 @@ export function VerificationPanel({
     <div className="verification-submit">
       <div>
         <b>{ready?'Alle erforderlichen Nachweise liegen vor.':'Noch nicht vollständig.'}</b>
-        <span>{regulated?'Bei meister-/zulassungspflichtigem Leistungsumfang werden Qualifikation und betriebliche Berechtigung gemeinsam geprüft.':'Für diesen Leistungsumfang genügt der Betriebsnachweis.'}</span>
+        <span>{regulated
+          ?'Bei zulassungspflichtigem Leistungsumfang werden Qualifikation und betriebliche Berechtigung gemeinsam geprüft.'
+          :climateRequired
+            ?'Für Klimaservice wird zusätzlich der Kfz-Klimasachkundenachweis geprüft.'
+            :reviewRequired
+              ?'Diese Service-/Diagnoseleistungen werden nach ihrem konkreten Umfang beurteilt; ein Meisterbrief wird nicht pauschal verlangt.'
+              :'Für diesen Leistungsumfang genügt der Betriebsnachweis.'}</span>
       </div>
       <button className="btn primary" disabled={!ready||busy||status==='pending'||status==='verified'} onClick={()=>void submit()}>
         {status==='verified'?'Verifiziert':status==='pending'?'Prüfung läuft':busy?'Wird eingereicht …':'Verifizierung beantragen'}
