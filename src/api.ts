@@ -280,7 +280,7 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
     :{data:[],error:null} as any;
   if(requestResult.error)throw requestResult.error;
   const assignmentResult=await client.from('work_order_assignments')
-    .select('work_order_id,member_user_id,status').in('work_order_id',orderIds).eq('status','active');
+    .select('work_order_id,member_user_id,status').in('work_order_id',orderIds).eq('status','claimed');
   if(assignmentResult.error)throw assignmentResult.error;
 
   const assigneeIds=[...new Set(((assignmentResult.data??[]) as any[]).map(a=>a.member_user_id).filter(Boolean))];
