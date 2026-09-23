@@ -350,7 +350,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      {live.isLive&&<section className="panel today-arrivals">
        <header><div><span className="overline">HEUTE & ÜBERFÄLLIG</span><h3>Anstehende Fahrzeugannahmen</h3></div><button className="btn secondary" onClick={()=>openSection('Termine')}>Alle Termine</button></header>
        <div>{live.appointments.filter(item=>{const phase=appointmentPhase(item,now);return phase==='late'||(item.status==='confirmed'&&!item.arrivedAt&&sameLocalDay(new Date(item.startsAt),now))}).sort((a,b)=>new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime()).slice(0,5).map(appointmentCard)}</div>
-       {!live.appointments.some(item=>{const phase=appointmentPhase(item,now);return phase==='late'||(item.status==='confirmed'&&!item.arrivedAt&&sameLocalDay(new Date(item.startsAt),now))})&&<div className="inbox-empty">Heute sind keine Fahrzeugannahmen geplant.</div>
+       {!live.appointments.some(item=>{const phase=appointmentPhase(item,now);return phase==='late'||(item.status==='confirmed'&&!item.arrivedAt&&sameLocalDay(new Date(item.startsAt),now))})&&<div className="inbox-empty">Heute sind keine Fahrzeugannahmen geplant.</div>}
      </section>}
 
      {live.isLive&&<div className="office-inbox-grid">
