@@ -15,13 +15,14 @@ export function authReturnUrl(path:string,query?:string){
 
 export async function signUpCustomer(
   email:string,password:string,fullName:string,
-  input?:{accountIntent?:'customer'|'workshop';street?:string;postalCode?:string;city?:string}
+  input?:{accountIntent?:'customer'|'workshop';phone?:string;street?:string;postalCode?:string;city?:string}
 ){
   const {data,error}=await db().auth.signUp({
     email,password,
     options:{emailRedirectTo:authReturnUrl('/bestaetigung'),data:{
       full_name:fullName.trim(),
       account_intent:input?.accountIntent??'customer',
+      phone:input?.phone?.trim()||null,
       street:input?.street?.trim()||null,
       postal_code:input?.postalCode?.trim()||null,
       city:input?.city?.trim()||null,
@@ -649,10 +650,27 @@ export async function uploadOfficialDocument(input:{
 }
 
 
-export async function updateMyProfile(input:{fullName:string;street:string;postalCode:string;city:string}){
-  const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
+export type CustomerProfile={
+  id:string;fullName:string;phone?:string|null;street?:string|null;postalCode?:string|null;city?:string|null;countryCode:string;
+};
+
+export async function getMyProfile():Promise<CustomerProfile>{
+  const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Bitte zuerst anmelden.');
+  const {data,error}=await client.from('profiles')
+    .select('id,full_name,phone,street,postal_code,city,country_code')
+    .eq('id',auth.user.id).single();
+  if(error)throw error;
+  return{
+    id:data.id,fullName:data.full_name,phone:data.phone,street:data.street,postalCode:data.postal_code,
+    city:data.city,countryCode:data.country_code??'DE'
+  };
+}
+
+export async function updateMyProfile(input:{fullName:string;phone?:string;street:string;postalCode:string;city:string}){
+  const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Bitte zuerst anmelden.');
   const {data,error}=await client.from('profiles').update({
-    full_name:input.fullName.trim(),street:input.street.trim(),postal_code:input.postalCode.trim(),city:input.city.trim()
+    full_name:input.fullName.trim(),phone:input.phone?.trim()||null,street:input.street.trim(),
+    postal_code:input.postalCode.trim(),city:input.city.trim()
   }).eq('id',auth.user.id).select().single();
   if(error)throw error;return data;
 }
