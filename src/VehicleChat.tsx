@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Car, FileText, Image as ImageIcon, Paperclip, Send, ShieldCheck, X } from 'lucide-react';
+import { Car, FileText, Image as ImageIcon, MessageCircle, Paperclip, Send, ShieldCheck, X } from 'lucide-react';
 import {
   ensureVehicleChat,ensureWorkOrderChat,getChatAttachmentUrl,getSignedInUserId,listChatMessages,markChatRead,
   sendChatAttachment,sendChatMessage,subscribeChat,type ChatMessage
@@ -16,6 +16,7 @@ type Props={
   vehicleLabel?:string;
   plate?:string;
   orderNumber?:string;
+  chatEnabled?:boolean;
 };
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -31,7 +32,7 @@ function formatTime(value:string){
 }
 
 export function VehicleChat({
-  open,onClose,audience,workOrderId,workshopId,vehicleId,vehicleLabel='BMW X3 3.0i',plate='SAD XX 123',orderNumber='184'
+  open,onClose,audience,workOrderId,workshopId,vehicleId,vehicleLabel='BMW X3 3.0i',plate='SAD XX 123',orderNumber='184',chatEnabled=true
 }:Props){
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [threadId,setThreadId]=useState<string|null>(null);
@@ -40,6 +41,7 @@ export function VehicleChat({
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const fileRef=useRef<HTMLInputElement>(null);
+  const messagesRef=useRef<HTMLDivElement>(null);
   const isLive=backendConfigured&&Boolean(
     (workOrderId&&uuid.test(workOrderId))||
     (workshopId&&vehicleId&&uuid.test(workshopId)&&uuid.test(vehicleId))
@@ -54,6 +56,7 @@ export function VehicleChat({
         setThreadId(null);setUserId(null);setMessages(demoMessages);setError(null);return;
       }
       try{
+        setMessages([]);setThreadId(null);setError(null);
         const uid=await getSignedInUserId();
         if(!uid)throw new Error('Bitte zuerst anmelden.');
         const thread=workOrderId&&uuid.test(workOrderId)
@@ -75,6 +78,14 @@ export function VehicleChat({
     return()=>{cancelled=true;unsubscribe?.()};
   },[open,isLive,workOrderId,workshopId,vehicleId]);
 
+  useEffect(()=>{
+    if(!open)return;
+    requestAnimationFrame(()=>{
+      const node=messagesRef.current;
+      if(node)node.scrollTop=node.scrollHeight;
+    });
+  },[open,messages.length]);
+
   if(!open)return null;
 
   const mine=(message:ChatMessage)=>{
@@ -83,7 +94,7 @@ export function VehicleChat({
   };
 
   const send=async()=>{
-    const value=text.trim();if(!value||busy)return;
+    const value=text.trim();if(!value||busy||!chatEnabled)return;
     if(!isLive){
       setMessages(current=>[...current,{
         id:'demo-'+Date.now(),thread_id:'demo',sender_user_id:audience,kind:'text',body:value,created_at:new Date().toISOString()
@@ -100,7 +111,7 @@ export function VehicleChat({
   };
 
   const attach=async(file?:File)=>{
-    if(!file)return;
+    if(!file||!chatEnabled)return;
     if(!isLive||!threadId){setError('Dateiupload steht in der Produktdemo nicht zur Verfügung.');return;}
     setBusy(true);setError(null);
     try{
@@ -124,8 +135,8 @@ export function VehicleChat({
         <div><span className="chat-vehicle"><Car size={17}/></span><div><b>{vehicleLabel}</b><small>{plate} · {workOrderId?`Auftrag #${orderNumber}`:'Werkstattchat'}</small></div></div>
         <button onClick={onClose} aria-label="Chat schließen"><X/></button>
       </header>
-      <div className="chat-note"><ShieldCheck size={14}/> Chat und formelle Reparaturfreigabe sind bewusst getrennt.</div>
-      <div className="messages">
+      <div className={'chat-note '+(!chatEnabled?'disabled':'')}>{chatEnabled?<ShieldCheck size={14}/>:<MessageCircle size={14}/>} {chatEnabled?'Der Verlauf bleibt auch nach erneutem Login erhalten. Reparaturfreigaben bleiben davon getrennt.':'Diese Werkstatt hat den MotorAtlas-Chat deaktiviert. Vorhandene Nachrichten bleiben lesbar.'}</div>
+      <div className="messages" ref={messagesRef}>
         {messages.length===0&&<div className="chat-empty"><b>Noch keine Nachrichten.</b><span>Dieser Verlauf bleibt direkt am Fahrzeug bzw. Auftrag.</span></div>}
         {messages.map(message=>{
           const own=mine(message);
@@ -140,12 +151,12 @@ export function VehicleChat({
         })}
         {error&&<div className="chat-error">{error}</div>}
       </div>
-      <footer>
+      {chatEnabled?<footer>
         <input ref={fileRef} className="chat-file-input" type="file" accept="image/*,application/pdf" onChange={event=>void attach(event.target.files?.[0])}/>
         <button className="attach" title="Bild oder PDF anhängen" onClick={()=>fileRef.current?.click()} disabled={busy}><Paperclip/></button>
-        <input value={text} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();void send()}}} placeholder="Nachricht zum Fahrzeug …"/>
+        <input autoComplete="off" enterKeyHint="send" value={text} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();void send()}}} placeholder="Nachricht schreiben …"/>
         <button className="send" onClick={()=>void send()} disabled={busy||!text.trim()}><Send/></button>
-      </footer>
+      </footer>:<div className="chat-disabled-footer"><MessageCircle/><div><b>Chat deaktiviert</b><span>Bitte Telefon oder E-Mail verwenden.</span></div></div>}
     </aside>
   </div>;
 }
