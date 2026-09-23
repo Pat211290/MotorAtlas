@@ -592,8 +592,11 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  useEffect(()=>{
    if(!selected)return;
    if(selected.assigneeUserId){setMemberId(selected.assigneeUserId);return}
-   setMemberId(live.identity?.userId??live.members[0]?.userId??'');
- },[selected?.id,selected?.assigneeUserId,live.identity?.userId,live.members]);
+   const type=selected.rawStage==='ready_for_repair'||selected.rawStage==='repairing'?'repair':'diagnosis';
+   const eligible=live.members.filter(member=>type==='diagnosis'?member.canDiagnosis:member.canRepair);
+   const preferred=eligible.find(member=>member.userId===live.identity?.userId)??eligible[0];
+   setMemberId(preferred?.userId??'');
+ },[selected?.id,selected?.assigneeUserId,selected?.rawStage,live.identity?.userId,live.members]);
 
  useEffect(()=>{
    if(selectedId&&queue.some(job=>job.id===selectedId))return;
@@ -716,9 +719,9 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
          {canAssign(selected)?<div className="work-assignment-box">
            <div><span className="overline">NÄCHSTER SCHRITT</span><h3>{assignmentLabel(selected)} zuordnen und starten</h3><p>Mit der Zuordnung beginnt die Arbeit offiziell. Der Kunde sieht Mitarbeiter und Startzeit sofort in seinem Status.</p></div>
            <label><span>Zuständiger Mitarbeiter</span><select value={memberId} onChange={event=>setMemberId(event.target.value)}>
-             {live.members.map(member=><option key={member.userId} value={member.userId}>{member.displayName} · {roleLabel(member.role)}{member.userId===live.identity?.userId?' · Ich':''}</option>)}
+             {live.members.filter(member=>workType(selected)==='diagnosis'?member.canDiagnosis:member.canRepair).map(member=><option key={member.userId} value={member.userId}>{member.displayName} · {roleLabel(member.role)}{member.userId===live.identity?.userId?' · Ich':''}</option>)}
            </select></label>
-           <button className="btn primary xl full" disabled={busy||!memberId} onClick={()=>void assign()}>{busy?'Wird zugeordnet …':assignmentLabel(selected)+' starten'}</button>
+           <button className="btn primary xl full" disabled={busy||!memberId} onClick={()=>void assign()}>{busy?'Wird zugeordnet …':memberId===live.identity?.userId?(workType(selected)==='diagnosis'?'Auftrag annehmen & Diagnose starten':'Reparatur übernehmen & starten'):(workType(selected)==='diagnosis'?'Zuordnen & Diagnose starten':'Zuordnen & Reparatur starten')}</button>
          </div>:<div className="work-assignment-active">
            <UserRound/>
            <div><small>{assignmentLabel(selected).toUpperCase()} IN ARBEIT</small><b>{selected.assignee??'Werkstattteam'}</b><span>{selected.assignmentClaimedAt?new Date(selected.assignmentClaimedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Startzeit wird synchronisiert'}</span></div>
