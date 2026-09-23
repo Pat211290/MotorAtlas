@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Camera, CalendarDays, Car, ShieldAlert, X } from 'lucide-react';
-import { createServiceRequestDraft, submitServiceRequest, uploadRequestImage, type CustomerVehicle, type CustomerWorkshop } from './api';
+import { Camera, CalendarDays, Car, FileSearch, FileText, SearchCheck, ShieldAlert, Wrench, X } from 'lucide-react';
+import { createServiceRequestDraft, submitServiceRequest, uploadRequestImage, type CustomerVehicle, type CustomerWorkshop, type ServiceRequestIntent } from './api';
 import { QuarterHourDateTime } from './QuarterHourDateTime';
 
 export function ServiceRequestModal({
@@ -14,6 +14,7 @@ export function ServiceRequestModal({
   const [complaint,setComplaint]=useState('');
   const [notes,setNotes]=useState('');
   const [desired,setDesired]=useState('');
+  const [requestIntent,setRequestIntent]=useState<ServiceRequestIntent>('diagnosis_then_quote');
   const [driveable,setDriveable]=useState<'yes'|'no'|'unknown'>('yes');
   const [warning,setWarning]=useState<'none'|'yellow'|'red'|'unknown'>('unknown');
   const [image,setImage]=useState<File|null>(null);
@@ -27,7 +28,7 @@ export function ServiceRequestModal({
   },[open,workshops,workshopId]);
 
   if(!open)return null;
-  const reset=()=>{setVehicleId('');setComplaint('');setNotes('');setDesired('');setDriveable('yes');setWarning('unknown');setImage(null);setError(null)};
+  const reset=()=>{setVehicleId('');setComplaint('');setNotes('');setDesired('');setRequestIntent('diagnosis_then_quote');setDriveable('yes');setWarning('unknown');setImage(null);setError(null)};
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();
@@ -39,7 +40,7 @@ export function ServiceRequestModal({
         workshopId,vehicleId,complaint:complaint.trim(),customerNotes:notes.trim()||undefined,
         desiredStart:desired?new Date(desired).toISOString():undefined,
         driveable:driveable==='unknown'?undefined:driveable==='yes',
-        warningLevel:warning
+        warningLevel:warning,requestIntent
       });
       if(image)await uploadRequestImage(request.id,image);
       await submitServiceRequest(request.id);
@@ -58,6 +59,16 @@ export function ServiceRequestModal({
           <label><span>Werkstatt</span><select value={workshopId} onChange={e=>setWorkshopId(e.target.value)}>{workshops.map(w=><option key={w.workshopId} value={w.workshopId}>{w.name}{w.isPrimary?' · Stammwerkstatt':''}</option>)}</select></label>
         </div>
         {!workshops.length&&<div className="request-blocker"><ShieldAlert/><b>Noch keine freigegebene Werkstatt.</b><span>Wähle zuerst eine Werkstatt und lass deine Kundenanfrage bestätigen.</span></div>}
+        <div className="request-intent-block">
+          <div className="request-intent-head"><span>Was soll die Werkstatt für dich tun? <small>Pflicht</small></span><p>Damit weiß die Werkstatt schon vor dem Termin, ob sie direkt arbeiten darf oder erst prüfen bzw. ein Angebot erstellen soll.</p></div>
+          <div className="request-intent-grid">
+            <button type="button" className={requestIntent==='direct_work'?'request-intent active':''} onClick={()=>setRequestIntent('direct_work')}><Wrench/><span><b>Leistung direkt beauftragen</b><small>Für bekannte Arbeiten wie Öl- und Filterwechsel. Die beschriebene Leistung darf ausgeführt werden; Zusatzarbeiten brauchen eine neue Freigabe.</small></span></button>
+            <button type="button" className={requestIntent==='diagnosis_then_quote'?'request-intent active':''} onClick={()=>setRequestIntent('diagnosis_then_quote')}><FileSearch/><span><b>Diagnose + Kostenvoranschlag</b><small>Erst prüfen, danach Angebot. Reparatur beginnt erst nach deiner Freigabe.</small></span></button>
+            <button type="button" className={requestIntent==='diagnosis_only'?'request-intent active':''} onClick={()=>setRequestIntent('diagnosis_only')}><SearchCheck/><span><b>Nur Diagnose / Prüfung</b><small>Fehler oder Zustand feststellen. Keine Reparatur wird automatisch beauftragt.</small></span></button>
+            <button type="button" className={requestIntent==='diagnosis_then_decide'?'request-intent active':''} onClick={()=>setRequestIntent('diagnosis_then_decide')}><ShieldAlert/><span><b>Diagnose, danach entscheide ich</b><small>Nach der Diagnose bleibt offen, ob repariert, ein Angebot erstellt oder die Reparatur verschoben wird.</small></span></button>
+            <button type="button" className={requestIntent==='quote_before_work'?'request-intent active':''} onClick={()=>setRequestIntent('quote_before_work')}><FileText/><span><b>Nur Preis / Kostenvoranschlag</b><small>Für eine bekannte Leistung zuerst ein Angebot einholen, bevor Arbeiten freigegeben werden.</small></span></button>
+          </div>
+        </div>
         <label><span>Warum möchtest du die Werkstatt kontaktieren? <small>optional</small></span><textarea rows={4} value={complaint} onChange={e=>setComplaint(e.target.value)} placeholder="z. B. Motorkontrollleuchte, Ölwechsel, Geräusch beim Bremsen – oder einfach leer lassen."/></label>
         <label><span>Weitere Hinweise <small>optional</small></span><textarea rows={2} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Seit wann? Unter welchen Bedingungen? Wurde schon etwas geprüft?"/></label>
         <div className="request-state-grid">
