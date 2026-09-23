@@ -36,10 +36,12 @@ Deno.serve(async(req:Request)=>{
   if(!payload.workshopId)return json({error:"workshop_id_required"},400);
 
   const {data:workshop,error:workshopError}=await admin.from("workshops")
-    .select("id,owner_user_id,street,postal_code,city,country_code")
+    .select("id,owner_user_id,street,postal_code,city,country_code,verification_status,verified_at,listed_publicly")
     .eq("id",payload.workshopId).maybeSingle();
   if(workshopError||!workshop)return json({error:"workshop_not_found"},404);
-  if(workshop.owner_user_id!==authData.user.id)return json({error:"not_authorized"},403);
+  const owner=workshop.owner_user_id===authData.user.id;
+  const publicVerified=workshop.verification_status==="verified"&&Boolean(workshop.verified_at)&&workshop.listed_publicly===true;
+  if(!owner&&!publicVerified)return json({error:"not_authorized"},403);
 
   const address=[workshop.street,workshop.postal_code,workshop.city,workshop.country_code||"DE"].filter(Boolean).join(", ");
   const endpoint=new URL("https://nominatim.openstreetmap.org/search");
