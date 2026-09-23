@@ -110,6 +110,27 @@ function appPath(segment:string){
   return `${basePath}/${segment.replace(/^\/+|\/+$/g,'')}`;
 }
 
+const SIGNUP_CONFIRM_EVENT_KEY='motoratlas_signup_confirmation_event';
+const PENDING_SIGNUP_EMAIL_KEY='motoratlas_pending_signup_email';
+
+function readPendingSignupEmail(){
+  try{return localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY)?.trim()??''}catch{return''}
+}
+
+function publishSignupConfirmed(email?:string|null){
+  const resolved=email?.trim()||readPendingSignupEmail();
+  const payload={email:resolved,confirmedAt:Date.now()};
+  try{
+    if(resolved)localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY,resolved);
+    localStorage.setItem(SIGNUP_CONFIRM_EVENT_KEY,JSON.stringify(payload));
+  }catch{}
+  try{
+    const channel=new BroadcastChannel('motoratlas-auth');
+    channel.postMessage({type:'signup-confirmed',...payload});
+    channel.close();
+  }catch{}
+}
+
 function initialTab():Tab{
   const params=new URLSearchParams(location.search);
   const path=location.pathname.replace(/\/+$/,'');
@@ -124,7 +145,7 @@ function initialTab():Tab{
 
 export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [tab,setTabState]=useState<Tab>(initialTab);
-  const [email,setEmail]=useState('');
+  const [email,setEmail]=useState(()=>readPendingSignupEmail());
   const [password,setPassword]=useState('');
   const [name,setName]=useState('');
   const [street,setStreet]=useState('');
@@ -135,7 +156,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   const [newPassword2,setNewPassword2]=useState('');
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
-  const [pendingEmail,setPendingEmail]=useState('');
+  const [pendingEmail,setPendingEmail]=useState(()=>readPendingSignupEmail());
   const [resendBusy,setResendBusy]=useState(false);
   const [resendStatus,setResendStatus]=useState('');
   const [confirmationState,setConfirmationState]=useState<'checking'|'success'|'error'>(
@@ -166,6 +187,69 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
   },[]);
 
   useEffect(()=>{
+    if(tab!=='verify')return;
+
+    const continueToLogin=(confirmedEmail?:string)=>{
+      const resolved=confirmedEmail?.trim()||pendingEmail||readPendingSignupEmail();
+      if(resolved){
+        setEmail(resolved);
+        setPendingEmail(resolved);
+      }
+      history.replaceState({},'',appPath('anmelden'));
+      setPassword('');
+      setResendStatus('');
+      setMessage('E-Mail-Adresse bestätigt. Melde dich jetzt an – danach öffnet MotorAtlas automatisch deinen passenden Einrichtungsbereich.');
+      setTabState('login');
+    };
+
+    const acceptPayload=(value:unknown)=>{
+      if(!value||typeof value!=='object')return;
+      const payload=value as {type?:string;email?:string;confirmedAt?:number};
+      if(payload.type&&payload.type!=='signup-confirmed')return;
+      const expected=(pendingEmail||readPendingSignupEmail()).trim().toLowerCase();
+      const received=(payload.email??'').trim().toLowerCase();
+      if(expected&&received&&expected!==received)return;
+      if(typeof payload.confirmedAt==='number'&&Date.now()-payload.confirmedAt>10*60*1000)return;
+      continueToLogin(payload.email);
+    };
+
+    let channel:BroadcastChannel|null=null;
+    try{
+      channel=new BroadcastChannel('motoratlas-auth');
+      channel.onmessage=event=>acceptPayload(event.data);
+    }catch{}
+
+    const onStorage=(event:StorageEvent)=>{
+      if(event.key!==SIGNUP_CONFIRM_EVENT_KEY||!event.newValue)return;
+      try{acceptPayload(JSON.parse(event.newValue))}catch{}
+    };
+    window.addEventListener('storage',onStorage);
+
+    try{
+      const cached=localStorage.getItem(SIGNUP_CONFIRM_EVENT_KEY);
+      if(cached)acceptPayload(JSON.parse(cached));
+    }catch{}
+
+    return()=>{
+      window.removeEventListener('storage',onStorage);
+      if(channel)channel.close();
+    };
+  },[tab,pendingEmail]);
+
+  useEffect(()=>{
+    if(tab!=='confirmed'||confirmationState!=='success')return;
+    const id=window.setTimeout(()=>{
+      const saved=readPendingSignupEmail();
+      if(saved)setEmail(saved);
+      history.replaceState({},'',appPath('anmelden'));
+      setPassword('');
+      setMessage('E-Mail-Adresse bestätigt. Melde dich jetzt an – MotorAtlas führt dich danach automatisch weiter.');
+      setTabState('login');
+    },1200);
+    return()=>window.clearTimeout(id);
+  },[tab,confirmationState]);
+
+  useEffect(()=>{
     if(tab!=='confirmed'||!supabase)return;
     const client=supabase;
     const params=new URLSearchParams(location.search);
@@ -176,11 +260,13 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       if(!tokenHash||!type){
         if(sessionStorage.getItem('motoratlas_signup_confirmed')==='1'){
           sessionStorage.removeItem('motoratlas_signup_confirmed');
+          publishSignupConfirmed();
           setConfirmationState('success');
           return;
         }
         const {data}=await client.auth.getUser();
         if(data.user?.email_confirmed_at){
+          publishSignupConfirmed(data.user.email);
           setConfirmationState('success');
           return;
         }
@@ -191,10 +277,11 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
 
       setConfirmationState('checking');
       setConfirmationError('');
-      const {error}=await client.auth.verifyOtp({token_hash:tokenHash,type});
+      const {data,error}=await client.auth.verifyOtp({token_hash:tokenHash,type});
       if(error){
-        const {data}=await client.auth.getUser();
-        if(data.user?.email_confirmed_at){
+        const {data:current}=await client.auth.getUser();
+        if(current.user?.email_confirmed_at){
+          publishSignupConfirmed(current.user.email);
           setConfirmationState('success');
           history.replaceState({},'',appPath('bestaetigung'));
           return;
@@ -204,6 +291,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
         return;
       }
 
+      publishSignupConfirmed(data.user?.email);
       try{await client.auth.signOut()}catch{}
       history.replaceState({},'',appPath('bestaetigung'));
       setConfirmationState('success');
@@ -217,9 +305,10 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       try{await supabase.auth.signOut()}catch{}
     }
     history.replaceState({},'',appPath('anmelden'));
-    setEmail('');
+    const saved=readPendingSignupEmail();
+    if(saved)setEmail(saved);
     setPassword('');
-    setMessage('');
+    setMessage('E-Mail-Adresse bestätigt. Melde dich jetzt an – MotorAtlas führt dich danach automatisch weiter.');
     setResendStatus('');
     setTabState('login');
   };
@@ -281,6 +370,10 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       if(tab==='login'){
         const {error}=await supabase.auth.signInWithPassword({email,password});
         if(error)throw error;
+        try{
+          localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+          localStorage.removeItem(SIGNUP_CONFIRM_EVENT_KEY);
+        }catch{}
         setView(await resolveSignedInView());
       }else{
         if(tab==='customer'&&(!street.trim()||!postalCode.trim()||!city.trim()))throw new Error('Bitte die vollständige Anschrift eintragen.');
@@ -291,9 +384,18 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
           city:tab==='customer'?city:undefined
         });
         if(result.session){
+          try{
+            localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+            localStorage.removeItem(SIGNUP_CONFIRM_EVENT_KEY);
+          }catch{}
           setView(tab==='workshop'?'branding':'customer');
         }else{
-          setPendingEmail(email.trim());
+          const normalizedEmail=email.trim();
+          setPendingEmail(normalizedEmail);
+          try{
+            localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY,normalizedEmail);
+            localStorage.removeItem(SIGNUP_CONFIRM_EVENT_KEY);
+          }catch{}
           setMessage('');
           setResendStatus('');
           setTabState('verify');
