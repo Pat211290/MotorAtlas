@@ -45,12 +45,9 @@ function Shell({
   };
 
   const readAll=async()=>{
-    const first=notifications[0];
-    if(!first)return;
-    try{
-      const workshopId=(first as any).workshopId;
-      if(workshopId)await markAllWorkshopNotificationsRead(workshopId);
-    }catch{}
+    const workshopId=notifications.find(item=>item.workshopId)?.workshopId;
+    if(!workshopId)return;
+    try{await markAllWorkshopNotificationsRead(workshopId);await onNotificationsChanged?.()}catch{}
   };
 
   return <div className="app-shell">
@@ -76,7 +73,7 @@ function Shell({
             <Bell size={18}/>{unread>0&&<span className="notification-count">{unread>99?'99+':unread}</span>}
           </button>
           {notificationOpen&&<div className="notification-popover">
-            <header><div><small>BENACHRICHTIGUNGEN</small><b>{unread?unread+' neu':'Alles gelesen'}</b></div>{unread>0&&<button onClick={async()=>{if(notifications.length){const first=notifications[0] as any;if(first.workshopId){await markAllWorkshopNotificationsRead(first.workshopId);await onNotificationsChanged?.();}}}}>Alle gelesen</button>}</header>
+            <header><div><small>BENACHRICHTIGUNGEN</small><b>{unread?unread+' neu':'Alles gelesen'}</b></div>{unread>0&&<button onClick={()=>void readAll()}>Alle gelesen</button>}</header>
             <div>{notifications.length?notifications.slice(0,12).map(item=><button key={item.id} className={item.readAt?'':'unread'} onClick={()=>void openNotification(item)}>
               <span className="notification-dot"/><div><b>{item.title}</b><p>{item.body||'Neue Aktivität in MotorAtlas.'}</p><small>{new Date(item.createdAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}</small></div>
             </button>):<div className="notification-empty"><Bell/><b>Keine neuen Meldungen.</b><span>Neue Anfragen und Terminantworten erscheinen hier automatisch.</span></div>}</div>
