@@ -211,6 +211,7 @@ export type LiveJob={
   rawStage:string;
   priority:'normal'|'urgent'|'waiting_customer'|'immobile';
   assignee?:string|null;
+  assigneeUserId?:string|null;
   updatedAt:string;
 };
 
@@ -292,7 +293,7 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const vehicleMap=new Map(((vehicleResult.data??[]) as any[]).map(v=>[v.id,v]));
   const requestMap=new Map(((requestResult.data??[]) as any[]).map(r=>[r.id,r]));
   const memberMap=new Map(((memberResult.data??[]) as any[]).map(m=>[m.user_id,m.display_name]));
-  const assignmentMap=new Map(((assignmentResult.data??[]) as any[]).map(a=>[a.work_order_id,memberMap.get(a.member_user_id)??null]));
+  const assignmentMap=new Map(((assignmentResult.data??[]) as any[]).map(a=>[a.work_order_id,{userId:a.member_user_id,name:memberMap.get(a.member_user_id)??null}]));
 
   return rows.map(row=>{
     const vehicle=vehicleMap.get(row.vehicle_id) as any;
@@ -310,7 +311,8 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
       stage:mapOrderStage(row.stage),
       rawStage:row.stage,
       priority:row.priority,
-      assignee:assignmentMap.get(row.id)??null,
+      assignee:assignmentMap.get(row.id)?.name??null,
+      assigneeUserId:assignmentMap.get(row.id)?.userId??null,
       updatedAt:row.updated_at
     } satisfies LiveJob;
   });
