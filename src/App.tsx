@@ -7,6 +7,7 @@ import { WorkshopFinder } from './WorkshopFinder';
 import { PublicWorkshopProfile } from './WorkshopProfile';
 import { PublicHeader } from './PublicHeader';
 import { AccessPage } from './AccessPage';
+import { ImprintPage, PrivacyPage } from './LegalPages';
 import { CustomerMarketingPage, SecurityMarketingPage, WorkshopMarketingPage } from './MarketingPages';
 import { BrandingPage, CustomerPortal, OfficeDashboard, WorkshopBoard } from './Workspace';
 import { Brand, type AppView } from './components';
@@ -101,6 +102,8 @@ const viewHashes:Record<AppView,string>={
   finder:'#/werkstatt-finden',
   'workshop-profile':'#/werkstattprofil',
   login:'#/anmelden',
+  privacy:'#/datenschutz',
+  imprint:'#/impressum',
   office:'#/app/buero',
   workshop:'#/app/werkstatt',
   customer:'#/app/kunde',
@@ -157,12 +160,14 @@ export default function App(){
       'security-info':'MotorAtlas – Sicherheit & Transparenz',
       finder:'MotorAtlas – Werkstatt finden',
       'workshop-profile':'MotorAtlas – Werkstattprofil',
-      login:'MotorAtlas – Anmelden'
+      login:'MotorAtlas – Anmelden',
+      privacy:'MotorAtlas – Datenschutz',
+      imprint:'MotorAtlas – Impressum'
     };
     if(titles[view])document.title=titles[view]!;
   },[view]);
 
-  const showPublicHeader=['home','customer-info','workshop-info','security-info','finder','workshop-profile','login'].includes(view);
+  const showPublicHeader=['home','customer-info','workshop-info','security-info','finder','workshop-profile','login','privacy','imprint'].includes(view);
   return <div className="site">
     <Splash/>
     {showPublicHeader&&<PublicHeader view={view} setView={navigate}/>} 
