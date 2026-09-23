@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          curl --fail --silent --show-error "${SUPABASE_URL}/auth/v1/health" >/tmp/auth-health.json
+          curl --fail --silent --show-error -H "apikey: ${SUPABASE_KEY}" "${SUPABASE_URL}/auth/v1/health" >/tmp/auth-health.json
           cat /tmp/auth-health.json
 
       - name: Inspect public Auth settings
