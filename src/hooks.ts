@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getCurrentWorkshopIdentity,getSignedInUserId,listPendingCustomerRequests,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
+  getCurrentWorkshopIdentity,getSignedInUserId,listMyWorkshopNotifications,listPendingCustomerRequests,listWorkshopAppointments,listWorkshopJobs,listWorkshopServiceRequests,loadCustomerWorkspace,
   subscribeCustomerOrders,subscribeWorkshop,
-  type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
-  type LiveJob,type WorkshopIdentity,type WorkshopServiceRequest
+  type AppNotification,type CustomerAppointment,type CustomerOrder,type CustomerRelationshipRequest,type CustomerServiceRequest,type CustomerVehicle,type CustomerWorkshop,
+  type LiveJob,type WorkshopAppointment,type WorkshopIdentity,type WorkshopServiceRequest
 } from './api';
 import { backendConfigured } from './lib';
 
@@ -12,6 +12,8 @@ export function useWorkshopWorkspace(){
   const [jobs,setJobs]=useState<LiveJob[]>([]);
   const [serviceRequests,setServiceRequests]=useState<WorkshopServiceRequest[]>([]);
   const [customerRequests,setCustomerRequests]=useState<any[]>([]);
+  const [appointments,setAppointments]=useState<WorkshopAppointment[]>([]);
+  const [notifications,setNotifications]=useState<AppNotification[]>([]);
   const [loading,setLoading]=useState(backendConfigured);
   const [error,setError]=useState<string|null>(null);
 
@@ -21,14 +23,17 @@ export function useWorkshopWorkspace(){
       const current=await getCurrentWorkshopIdentity();
       setIdentity(current);
       if(!current){
-        setJobs([]);setServiceRequests([]);setCustomerRequests([]);setLoading(false);return;
+        setJobs([]);setServiceRequests([]);setCustomerRequests([]);setAppointments([]);setNotifications([]);setLoading(false);return;
       }
-      const [nextJobs,nextServiceRequests,nextCustomerRequests]=await Promise.all([
+      const [nextJobs,nextServiceRequests,nextCustomerRequests,nextAppointments,nextNotifications]=await Promise.all([
         listWorkshopJobs(current.workshopId),
         listWorkshopServiceRequests(current.workshopId),
-        listPendingCustomerRequests(current.workshopId)
+        listPendingCustomerRequests(current.workshopId),
+        listWorkshopAppointments(current.workshopId),
+        listMyWorkshopNotifications(current.workshopId)
       ]);
       setJobs(nextJobs);setServiceRequests(nextServiceRequests);setCustomerRequests(nextCustomerRequests);
+      setAppointments(nextAppointments);setNotifications(nextNotifications);
       setError(null);
     }catch(err){
       setError(err instanceof Error?err.message:'Werkstattdaten konnten nicht geladen werden.');
@@ -54,7 +59,7 @@ export function useWorkshopWorkspace(){
     };
   },[reload]);
 
-  return{identity,jobs,serviceRequests,customerRequests,loading,error,reload,isLive:Boolean(identity)};
+  return{identity,jobs,serviceRequests,customerRequests,appointments,notifications,loading,error,reload,isLive:Boolean(identity)};
 }
 
 export function useCustomerWorkspace(){
