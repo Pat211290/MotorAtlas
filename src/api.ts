@@ -239,6 +239,8 @@ export function subscribeWorkshop(workshopId:string,onChange:()=>void){
     .on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:`workshop_id=eq.${workshopId}`},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'workshop_members',filter:`workshop_id=eq.${workshopId}`},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'workshops',filter:`id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'chat_threads',filter:`workshop_id=eq.${workshopId}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'chat_messages'},refresh)
     .subscribe(status=>{if(status==='SUBSCRIBED')refresh()});
   return()=>{
     if(timer)window.clearTimeout(timer);
@@ -255,12 +257,21 @@ export type ChatMessage={
   attachment_path?:string|null;attachment_name?:string|null;attachment_mime?:string|null;attachment_size?:number|null;created_at:string;
 };
 
+function chatErrorMessage(error:any){
+  const message=String(error?.message??error??'');
+  if(message.includes('chat_disabled'))return'Diese Werkstatt hat den MotorAtlas-Chat deaktiviert. Bitte nutze Telefon oder E-Mail.';
+  if(message.includes('no_active_workshop_relationship'))return'Der Chat ist erst nach Freigabe durch die Werkstatt verfügbar.';
+  if(message.includes('not_authorized'))return'Du hast keinen Zugriff auf diesen Chat.';
+  return message||'Chat konnte nicht geöffnet werden.';
+}
+
 export async function ensureVehicleChat(workshopId:string,vehicleId:string){
   const {data,error}=await db().rpc('ensure_vehicle_chat',{p_workshop_id:workshopId,p_vehicle_id:vehicleId});
-  if(error)throw error;return data as ChatThread;
+  if(error)throw new Error(chatErrorMessage(error));return data as ChatThread;
 }
 export async function ensureWorkOrderChat(workOrderId:string){
-  const {data,error}=await db().rpc('ensure_work_order_chat',{p_work_order_id:workOrderId});if(error)throw error;return data as ChatThread;
+  const {data,error}=await db().rpc('ensure_work_order_chat',{p_work_order_id:workOrderId});
+  if(error)throw new Error(chatErrorMessage(error));return data as ChatThread;
 }
 export async function listChatMessages(threadId:string,limit=100){
   const {data,error}=await db().from('chat_messages').select('*').eq('thread_id',threadId).order('created_at',{ascending:true}).limit(limit);
@@ -270,7 +281,7 @@ export async function sendChatMessage(threadId:string,body:string){
   const text=body.trim();if(!text)throw new Error('Message is empty');
   const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
   const {data,error}=await client.from('chat_messages').insert({thread_id:threadId,sender_user_id:auth.user.id,kind:'text',body:text}).select().single();
-  if(error)throw error;return data as ChatMessage;
+  if(error)throw new Error(chatErrorMessage(error));return data as ChatMessage;
 }
 export async function sendChatAttachment(threadId:string,file:File,body?:string){
   const client=db();const {data:auth}=await client.auth.getUser();if(!auth.user)throw new Error('Not signed in');
@@ -297,6 +308,54 @@ export function subscribeChat(threadId:string,onMessage:(message:ChatMessage)=>v
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_messages',filter:`thread_id=eq.${threadId}`},
       (payload:any)=>onMessage(payload.new as ChatMessage)).subscribe();
   return()=>{void client.removeChannel(channel)};
+}
+
+export type WorkshopChatInboxItem={
+  threadId:string;customerUserId:string;customerName:string;vehicleId:string;vehicleName:string;plate:string;
+  photoPath?:string|null;lastMessage:string;lastMessageKind:string;lastMessageAt:string;unreadCount:number;
+};
+
+export type WorkshopDashboardMetrics={
+  activeCustomerCount:number;
+  primaryCustomerCount:number;
+};
+
+export type WorkshopResponseStats={
+  medianResponseMinutes:number|null;
+  averageResponseMinutes:number|null;
+  sampleCount:number;
+};
+
+export async function listWorkshopChatInbox(workshopId:string):Promise<WorkshopChatInboxItem[]>{
+  const {data,error}=await db().rpc('get_workshop_chat_inbox',{p_workshop_id:workshopId});
+  if(error)throw error;
+  return((data??[]) as any[]).map(row=>({
+    threadId:row.thread_id,customerUserId:row.customer_user_id,customerName:row.customer_name,
+    vehicleId:row.vehicle_id,vehicleName:row.vehicle_name,plate:row.plate,photoPath:row.photo_path,
+    lastMessage:row.last_message,lastMessageKind:row.last_message_kind,lastMessageAt:row.last_message_at,
+    unreadCount:Number(row.unread_count??0)
+  }));
+}
+
+export async function getWorkshopDashboardMetrics(workshopId:string):Promise<WorkshopDashboardMetrics>{
+  const {data,error}=await db().rpc('get_workshop_dashboard_metrics',{p_workshop_id:workshopId});
+  if(error)throw error;
+  const row=Array.isArray(data)?data[0]:data;
+  return{
+    activeCustomerCount:Number(row?.active_customer_count??0),
+    primaryCustomerCount:Number(row?.primary_customer_count??0)
+  };
+}
+
+export async function getWorkshopResponseStats(workshopId:string):Promise<WorkshopResponseStats>{
+  const {data,error}=await db().rpc('get_workshop_response_stats',{p_workshop_id:workshopId});
+  if(error)throw error;
+  const row=Array.isArray(data)?data[0]:data;
+  return{
+    medianResponseMinutes:row?.median_response_minutes==null?null:Number(row.median_response_minutes),
+    averageResponseMinutes:row?.average_response_minutes==null?null:Number(row.average_response_minutes),
+    sampleCount:Number(row?.sample_count??0)
+  };
 }
 
 
@@ -330,6 +389,7 @@ export type WorkshopIdentity={
   brandPrimary?:string|null;
   brandSecondary?:string|null;
   operatingMode?:'solo'|'team';
+  chatEnabled:boolean;
 };
 
 function mapOrderStage(stage:string):LiveStage{
@@ -350,7 +410,7 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
   if(error)throw error;
   if(!member)return null;
   const {data:workshop,error:workshopError}=await client.from('workshops')
-    .select('id,name,brand_primary,brand_secondary,operating_mode')
+    .select('id,name,brand_primary,brand_secondary,operating_mode,chat_enabled')
     .eq('id',member.workshop_id).single();
   if(workshopError)throw workshopError;
   return{
@@ -362,7 +422,8 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
     workshopName:workshop.name,
     brandPrimary:workshop.brand_primary,
     brandSecondary:workshop.brand_secondary,
-    operatingMode:(workshop.operating_mode??'solo') as 'solo'|'team'
+    operatingMode:(workshop.operating_mode??'solo') as 'solo'|'team',
+    chatEnabled:workshop.chat_enabled!==false
   };
 }
 
@@ -436,7 +497,7 @@ export type CustomerOrder={
 };
 export type CustomerWorkshop={
   workshopId:string;linkId:string;isPrimary:boolean;name:string;street:string;postalCode:string;city:string;
-  phone?:string|null;email?:string|null;website?:string|null;description?:string|null;
+  phone?:string|null;email?:string|null;website?:string|null;description?:string|null;chatEnabled:boolean;
   logoPath?:string|null;acceptsNewCustomers:boolean;
 };
 export type CustomerServiceRequest={
@@ -489,7 +550,7 @@ export async function loadCustomerWorkspace():Promise<{
     ...((requestResult.data??[]) as any[]).map(request=>request.workshop_id)
   ])];
   const workshopResult=workshopIds.length
-    ?await client.from('workshops').select('id,name,street,postal_code,city,phone,email,website,description,logo_path,accepts_new_customers').in('id',workshopIds)
+    ?await client.from('workshops').select('id,name,street,postal_code,city,phone,email,website,description,chat_enabled,logo_path,accepts_new_customers').in('id',workshopIds)
     :{data:[],error:null} as any;
   if(workshopResult.error)throw workshopResult.error;
 
@@ -517,7 +578,7 @@ export async function loadCustomerWorkspace():Promise<{
       return{workshopId:link.workshop_id,linkId:link.id,isPrimary:Boolean(link.is_primary),name:workshop?.name??'Werkstatt',
         street:workshop?.street??'',postalCode:workshop?.postal_code??'',city:workshop?.city??'',
         phone:workshop?.phone??null,email:workshop?.email??null,website:workshop?.website??null,description:workshop?.description??null,
-        logoPath:workshop?.logo_path??null,acceptsNewCustomers:Boolean(workshop?.accepts_new_customers)};
+        chatEnabled:workshop?.chat_enabled!==false,logoPath:workshop?.logo_path??null,acceptsNewCustomers:Boolean(workshop?.accepts_new_customers)};
     }),
     requests:((requestResult.data??[]) as any[]).map(r=>({
       id:r.id,workshopId:r.workshop_id,vehicleId:r.vehicle_id,complaint:r.complaint,status:r.status,
@@ -695,6 +756,9 @@ export function subscribeCustomerOrders(userId:string,onChange:()=>void){
     .on('postgres_changes',{event:'*',schema:'public',table:'documents',filter:'customer_user_id=eq.'+userId},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:'user_id=eq.'+userId},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'appointments'},refresh)
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workshops'},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'chat_messages'},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'chat_threads'},refresh)
     .subscribe(status=>{if(status==='SUBSCRIBED')refresh()});
   return()=>{
     if(timer)window.clearTimeout(timer);
@@ -905,13 +969,13 @@ export async function uploadWorkshopLogo(input:{workshopId:string;file:File;prim
 
 export async function updateWorkshopProfile(input:{
   workshopId:string;name:string;legalName?:string;street:string;postalCode:string;city:string;
-  phone?:string;email?:string;website?:string;description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;services?:string[];
+  phone?:string;email?:string;website?:string;chatEnabled:boolean;description?:string;operatingMode:'solo'|'team';acceptsNewCustomers:boolean;services?:string[];
 }){
   const client=db();
   const {data,error}=await client.from('workshops').update({
     name:input.name.trim(),legal_name:input.legalName?.trim()||null,street:input.street.trim(),
     postal_code:input.postalCode.trim(),city:input.city.trim(),phone:input.phone?.trim()||null,
-    email:input.email?.trim()||null,website:input.website?.trim()||null,description:input.description?.trim()||null,
+    email:input.email?.trim()||null,website:input.website?.trim()||null,chat_enabled:input.chatEnabled,description:input.description?.trim()||null,
     operating_mode:input.operatingMode,accepts_new_customers:input.acceptsNewCustomers,
     services:input.services??[]
   }).eq('id',input.workshopId).select().single();
@@ -998,7 +1062,7 @@ export async function listPendingCustomerRequests(workshopId:string){
 
 export async function getWorkshopProfile(workshopId:string){
   const {data,error}=await db().from('workshops')
-    .select('id,name,legal_name,street,postal_code,city,phone,email,website,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_requested_at,verification_review_note')
+    .select('id,name,legal_name,street,postal_code,city,phone,email,website,chat_enabled,description,services,operating_mode,accepts_new_customers,logo_path,brand_primary,brand_secondary,listed_publicly,verified_at,verification_status,verification_requested_at,verification_review_note')
     .eq('id',workshopId).single();
   if(error)throw error;return data;
 }
