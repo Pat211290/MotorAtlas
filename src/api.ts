@@ -605,6 +605,19 @@ export async function listMyWorkshopNotifications(workshopId:string,limit=30):Pr
   }));
 }
 
+export async function listMyNotifications(limit=30):Promise<AppNotification[]>{
+  const client=db();
+  const {data:auth}=await client.auth.getUser();if(!auth.user)return[];
+  const {data,error}=await client.from('notifications')
+    .select('id,workshop_id,title,body,kind,work_order_id,read_at,created_at')
+    .eq('user_id',auth.user.id)
+    .order('created_at',{ascending:false}).limit(limit);
+  if(error)throw error;
+  return((data??[]) as any[]).map(n=>({
+    id:n.id,workshopId:n.workshop_id,title:n.title,body:n.body,kind:n.kind,workOrderId:n.work_order_id,readAt:n.read_at,createdAt:n.created_at
+  }));
+}
+
 export async function markNotificationRead(notificationId:string){
   const {error}=await db().from('notifications').update({read_at:new Date().toISOString()}).eq('id',notificationId);
   if(error)throw error;
