@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clock3, FileCheck2, Mail, Phone, ShieldCheck, X } from 'lucide-react';
+import { Clock3, FileCheck2, Mail, ShieldCheck, X } from 'lucide-react';
 import { resolveWorkOrderNextStep, type AgreementMethod, type WorkNextStepDecision } from './api';
 
 const titles:Record<WorkNextStepDecision,string>={
