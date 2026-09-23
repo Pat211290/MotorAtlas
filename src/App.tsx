@@ -7,7 +7,7 @@ import { WorkshopFinder } from './WorkshopFinder';
 import { PublicWorkshopProfile } from './WorkshopProfile';
 import { PublicHeader } from './PublicHeader';
 import { AccessPage } from './AccessPage';
-import { ImprintPage, PrivacyPage } from './LegalPages';
+import { ImprintPage, PrivacyPage, PublicLegalStrip } from './LegalPages';
 import { CustomerMarketingPage, SecurityMarketingPage, WorkshopMarketingPage } from './MarketingPages';
 import { BrandingPage, CustomerPortal, OfficeDashboard, WorkshopBoard } from './Workspace';
 import { Brand, type AppView } from './components';
@@ -168,6 +168,7 @@ export default function App(){
   },[view]);
 
   const showPublicHeader=['home','customer-info','workshop-info','security-info','finder','workshop-profile','login','privacy','imprint'].includes(view);
+  const showLegalStrip=['finder','workshop-profile','login'].includes(view);
   return <div className="site">
     <Splash/>
     {showPublicHeader&&<PublicHeader view={view} setView={navigate}/>} 
@@ -182,5 +183,6 @@ export default function App(){
     {view==='workshop'&&<WorkshopBoard setView={navigate}/>}
     {view==='customer'&&<CustomerPortal setView={navigate}/>}
     {view==='branding'&&<BrandingPage setView={navigate}/>}
+    {showLegalStrip&&<PublicLegalStrip setView={navigate}/>}
   </div>;
 }
