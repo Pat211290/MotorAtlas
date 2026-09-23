@@ -784,6 +784,13 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
            </section>
          </div>
 
+         <div className="work-order-route">
+           <small>AUFTRAGSWEG</small>
+           <b>{requestIntentLabel(selected.workflowPath as ServiceRequestIntent|undefined)}</b>
+           <span>{selected.commercialState==='direct_order'?'Direkt durch den Kunden beauftragt – kein automatischer Kostenvoranschlag erforderlich.':selected.commercialState==='external_approved'?'Freigabe außerhalb von MotorAtlas dokumentiert'+(selected.agreementMethod?' · '+selected.agreementMethod:'')+'.':selected.commercialState==='external_waiting'?'Externe Abstimmung vorhanden, Kundenentscheidung noch offen.':selected.commercialState==='no_repair'?'Keine Reparatur in diesem Auftrag.':selected.commercialState==='deferred'?'Reparatur auf später verschoben.':'Der weitere Ablauf folgt der Kundenauswahl.'}</span>
+           {selected.agreementNote&&<p>{selected.agreementNote}</p>}
+         </div>
+
          <div className="work-incident">
            <div><small>KUNDENANGABE / SCHADEN / ANLIEGEN</small><p>{selected.complaint||'Keine Beschreibung hinterlegt.'}</p></div>
            {selected.customerNotes&&<div><small>ZUSÄTZLICHE ANGABE</small><p>{selected.customerNotes}</p></div>}
