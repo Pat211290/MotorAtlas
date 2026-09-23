@@ -360,3 +360,10 @@ export async function getSignedInUserId(){
   if(error)throw error;
   return data.user?.id??null;
 }
+
+
+export async function getChatAttachmentUrl(path:string,expiresIn=300){
+  const {data,error}=await db().storage.from('chat-media').createSignedUrl(path,expiresIn);
+  if(error)throw error;
+  return data.signedUrl;
+}
