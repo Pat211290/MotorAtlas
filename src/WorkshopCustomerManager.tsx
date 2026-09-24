@@ -29,6 +29,7 @@ export function WorkshopCustomerManager({workshopId,onChanged,onOpenOrder}:{work
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
   const [createOpen,setCreateOpen]=useState(false);
+  const [autoQrVehicleId,setAutoQrVehicleId]=useState<string|null>(null);
 
   const load=async(query=search)=>{
     setLoading(true);
@@ -73,20 +74,26 @@ export function WorkshopCustomerManager({workshopId,onChanged,onOpenOrder}:{work
         </div>
       </section>
 
-      {selected?<WorkshopCustomerVehicleDetail item={selected} workshopId={workshopId} onChanged={async()=>{await load(search);await onChanged()}} onOpenOrder={onOpenOrder}/>:
+      {selected?<WorkshopCustomerVehicleDetail item={selected} workshopId={workshopId} onChanged={async()=>{await load(search);await onChanged()}} onOpenOrder={onOpenOrder} autoOpenQr={autoQrVehicleId===selected.vehicleId} onQrOpened={()=>setAutoQrVehicleId(null)}/>:
         <section className="panel workshop-customer-placeholder"><Car/><h3>Fahrzeug auswählen</h3><p>Links suchen oder auswählen. Hier erscheinen Fahrzeugdaten, Kontakt, Historie und der sichere QR-Code zur Kontoübernahme.</p></section>}
     </div>
 
-    <WorkshopCustomerCreateModal open={createOpen} onClose={()=>setCreateOpen(false)} workshopId={workshopId} onDone={async(vehicleId)=>{setCreateOpen(false);await load(search);setSelectedId(vehicleId);await onChanged()}}/>
+    <WorkshopCustomerCreateModal open={createOpen} onClose={()=>setCreateOpen(false)} workshopId={workshopId} onDone={async(vehicleId)=>{setCreateOpen(false);await load(search);setSelectedId(vehicleId);setAutoQrVehicleId(vehicleId);await onChanged()}}/>
   </div>;
 }
 
-function WorkshopCustomerVehicleDetail({item,workshopId,onChanged,onOpenOrder}:{item:WorkshopCustomerDirectoryItem;workshopId:string;onChanged:()=>Promise<void>|void;onOpenOrder?:(workOrderId:string)=>void}){
+function WorkshopCustomerVehicleDetail({item,workshopId,onChanged,onOpenOrder,autoOpenQr,onQrOpened}:{item:WorkshopCustomerDirectoryItem;workshopId:string;onChanged:()=>Promise<void>|void;onOpenOrder?:(workOrderId:string)=>void;autoOpenQr?:boolean;onQrOpened?:()=>void}){
   const [history,setHistory]=useState<VehicleHistoryEntry[]>([]);
   const [historyBusy,setHistoryBusy]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false);
   const [qrOpen,setQrOpen]=useState(false);
   const [orderOpen,setOrderOpen]=useState(false);
+
+  useEffect(()=>{
+    if(!autoOpenQr)return;
+    setQrOpen(true);
+    onQrOpened?.();
+  },[autoOpenQr,item.vehicleId]);
 
   useEffect(()=>{
     let cancelled=false;
