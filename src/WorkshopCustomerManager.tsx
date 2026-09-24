@@ -4,8 +4,8 @@ import {
   CalendarClock, Car, FileClock, History, Mail, MapPin, Phone, Plus, QrCode, Search, ShieldCheck, UserRound, X
 } from 'lucide-react';
 import {
-  addVehicleHistoryEntry, createVehicleClaimToken, createWorkshopCustomerVehicle, getVehicleHistory,
-  listWorkshopCustomerDirectory, type VehicleHistoryEntry, type WorkshopCustomerDirectoryItem
+  addVehicleHistoryEntry, createVehicleClaimToken, createWalkInWorkOrder, createWorkshopCustomerVehicle, getVehicleHistory,
+  listWorkshopCustomerDirectory, type ServiceRequestIntent, type VehicleHistoryEntry, type WorkshopCustomerDirectoryItem
 } from './api';
 
 function claimUrl(token:string){
@@ -22,7 +22,7 @@ function parseNumber(value:string){
   return Number.isFinite(n)?Math.round(n):null;
 }
 
-export function WorkshopCustomerManager({workshopId,onChanged}:{workshopId:string;onChanged:()=>Promise<void>|void}){
+export function WorkshopCustomerManager({workshopId,onChanged,onOpenOrder}:{workshopId:string;onChanged:()=>Promise<void>|void;onOpenOrder?:(workOrderId:string)=>void}){
   const [search,setSearch]=useState('');
   const [items,setItems]=useState<WorkshopCustomerDirectoryItem[]>([]);
   const [selectedId,setSelectedId]=useState<string|null>(null);
@@ -73,7 +73,7 @@ export function WorkshopCustomerManager({workshopId,onChanged}:{workshopId:strin
         </div>
       </section>
 
-      {selected?<WorkshopCustomerVehicleDetail item={selected} workshopId={workshopId} onChanged={async()=>{await load(search);await onChanged()}}/>:
+      {selected?<WorkshopCustomerVehicleDetail item={selected} workshopId={workshopId} onChanged={async()=>{await load(search);await onChanged()}} onOpenOrder={onOpenOrder}/>:
         <section className="panel workshop-customer-placeholder"><Car/><h3>Fahrzeug auswählen</h3><p>Links suchen oder auswählen. Hier erscheinen Fahrzeugdaten, Kontakt, Historie und der sichere QR-Code zur Kontoübernahme.</p></section>}
     </div>
 
@@ -81,11 +81,12 @@ export function WorkshopCustomerManager({workshopId,onChanged}:{workshopId:strin
   </div>;
 }
 
-function WorkshopCustomerVehicleDetail({item,workshopId,onChanged}:{item:WorkshopCustomerDirectoryItem;workshopId:string;onChanged:()=>Promise<void>|void}){
+function WorkshopCustomerVehicleDetail({item,workshopId,onChanged,onOpenOrder}:{item:WorkshopCustomerDirectoryItem;workshopId:string;onChanged:()=>Promise<void>|void;onOpenOrder?:(workOrderId:string)=>void}){
   const [history,setHistory]=useState<VehicleHistoryEntry[]>([]);
   const [historyBusy,setHistoryBusy]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false);
   const [qrOpen,setQrOpen]=useState(false);
+  const [orderOpen,setOrderOpen]=useState(false);
 
   useEffect(()=>{
     let cancelled=false;
@@ -97,7 +98,7 @@ function WorkshopCustomerVehicleDetail({item,workshopId,onChanged}:{item:Worksho
   return <section className="panel workshop-customer-detail">
     <header className="workshop-customer-detail-head">
       <div><span className="overline">FAHRZEUGAKTE</span><h2>{[item.make,item.model,item.variant].filter(Boolean).join(' ')}</h2><p>{item.licensePlate}</p></div>
-      <div><button className="btn secondary" onClick={()=>setHistoryOpen(true)}><Plus size={15}/> Historie ergänzen</button><button className="btn primary" onClick={()=>setQrOpen(true)}><QrCode size={16}/> QR-Code</button></div>
+      <div><button className="btn primary" onClick={()=>setOrderOpen(true)}><Plus size={15}/> Neuer Auftrag</button><button className="btn secondary" onClick={()=>setHistoryOpen(true)}><FileClock size={15}/> Historie ergänzen</button><button className="btn secondary" onClick={()=>setQrOpen(true)}><QrCode size={16}/> QR-Code</button></div>
     </header>
 
     <div className="workshop-customer-contact">
@@ -124,9 +125,56 @@ function WorkshopCustomerVehicleDetail({item,workshopId,onChanged}:{item:Worksho
       </div>:<div className="inbox-empty">Noch keine Historieneinträge vorhanden.</div>}
     </div>
 
+    <WalkInOrderModal open={orderOpen} onClose={()=>setOrderOpen(false)} item={item} workshopId={workshopId} onDone={async orderId=>{setOrderOpen(false);await onChanged();onOpenOrder?.(orderId)}}/>
     <VehicleClaimQrModal open={qrOpen} onClose={()=>setQrOpen(false)} item={item} workshopId={workshopId}/>
     <HistoryEntryModal open={historyOpen} onClose={()=>setHistoryOpen(false)} item={item} workshopId={workshopId} onDone={async()=>{setHistory(await getVehicleHistory(item.vehicleId));await onChanged()}}/>
   </section>;
+}
+
+function WalkInOrderModal({open,onClose,item,workshopId,onDone}:{
+  open:boolean;onClose:()=>void;item:WorkshopCustomerDirectoryItem;workshopId:string;onDone:(workOrderId:string)=>Promise<void>|void;
+}){
+  const [problem,setProblem]=useState('');
+  const [workflow,setWorkflow]=useState<ServiceRequestIntent>('diagnosis_then_quote');
+  const [invoiceRequired,setInvoiceRequired]=useState(true);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+
+  useEffect(()=>{if(open){setProblem('');setWorkflow('diagnosis_then_quote');setInvoiceRequired(true);setError(null)}},[open,item.vehicleId]);
+  if(!open)return null;
+
+  const submit=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    if(!problem.trim()){setError('Bitte Problem oder gewünschten Arbeitsumfang eintragen.');return}
+    setBusy(true);setError(null);
+    try{
+      const order:any=await createWalkInWorkOrder({
+        workshopId,vehicleId:item.vehicleId,customerId:item.customerId??null,problem,workflowPath:workflow,invoiceRequired
+      });
+      await onDone(order.id);
+    }catch(err){setError(err instanceof Error?err.message:'Auftrag konnte nicht angelegt werden.')}
+    finally{setBusy(false)}
+  };
+
+  return <div className="modal-backdrop" onMouseDown={()=>{if(!busy)onClose()}}>
+    <section className="workflow-modal walk-in-order-modal" onMouseDown={e=>e.stopPropagation()}>
+      <header><div className="modal-icon"><Car/></div><div><span>NEUER WERKSTATTAUFTRAG</span><h2>Fahrzeug ist jetzt eingetroffen</h2><small>{item.customerName} · {item.make} {item.model} · {item.licensePlate}</small></div><button disabled={busy} onClick={onClose}><X/></button></header>
+      <div className="vehicle-identity-lock"><ShieldCheck/><div><b>Nur bei tatsächlich anwesendem Fahrzeug</b><span>Mit dem Speichern wird das Fahrzeug direkt als „eingetroffen“ erfasst und erscheint im Werkstattablauf.</span></div></div>
+      <form onSubmit={submit}>
+        <label><span>Problem / Auftrag</span><textarea rows={4} value={problem} onChange={e=>setProblem(e.target.value)} placeholder="z. B. Kunde meldet Geräusch vorne rechts / Ölwechsel durchführen" required/></label>
+        <label><span>Ablauf</span><select value={workflow} onChange={e=>setWorkflow(e.target.value as ServiceRequestIntent)}>
+          <option value="diagnosis_then_quote">Diagnose → Kostenvoranschlag</option>
+          <option value="diagnosis_then_decide">Diagnose → Entscheidung</option>
+          <option value="diagnosis_only">Nur Diagnose / Prüfung</option>
+          <option value="direct_work">Direktauftrag / Arbeit freigegeben</option>
+          <option value="quote_before_work">Kostenvoranschlag vor Arbeit</option>
+        </select></label>
+        <label className="modal-check-row"><input type="checkbox" checked={invoiceRequired} onChange={e=>setInvoiceRequired(e.target.checked)}/><span><b>Rechnung vorgesehen</b><small>Kann später bei tatsächlich kostenlosem Auftrag auf „Keine Kosten entstanden“ gesetzt werden.</small></span></label>
+        {error&&<div className="modal-error">{error}</div>}
+        <div className="modal-actions"><button type="button" className="btn secondary" disabled={busy} onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={busy}>{busy?'Auftrag wird angelegt …':'Auftrag anlegen & einchecken'}</button></div>
+      </form>
+    </section>
+  </div>;
 }
 
 function VehicleClaimQrModal({open,onClose,item,workshopId}:{open:boolean;onClose:()=>void;item:WorkshopCustomerDirectoryItem;workshopId:string}){
