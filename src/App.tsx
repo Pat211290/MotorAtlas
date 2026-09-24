@@ -130,7 +130,7 @@ function authPath(segment:string){
 
 function viewFromLocation():AppView|null{
   const path=location.pathname.replace(/\/+$/,'');
-  if(path.endsWith('/anmelden')||path.endsWith('/bestaetigung')||path.endsWith('/passwort-zuruecksetzen'))return'login';
+  if(path.endsWith('/anmelden')||path.endsWith('/bestaetigung')||path.endsWith('/passwort-zuruecksetzen')||path.endsWith('/fahrzeug-uebernehmen'))return'login';
   return viewFromHash(location.hash);
 }
 
