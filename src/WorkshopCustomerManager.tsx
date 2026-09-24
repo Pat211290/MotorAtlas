@@ -11,9 +11,8 @@ import {
 function claimUrl(token:string){
   const configured=(import.meta.env.VITE_PUBLIC_APP_URL as string|undefined)?.trim()||'https://motoratlas.de/';
   const url=new URL(configured);
-  url.pathname=url.pathname.replace(/\/+$/,'')+'/fahrzeug-uebernehmen';
-  url.search='?claim='+encodeURIComponent(token);
-  url.hash='';
+  url.search='';
+  url.hash='/fahrzeug-uebernehmen?claim='+encodeURIComponent(token);
   return url.toString();
 }
 
