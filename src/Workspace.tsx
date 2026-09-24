@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Bell, Building2, CalendarDays, Car, Clock3, FileText, Home, Mail, MapPin, MessageCircle,
+  AlertTriangle, Archive, Bell, Building2, CalendarDays, Car, Clock3, FileText, Home, Mail, MapPin, MessageCircle,
   Phone, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, Wrench
 } from 'lucide-react';
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
+import { archiveMyVehicle, assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
+import { VehicleIdentityModal } from './VehicleIdentityModal';
 import { ServiceRequestModal } from './ServiceRequestModal';
 import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeRequestModals';
 import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
@@ -275,6 +276,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [docType,setDocType]=useState<'quote'|'invoice'|null>(null);
  const [workDecision,setWorkDecision]=useState<WorkNextStepDecision|null>(null);
  const [noCostConfirm,setNoCostConfirm]=useState(false);
+ const [vehicleIdentityOpen,setVehicleIdentityOpen]=useState(false);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
  const [customerRequest,setCustomerRequest]=useState<any|null>(null);
  const [busy,setBusy]=useState(false);
@@ -625,7 +627,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
      <div className="lower-grid">{selected?<section className="panel focus-card workflow-focus-card">
        <div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small>{selected.workflowPath&&<span className="workflow-path-label">{selected.workflowPath==='direct_work'?'Direktauftrag':selected.workflowPath==='diagnosis_only'?'Nur Diagnose':selected.workflowPath==='diagnosis_then_decide'?'Diagnose → Entscheidung':selected.workflowPath==='quote_before_work'?'Kostenvoranschlag vor Arbeit':'Diagnose → Kostenvoranschlag'}</span>}</div>
-       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}}><MessageCircle size={16}/> Fahrzeugchat</button>{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
+       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}}><MessageCircle size={16}/> Fahrzeugchat</button>{live.isLive&&selected.arrivedAt&&<button className="btn secondary" onClick={()=>setVehicleIdentityOpen(true)}><Car size={16}/> Fahrzeugdaten</button>}{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
        {['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<div className="workflow-next-steps">
          <div className="workflow-choice-grid">
            <button className="workflow-choice primary" onClick={async()=>{setBusy(true);setActionError(null);try{if(selected.rawStage==='awaiting_customer_decision')await resolveWorkOrderNextStep({workOrderId:selected.id,decision:'motoratlas_quote'});setDocType('quote');await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Kostenvoranschlag konnte nicht vorbereitet werden.')}finally{setBusy(false)}}}>
@@ -746,6 +748,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  />
  <VehicleChat open={Boolean(chatInboxTarget)} onClose={()=>setChatInboxTarget(null)} audience="workshop" chatThreadId={chatInboxTarget?.threadId} workshopId={live.identity?.workshopId} vehicleId={chatInboxTarget?.vehicleId} vehicleLabel={chatInboxTarget?.vehicleName??'Fahrzeug'} plate={chatInboxTarget?.plate??'—'} chatEnabled={live.identity?.chatEnabled}/>
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
+ {selected&&<VehicleIdentityModal open={vehicleIdentityOpen} onClose={()=>setVehicleIdentityOpen(false)} onDone={live.reload} job={selected}/>}
  {selected&&<WorkDecisionModal open={Boolean(workDecision)} onClose={()=>setWorkDecision(null)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle} decision={workDecision}/>}
  {selected&&noCostConfirm&&<div className="modal-backdrop" onMouseDown={()=>{if(!busy)setNoCostConfirm(false)}}>
    <section className="workflow-modal no-cost-modal" onMouseDown={event=>event.stopPropagation()}>
@@ -788,6 +791,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
  const [chat,setChat]=useState(false);
  const [notificationChatThreadId,setNotificationChatThreadId]=useState<string|null>(null);
  const [diagnosis,setDiagnosis]=useState(false);
+ const [vehicleIdentityOpen,setVehicleIdentityOpen]=useState(false);
  const [busy,setBusy]=useState(false);
  const [actionError,setActionError]=useState<string|null>(null);
  const [memberId,setMemberId]=useState('');
@@ -948,6 +952,12 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
              <span>km: {selected.mileage!=null?selected.mileage.toLocaleString('de-DE'):'—'}</span>
              <span>HSN/TSN: {[selected.hsn,selected.tsn].filter(Boolean).join(' / ')||'—'}</span>
              <span>VIN: {selected.vin||'—'}</span>
+             <span>D.2: {selected.typeVariantVersion||'—'}</span>
+             <span>Motorcode: {selected.engineCode||'—'}</span>
+             <span>Hubraum / Leistung: {[selected.displacementCcm?selected.displacementCcm+' cm³':null,selected.powerKw?selected.powerKw+' kW':null].filter(Boolean).join(' · ')||'—'}</span>
+             <span>Kraftstoff / Antrieb: {[selected.fuelType,selected.driveType].filter(Boolean).join(' · ')||'—'}</span>
+             <span>Getriebecode: {selected.transmissionCode||'—'}</span>
+             {selected.identityVerifiedAt&&<span>Zuletzt geprüft: {new Date(selected.identityVerifiedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</span>}
            </section>
          </div>
 
@@ -984,12 +994,14 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
 
          <div className="work-detail-actions">
            <button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}} disabled={live.identity?.chatEnabled===false}><MessageCircle size={17}/> Fahrzeugchat</button>
+           {live.isLive&&selected.arrivedAt&&<button className="btn secondary" onClick={()=>setVehicleIdentityOpen(true)}><Car size={17}/> Fahrzeugdaten prüfen & ergänzen</button>}
          </div>
        </>:<div className="work-empty"><Car size={34}/><b>Kein Fahrzeug ausgewählt.</b><span>Klicke links auf ein eingetroffenes Fahrzeug, um alle Daten und den Auftrag zu öffnen.</span></div>}
      </section>
    </div>
  </div>
  {selected&&<VehicleChat open={chat} onClose={()=>{setChat(false);setNotificationChatThreadId(null)}} audience="workshop" chatThreadId={notificationChatThreadId} workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
+ {selected&&<VehicleIdentityModal open={vehicleIdentityOpen} onClose={()=>setVehicleIdentityOpen(false)} onDone={live.reload} job={selected}/>}
  {selected&&<DiagnosisModal open={diagnosis} onClose={()=>setDiagnosis(false)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle}/>}
  </Shell>;
 }
@@ -1007,6 +1019,8 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [vehicleModal,setVehicleModal]=useState(false);
  const [requestModal,setRequestModal]=useState(false);
  const [requestVehicleId,setRequestVehicleId]=useState<string|null>(null);
+ const [archiveVehicleId,setArchiveVehicleId]=useState<string|null>(null);
+ const [archiveVehicleBusy,setArchiveVehicleBusy]=useState(false);
  const [directory,setDirectory]=useState(false);
  const [profileModal,setProfileModal]=useState(false);
  const [cancelTarget,setCancelTarget]=useState<(typeof live.appointments)[number]|null>(null);
@@ -1371,6 +1385,20 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
          <div className="wide"><small>FIN / VIN</small><b>{selectedVehicle.vin||'Nicht hinterlegt'}</b></div>
        </div>
 
+       <div className="garage-workshop-data">
+         <header><ShieldCheck/><div><small>WERKSTATTGEPRÜFTE IDENTIFIKATION</small><h3>Technische Fahrzeugdaten</h3><p>Diese Angaben sind für eine sichere Teile- und Fahrzeugidentifikation gedacht und können nur von einer autorisierten Werkstatt geändert werden, wenn das Fahrzeug eingecheckt ist.</p></div></header>
+         <div className="garage-workshop-data-grid">
+           <div><small>TYP / VARIANTE / VERSION (D.2)</small><b>{selectedVehicle.typeVariantVersion||'Nicht hinterlegt'}</b></div>
+           <div><small>MOTORCODE</small><b>{selectedVehicle.engineCode||'Nicht hinterlegt'}</b></div>
+           <div><small>HUBRAUM</small><b>{selectedVehicle.displacementCcm!=null?selectedVehicle.displacementCcm.toLocaleString('de-DE')+' cm³':'Nicht hinterlegt'}</b></div>
+           <div><small>LEISTUNG</small><b>{selectedVehicle.powerKw!=null?selectedVehicle.powerKw+' kW':'Nicht hinterlegt'}</b></div>
+           <div><small>KRAFTSTOFF</small><b>{selectedVehicle.fuelType||'Nicht hinterlegt'}</b></div>
+           <div><small>GETRIEBECODE</small><b>{selectedVehicle.transmissionCode||'Nicht hinterlegt'}</b></div>
+           <div><small>ANTRIEB</small><b>{selectedVehicle.driveType||'Nicht hinterlegt'}</b></div>
+           <div><small>LETZTE WERKSTATTPRÜFUNG</small><b>{selectedVehicle.identityVerifiedAt?new Date(selectedVehicle.identityVerifiedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch nicht werkstattgeprüft'}</b></div>
+         </div>
+       </div>
+
        {(selectedOrder||selectedRequest||selectedAppointment)&&<div className="garage-related">
          <small>AKTUELLER VORGANG</small>
          {selectedOrder?<><b>{customerOrderTitle(selectedOrder.rawStage,selectedOrder.commercialState)}</b><span>Auftrag #{selectedOrder.orderNumber} · {customerOrderDetail(selectedOrder.rawStage,selectedOrder.commercialState,selectedOrder.invoiceRequired)}</span></>:selectedAppointment?<><b>{selectedAppointment.status==='proposed'?'Terminvorschlag':'Werkstatttermin'}</b><span>{new Date(selectedAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</span></>:selectedRequest?<><b>{requestStatusLabel(selectedRequest.status)}</b><span>{selectedRequest.complaint==='Keine Fehlerbeschreibung angegeben.'?'Keine zusätzliche Beschreibung angegeben.':selectedRequest.complaint}</span></>:null}
@@ -1379,6 +1407,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        <div className="garage-detail-actions">
          <button className="btn primary" onClick={()=>{setRequestVehicleId(selectedVehicle.id);setRequestModal(true)}}><Plus size={16}/> Werkstattanfrage für dieses Fahrzeug</button>
          {selectedOrder&&<button className="btn secondary" onClick={()=>{setNotificationOrderId(selectedOrder.id);setSection('Übersicht')}}>Aktuellen Auftrag öffnen</button>}
+         <button className="btn secondary garage-archive-button" disabled={Boolean(selectedOrder||selectedRequest||selectedAppointment)} title={selectedOrder||selectedRequest||selectedAppointment?'Erst nach Abschluss aller offenen Vorgänge möglich':'Fahrzeug als verkauft markieren'} onClick={()=>setArchiveVehicleId(selectedVehicle.id)}><Archive size={16}/> {selectedOrder||selectedRequest||selectedAppointment?'Verkauf erst nach Abschluss':'Fahrzeug verkauft / aus Garage'}</button>
        </div>
      </section>
    </div>;
@@ -1493,6 +1522,14 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
      {section==='Stammwerkstatt'&&renderWorkshop()}
    </>:<section className="panel customer-empty-status"><Car/><div><span className="overline">PRODUKTDEMO</span><h2>Dein MotorAtlas-Kundenportal</h2><p>Nach der Anmeldung erscheinen hier echte Termine, Fahrzeuge, Dokumente und deine Stammwerkstatt.</p></div></section>}
  </div>
+ {archiveVehicleId&&<div className="modal-backdrop" onMouseDown={()=>{if(!archiveVehicleBusy)setArchiveVehicleId(null)}}>
+   <section className="workflow-modal garage-archive-modal" onMouseDown={event=>event.stopPropagation()}>
+     <header><div className="modal-icon"><Archive/></div><div><span>MEINE GARAGE</span><h2>Fahrzeug verkauft?</h2><small>Das Fahrzeug wird nicht gelöscht. Frühere Aufträge und Dokumente bleiben erhalten.</small></div><button disabled={archiveVehicleBusy} onClick={()=>setArchiveVehicleId(null)} aria-label="Schließen">×</button></header>
+     <div className="workflow-decision-note"><ShieldCheck/><p>Das Fahrzeug verschwindet aus deiner aktiven Garage und kann nicht mehr für neue Anfragen ausgewählt werden. Die Fahrzeugidentität und Historie bleiben unverändert gespeichert.</p></div>
+     {actionError&&<div className="modal-error">{actionError}</div>}
+     <div className="modal-actions"><button type="button" className="btn secondary" disabled={archiveVehicleBusy} onClick={()=>setArchiveVehicleId(null)}>Abbrechen</button><button type="button" className="btn primary" disabled={archiveVehicleBusy} onClick={async()=>{if(!archiveVehicleId)return;setArchiveVehicleBusy(true);setActionError(null);try{await archiveMyVehicle(archiveVehicleId);setArchiveVehicleId(null);setGarageVehicleId(null);await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Fahrzeug konnte nicht archiviert werden.')}finally{setArchiveVehicleBusy(false)}}}>{archiveVehicleBusy?'Wird archiviert …':'Ja, Fahrzeug verkauft'}</button></div>
+   </section>
+ </div>}
  <CustomerProfileModal open={profileModal} onClose={()=>setProfileModal(false)} onSaved={live.reload}/>
  <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
  <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
