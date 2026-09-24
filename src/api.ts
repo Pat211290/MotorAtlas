@@ -516,7 +516,8 @@ export type LiveJob={
   id:string;
   orderNumber:string;
   vehicleId:string;
-  customerUserId:string;
+  customerUserId?:string|null;
+  localCustomerId?:string|null;
   serviceRequestId?:string|null;
   vehicle:string;
   make?:string|null;
@@ -621,7 +622,7 @@ export async function getCurrentWorkshopIdentity():Promise<WorkshopIdentity|null
 export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const client=db();
   const {data:orders,error}=await client.from('work_orders')
-    .select('id,order_number,stage,priority,vehicle_id,service_request_id,customer_user_id,arrived_at,workflow_path,commercial_state,agreement_method,agreement_note,invoice_required,updated_at')
+    .select('id,order_number,stage,priority,vehicle_id,service_request_id,customer_user_id,local_customer_id,arrived_at,workflow_path,commercial_state,agreement_method,agreement_note,invoice_required,work_description,updated_at')
     .eq('workshop_id',workshopId)
     .not('stage','in','("closed","cancelled","appointment_confirmed")')
     .order('updated_at',{ascending:false});
@@ -644,10 +645,17 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   if(assignmentResult.error)throw assignmentResult.error;
 
   const customerIds=[...new Set(rows.map(r=>r.customer_user_id).filter(Boolean))];
-  const profileResult=customerIds.length
-    ?await client.from('profiles').select('id,full_name,email,phone,street,postal_code,city').in('id',customerIds)
-    :{data:[],error:null} as any;
+  const localCustomerIds=[...new Set(rows.map(r=>r.local_customer_id).filter(Boolean))];
+  const [profileResult,localCustomerResult]=await Promise.all([
+    customerIds.length
+      ?client.from('profiles').select('id,full_name,email,phone,street,postal_code,city').in('id',customerIds)
+      :Promise.resolve({data:[],error:null} as any),
+    localCustomerIds.length
+      ?client.from('workshop_customers').select('id,full_name,email,phone,street,postal_code,city').eq('workshop_id',workshopId).in('id',localCustomerIds)
+      :Promise.resolve({data:[],error:null} as any)
+  ]);
   if(profileResult.error)throw profileResult.error;
+  if(localCustomerResult.error)throw localCustomerResult.error;
   const assigneeIds=[...new Set(((assignmentResult.data??[]) as any[]).map(a=>a.member_user_id).filter(Boolean))];
   const memberResult=assigneeIds.length
     ?await client.from('workshop_members').select('user_id,display_name').eq('workshop_id',workshopId).in('user_id',assigneeIds)
@@ -657,6 +665,7 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const vehicleMap=new Map(((vehicleResult.data??[]) as any[]).map(v=>[v.id,v]));
   const requestMap=new Map(((requestResult.data??[]) as any[]).map(r=>[r.id,r]));
   const profileMap=new Map(((profileResult.data??[]) as any[]).map(p=>[p.id,p]));
+  const localCustomerMap=new Map(((localCustomerResult.data??[]) as any[]).map(p=>[p.id,p]));
   const memberMap=new Map(((memberResult.data??[]) as any[]).map(m=>[m.user_id,m.display_name]));
   const assignmentMap=new Map(((assignmentResult.data??[]) as any[]).map(a=>[a.work_order_id,{
     userId:a.member_user_id,name:memberMap.get(a.member_user_id)??null,type:a.assignment_type,claimedAt:a.claimed_at
@@ -666,12 +675,15 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
     const vehicle=vehicleMap.get(row.vehicle_id) as any;
     const request=requestMap.get(row.service_request_id) as any;
     const profile=profileMap.get(row.customer_user_id) as any;
+    const localCustomer=localCustomerMap.get(row.local_customer_id) as any;
+    const customer=profile??localCustomer;
     const assignment=assignmentMap.get(row.id) as any;
     return{
       id:row.id,
       orderNumber:row.order_number,
       vehicleId:row.vehicle_id,
-      customerUserId:row.customer_user_id,
+      customerUserId:row.customer_user_id??null,
+      localCustomerId:row.local_customer_id??null,
       serviceRequestId:row.service_request_id,
       vehicle:vehicle?[vehicle.make,vehicle.model,vehicle.variant].filter(Boolean).join(' '):'Fahrzeug',
       make:vehicle?.make??null,model:vehicle?.model??null,variant:vehicle?.variant??null,
@@ -683,10 +695,10 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
       fuelType:vehicle?.fuel_type??null,transmissionCode:vehicle?.transmission_code??null,driveType:vehicle?.drive_type??null,
       identityVerifiedAt:vehicle?.identity_verified_at??null,identityVerifiedWorkshopId:vehicle?.identity_verified_workshop_id??null,
       photoPath:vehicle?.photo_path??null,
-      complaint:request?.complaint??'Kein Beanstandungstext hinterlegt.',
+      complaint:request?.complaint??row.work_description??'Kein Beanstandungstext hinterlegt.',
       customerNotes:request?.customer_notes??null,driveable:request?.driveable??null,warningLevel:request?.warning_level??null,
-      customerName:profile?.full_name??'Kunde',customerEmail:profile?.email??null,customerPhone:profile?.phone??null,
-      customerStreet:profile?.street??null,customerPostalCode:profile?.postal_code??null,customerCity:profile?.city??null,
+      customerName:customer?.full_name??'Kunde',customerEmail:customer?.email??null,customerPhone:customer?.phone??null,
+      customerStreet:customer?.street??null,customerPostalCode:customer?.postal_code??null,customerCity:customer?.city??null,
       arrivedAt:row.arrived_at??null,
       stage:mapOrderStage(row.stage),
       rawStage:row.stage,
@@ -1035,7 +1047,8 @@ export type WorkOrderDocument={
   id:string;
   work_order_id:string;
   workshop_id:string;
-  customer_user_id:string;
+  customer_user_id?:string|null;
+  local_customer_id?:string|null;
   document_type:'quote'|'invoice'|'credit_note'|'other';
   document_number?:string|null;
   title?:string|null;
@@ -1200,9 +1213,13 @@ export async function createWorkshopCustomerVehicle(input:{
     p_transmission_code:input.transmissionCode?.trim().toUpperCase()||null,p_drive_type:input.driveType?.trim()||null
   });
   if(error){
-    const message=error.message.includes('vehicles_vin_unique_idx')||error.message.includes('duplicate key')
-      ?'Diese FIN/VIN ist bereits einem Fahrzeug in MotorAtlas zugeordnet.'
-      :error.message.includes('customer_name_required')
+    const message=error.message.includes('vehicle_already_known_to_workshop')
+      ?'Dieses Fahrzeug ist über die FIN bereits in deiner Werkstattakte vorhanden. Öffne den bestehenden Datensatz statt einen zweiten anzulegen.'
+      :error.message.includes('vehicle_exists_claim_required')
+        ?'Zu dieser FIN existiert bereits ein MotorAtlas-Fahrzeug. Aus Datenschutzgründen kann es hier nicht neu verknüpft werden. Nutze eine geprüfte Fahrzeugübernahme.'
+        :error.message.includes('vehicles_vin_unique_idx')||error.message.includes('duplicate key')
+          ?'Diese FIN/VIN ist bereits einem Fahrzeug in MotorAtlas zugeordnet.'
+          :error.message.includes('customer_name_required')
         ?'Bitte den Kundennamen eintragen.'
         :error.message.includes('license_plate_required')
           ?'Bitte das Kennzeichen eintragen.'
@@ -1210,6 +1227,27 @@ export async function createWorkshopCustomerVehicle(input:{
     throw new Error(message);
   }
   return Array.isArray(data)?data[0]:data;
+}
+
+export async function createWalkInWorkOrder(input:{
+  workshopId:string;vehicleId:string;customerId?:string|null;problem:string;
+  workflowPath:ServiceRequestIntent;invoiceRequired?:boolean;
+}){
+  const {data,error}=await db().rpc('create_walk_in_work_order',{
+    p_workshop_id:input.workshopId,p_vehicle_id:input.vehicleId,p_customer_id:input.customerId??null,
+    p_problem:input.problem.trim()||null,p_workflow_path:input.workflowPath,p_invoice_required:input.invoiceRequired??true
+  });
+  if(error){
+    const message=error.message.includes('vehicle_has_active_work_order')
+      ?'Für dieses Fahrzeug läuft bereits ein aktiver Werkstattauftrag.'
+      :error.message.includes('customer_vehicle_not_linked')
+        ?'Kunde und Fahrzeug sind in dieser Werkstattakte nicht miteinander verknüpft.'
+        :error.message.includes('not_authorized')
+          ?'Du darfst für dieses Fahrzeug keinen Auftrag anlegen.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function getVehicleHistory(vehicleId:string):Promise<VehicleHistoryEntry[]>{
