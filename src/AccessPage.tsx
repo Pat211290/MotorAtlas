@@ -352,7 +352,7 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       const {error}=await supabase.auth.resend({
         type:'signup',
         email:pendingEmail,
-        options:{emailRedirectTo:authReturnUrl('/bestaetigung')}
+        options:{emailRedirectTo:authReturnUrl('/bestaetigung',readPendingVehicleClaim()?'claim='+encodeURIComponent(readPendingVehicleClaim()):undefined)}
       });
       if(error){
         if(error.status===429){
@@ -366,6 +366,52 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     }finally{
       setResendBusy(false);
     }
+  };
+
+  const completeVehicleClaim=async(token=readPendingVehicleClaim())=>{
+    if(!token)throw new Error('Der Fahrzeug-Code fehlt.');
+    await claimVehicleWithToken(token);
+    savePendingVehicleClaim('');
+    try{
+      localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+      localStorage.removeItem(SIGNUP_CONFIRM_EVENT_KEY);
+    }catch{}
+    setView('customer');
+  };
+
+  const submitVehicleClaim=async(event:React.FormEvent)=>{
+    event.preventDefault();
+    setMessage('');
+    if(!backendConfigured||!supabase){setMessage('Die Backend-Verbindung ist derzeit nicht verfügbar.');return}
+    const token=claimTokenFromUrl||readPendingVehicleClaim();
+    if(!token){setMessage('Der Fahrzeug-Code fehlt. Bitte scanne den QR-Code erneut.');return}
+    setBusy(true);
+    try{
+      if(claimSignedIn){
+        await completeVehicleClaim(token);
+        return;
+      }
+      if(claimAccountMode==='login'){
+        const {error}=await supabase.auth.signInWithPassword({email,password});
+        if(error)throw error;
+        await completeVehicleClaim(token);
+        return;
+      }
+      const result=await signUpCustomer(email,password,'',{
+        accountIntent:'customer',
+        emailRedirectQuery:'claim='+encodeURIComponent(token)
+      });
+      const normalizedEmail=email.trim();
+      setPendingEmail(normalizedEmail);
+      try{localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY,normalizedEmail)}catch{}
+      if(result.session){
+        await completeVehicleClaim(token);
+      }else{
+        setMessage('Konto erstellt. Bitte bestätige deine E-Mail-Adresse. Der Fahrzeug-Code bleibt gespeichert und wird nach deiner Anmeldung automatisch übernommen.');
+      }
+    }catch(error){
+      setMessage(error instanceof Error?error.message:'Fahrzeug konnte nicht übernommen werden.');
+    }finally{setBusy(false)}
   };
 
   const submit=async(event:React.FormEvent)=>{
@@ -401,6 +447,11 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       if(tab==='login'){
         const {error}=await supabase.auth.signInWithPassword({email,password});
         if(error)throw error;
+        const pendingClaim=readPendingVehicleClaim();
+        if(pendingClaim){
+          await completeVehicleClaim(pendingClaim);
+          return;
+        }
         try{
           localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
           localStorage.removeItem(SIGNUP_CONFIRM_EVENT_KEY);
@@ -439,6 +490,62 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
       setBusy(false);
     }
   };
+
+  if(claimPage){
+    const valid=Boolean(claimPreview?.valid);
+    return <main className="access-page vehicle-claim-access">
+      <div className="access-glow one"/><div className="access-glow two"/>
+      <section className="wrap access-layout">
+        <div className="access-story">
+          <span className="access-kicker">FAHRZEUG ÜBERNEHMEN</span>
+          <h1>Dein Fahrzeug ist schon bei MotorAtlas angelegt.</h1>
+          <p>Die Werkstatt hat die Fahrzeugakte vorbereitet. Du brauchst kein Fahrzeugschein-Foto hochzuladen und musst die Daten nicht noch einmal abtippen.</p>
+          <div className="access-benefits">
+            <article><i><Car/></i><div><b>Fahrzeug bereits vorhanden</b><span>Fahrzeugdaten und technische Historie bleiben am Fahrzeug.</span></div></article>
+            <article><i><ShieldCheck/></i><div><b>Sichere Übergabe</b><span>Der QR-Code enthält nur einen zufälligen Einmal-Schlüssel und keine persönlichen Daten.</span></div></article>
+            <article><i><CheckCircle2/></i><div><b>Danach deine Garage</b><span>Nach der Übernahme erscheint das Fahrzeug direkt in deinem MotorAtlas-Konto.</span></div></article>
+          </div>
+        </div>
+
+        <section className="access-card vehicle-claim-access-card">
+          {claimLoading?<div className="access-verify"><div className="access-verify-icon"><RefreshCw/></div><h2>Fahrzeug wird geprüft …</h2></div>
+          :!claimPreview?<div className="access-verify"><div className="access-verify-icon"><Car/></div><h2>Fahrzeug-Code nicht gefunden</h2><p className="access-verify-lead">Bitte scanne den QR-Code der Werkstatt erneut.</p></div>
+          :!valid?<div className="access-verify"><div className="access-verify-icon"><Car/></div><h2>Dieser QR-Code ist nicht mehr gültig</h2><p className="access-verify-lead">Bitte lass dir von {claimPreview.workshopName} einen neuen QR-Code erstellen.</p></div>
+          :<>
+            <div className="vehicle-claim-preview">
+              <span>VON {claimPreview.workshopName.toUpperCase()}</span>
+              <Car/>
+              <h2>{[claimPreview.make,claimPreview.model,claimPreview.variant].filter(Boolean).join(' ')}</h2>
+              <b>{claimPreview.licensePlate}</b>
+              <small>Code gültig bis {new Date(claimPreview.expiresAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</small>
+            </div>
+
+            {claimSignedIn?<div className="vehicle-claim-signed-in">
+              <ShieldCheck/><div><b>Du bist bereits angemeldet.</b><span>Mit einem Klick wird dieses Fahrzeug deiner Garage zugeordnet.</span></div>
+              {message&&<div className="auth-message">{message}</div>}
+              <button className="btn primary xl full" disabled={busy} onClick={e=>void submitVehicleClaim(e as unknown as React.FormEvent)}>{busy?'Fahrzeug wird übernommen …':'Fahrzeug übernehmen'} <ArrowRight/></button>
+            </div>:<>
+              <div className="access-tabs vehicle-claim-tabs">
+                <button className={claimAccountMode==='register'?'active':''} onClick={()=>{setClaimAccountMode('register');setMessage('')}}>Neu registrieren</button>
+                <button className={claimAccountMode==='login'?'active':''} onClick={()=>{setClaimAccountMode('login');setMessage('')}}>Schon registriert</button>
+              </div>
+              <div className="access-card-head">
+                <span>{claimAccountMode==='register'?'NUR NOCH DEIN KONTO':'ANMELDEN & ÜBERNEHMEN'}</span>
+                <h2>{claimAccountMode==='register'?'E-Mail und Passwort reichen':'Bei MotorAtlas anmelden'}</h2>
+                <p>{claimAccountMode==='register'?'Weitere Fahrzeugdaten sind bereits hinterlegt. Deine Kontaktdaten kannst du später freiwillig im Profil ergänzen.':'Nach der Anmeldung wird das Fahrzeug direkt deiner Garage zugeordnet.'}</p>
+              </div>
+              <form onSubmit={submitVehicleClaim}>
+                <label><span>E-Mail</span><div><Mail/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></div></label>
+                <label><span>Passwort</span><div><LockKeyhole/><input type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required/><button type="button" className="show-password" onClick={()=>setShow(!show)}>{show?<EyeOff/>:<Eye/>}</button></div></label>
+                {message&&<div className="auth-message">{message}</div>}
+                <button className="btn primary xl full" disabled={busy}>{busy?'Bitte einen Moment …':claimAccountMode==='register'?'Konto erstellen & Fahrzeug übernehmen':'Anmelden & Fahrzeug übernehmen'} <ArrowRight/></button>
+              </form>
+            </>}
+          </>}
+        </section>
+      </section>
+    </main>;
+  }
 
   return <main className="access-page">
     <div className="access-glow one"/><div className="access-glow two"/>
