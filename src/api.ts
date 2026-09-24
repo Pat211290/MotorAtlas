@@ -970,7 +970,8 @@ export async function listMyWorkshopNotifications(workshopId:string,limit=30):Pr
   const {data:auth}=await client.auth.getUser();if(!auth.user)return[];
   const {data,error}=await client.from('notifications')
     .select('id,workshop_id,title,body,kind,work_order_id,target_type,target_id,read_at,created_at')
-    .eq('user_id',auth.user.id).eq('workshop_id',workshopId)
+    .eq('user_id',auth.user.id)
+    .or(`workshop_id.eq.${workshopId},workshop_id.is.null`)
     .order('created_at',{ascending:false}).limit(limit);
   if(error)throw error;
   return((data??[]) as any[]).map(n=>({
