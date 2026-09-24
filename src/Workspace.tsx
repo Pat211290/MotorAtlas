@@ -22,6 +22,7 @@ import { VerificationPanel } from './VerificationPanel';
 import { CustomerProfileModal } from './CustomerProfileModal';
 import { AppointmentCancelModal } from './AppointmentCancelModal';
 import { WorkDecisionModal } from './WorkDecisionModal';
+import { ExternalApprovalModal } from './ExternalApprovalModal';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
 type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente'|'Stammwerkstatt';
@@ -279,6 +280,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [workDecision,setWorkDecision]=useState<WorkNextStepDecision|null>(null);
  const [noCostConfirm,setNoCostConfirm]=useState(false);
  const [vehicleIdentityOpen,setVehicleIdentityOpen]=useState(false);
+ const [externalApprovalOpen,setExternalApprovalOpen]=useState(false);
  const [serviceRequest,setServiceRequest]=useState<(typeof live.serviceRequests)[number]|null>(null);
  const [customerRequest,setCustomerRequest]=useState<any|null>(null);
  const [busy,setBusy]=useState(false);
@@ -629,7 +631,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
      <div className="lower-grid">{selected?<section className="panel focus-card workflow-focus-card">
        <div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small>{selected.workflowPath&&<span className="workflow-path-label">{selected.workflowPath==='direct_work'?'Direktauftrag':selected.workflowPath==='diagnosis_only'?'Nur Diagnose':selected.workflowPath==='diagnosis_then_decide'?'Diagnose → Entscheidung':selected.workflowPath==='quote_before_work'?'Kostenvoranschlag vor Arbeit':'Diagnose → Kostenvoranschlag'}</span>}</div>
-       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}}><MessageCircle size={16}/> Fahrzeugchat</button>{live.isLive&&selected.arrivedAt&&<button className="btn secondary" onClick={()=>setVehicleIdentityOpen(true)}><Car size={16}/> Fahrzeugdaten</button>}{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
+       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" disabled={Boolean(live.isLive&&!selected.customerUserId)} onClick={()=>{setNotificationChatThreadId(null);setChat(true)}}><MessageCircle size={16}/> {live.isLive&&!selected.customerUserId?'Kein App-Chat':'Fahrzeugchat'}</button>{live.isLive&&selected.arrivedAt&&<button className="btn secondary" onClick={()=>setVehicleIdentityOpen(true)}><Car size={16}/> Fahrzeugdaten</button>}{live.isLive&&selected.rawStage==='awaiting_customer_approval'&&<button className="btn secondary" onClick={()=>setExternalApprovalOpen(true)}><ShieldCheck size={16}/> Externe Entscheidung erfassen</button>}{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
        {['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<div className="workflow-next-steps">
          <div className="workflow-choice-grid">
            <button className="workflow-choice primary" onClick={async()=>{setBusy(true);setActionError(null);try{if(selected.rawStage==='awaiting_customer_decision')await resolveWorkOrderNextStep({workOrderId:selected.id,decision:'motoratlas_quote'});setDocType('quote');await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Kostenvoranschlag konnte nicht vorbereitet werden.')}finally{setBusy(false)}}}>
@@ -706,7 +708,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
          <strong>Prüfen</strong>
        </button>)}
      </section>}
-     {live.identity&&<WorkshopCustomerManager workshopId={live.identity.workshopId} onChanged={live.reload}/>}
+     {live.identity&&<WorkshopCustomerManager workshopId={live.identity.workshopId} onChanged={live.reload} onOpenOrder={orderId=>{setSelectedId(orderId);openSection('Übersicht')}}/>}
    </>}
 
    {section==='Fahrzeuge'&&<>
@@ -753,6 +755,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  {selected&&<VehicleIdentityModal open={vehicleIdentityOpen} onClose={()=>setVehicleIdentityOpen(false)} onDone={live.reload} job={selected}/>}
  {selected&&<WorkDecisionModal open={Boolean(workDecision)} onClose={()=>setWorkDecision(null)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle} decision={workDecision}/>}
+ {selected&&<ExternalApprovalModal open={externalApprovalOpen} onClose={()=>setExternalApprovalOpen(false)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle}/>}
  {selected&&noCostConfirm&&<div className="modal-backdrop" onMouseDown={()=>{if(!busy)setNoCostConfirm(false)}}>
    <section className="workflow-modal no-cost-modal" onMouseDown={event=>event.stopPropagation()}>
      <header><div className="modal-icon"><ShieldCheck/></div><div><span>ABRECHNUNG</span><h2>Keine Kosten entstanden</h2><small>{selected.vehicle} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small></div><button disabled={busy} onClick={()=>setNoCostConfirm(false)} aria-label="Schließen">×</button></header>
@@ -996,7 +999,7 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
          </div>}
 
          <div className="work-detail-actions">
-           <button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}} disabled={live.identity?.chatEnabled===false}><MessageCircle size={17}/> Fahrzeugchat</button>
+           <button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}} disabled={live.identity?.chatEnabled===false||Boolean(live.isLive&&!selected.customerUserId)}><MessageCircle size={17}/> {live.isLive&&!selected.customerUserId?'Kein App-Chat':'Fahrzeugchat'}</button>
            {live.isLive&&selected.arrivedAt&&<button className="btn secondary" onClick={()=>setVehicleIdentityOpen(true)}><Car size={17}/> Fahrzeugdaten prüfen & ergänzen</button>}
          </div>
        </>:<div className="work-empty"><Car size={34}/><b>Kein Fahrzeug ausgewählt.</b><span>Klicke links auf ein eingetroffenes Fahrzeug, um alle Daten und den Auftrag zu öffnen.</span></div>}
