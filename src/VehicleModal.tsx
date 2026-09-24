@@ -1,25 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Camera, Car, X } from 'lucide-react';
-import { createVehicleWithPhoto, getVehicleImageUrl } from './api';
+import { Camera, Car, ShieldCheck, X } from 'lucide-react';
+import { createVehicleWithPhoto, getVehicleImageUrl, lookupVehicleForClaim, type VehicleClaimLookup } from './api';
+import { VehicleTransferOptions } from './VehicleTransferOptions';
 
-export function VehicleCreateModal({open,onClose,onDone}:{open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void}){
+export function VehicleCreateModal({open,onClose,onDone,onFindWorkshop}:{open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void;onFindWorkshop?:()=>void}){
   const [make,setMake]=useState('');const [model,setModel]=useState('');const [variant,setVariant]=useState('');
   const [firstRegistration,setFirstRegistration]=useState('');const [licensePlate,setLicensePlate]=useState('');
   const [hsn,setHsn]=useState('');const [tsn,setTsn]=useState('');const [vin,setVin]=useState('');const [mileage,setMileage]=useState('');
   const [photo,setPhoto]=useState<File|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);
+  const [claimLookup,setClaimLookup]=useState<VehicleClaimLookup|null>(null);
+  const [claimLookupBusy,setClaimLookupBusy]=useState(false);
   const preview=useMemo(()=>photo?URL.createObjectURL(photo):null,[photo]);
   useEffect(()=>()=>{if(preview)URL.revokeObjectURL(preview)},[preview]);
+  useEffect(()=>{
+    const normalized=vin.trim().toUpperCase();
+    if(!open||normalized.length!==17){setClaimLookup(null);setClaimLookupBusy(false);return}
+    let cancelled=false;
+    const id=window.setTimeout(()=>{
+      setClaimLookupBusy(true);
+      lookupVehicleForClaim(normalized)
+        .then(result=>{if(!cancelled)setClaimLookup(result)})
+        .catch(()=>{if(!cancelled)setClaimLookup(null)})
+        .finally(()=>{if(!cancelled)setClaimLookupBusy(false)});
+    },320);
+    return()=>{cancelled=true;window.clearTimeout(id)};
+  },[open,vin]);
   if(!open)return null;
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();
-    if(!photo){setError('Zu jedem Fahrzeug ist ein Fahrzeugbild erforderlich.');return}
+    if(claimLookup?.existsInMotorAtlas){
+      setError(claimLookup.alreadyMine?'Dieses Fahrzeug ist bereits deiner Garage zugeordnet.':'Dieses Fahrzeug existiert bereits in MotorAtlas. Bitte nutze eine sichere Fahrzeugübernahme.');
+      return;
+    }
+    if(!photo){setError('Zu jedem neuen Fahrzeug ist ein Fahrzeugbild erforderlich.');return}
     const km=mileage.trim()?Number(mileage):undefined;
     if(km!=null&&(!Number.isFinite(km)||km<0)){setError('Kilometerstand ist ungültig.');return}
     setBusy(true);setError(null);
     try{
       await createVehicleWithPhoto({make,model,variant,firstRegistration,licensePlate,hsn,tsn,vin,mileage:km,photo});
       await onDone();
-      setMake('');setModel('');setVariant('');setFirstRegistration('');setLicensePlate('');setHsn('');setTsn('');setVin('');setMileage('');setPhoto(null);
+      setMake('');setModel('');setVariant('');setFirstRegistration('');setLicensePlate('');setHsn('');setTsn('');setVin('');setMileage('');setPhoto(null);setClaimLookup(null);
       onClose();
     }catch(err){setError(err instanceof Error?err.message:'Fahrzeug konnte nicht gespeichert werden.')}
     finally{setBusy(false)}
@@ -27,10 +47,10 @@ export function VehicleCreateModal({open,onClose,onDone}:{open:boolean;onClose:(
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="workflow-modal vehicle-modal" onMouseDown={e=>e.stopPropagation()}>
     <header><div className="modal-icon"><Car/></div><div><span>MEINE GARAGE</span><h2>Fahrzeug hinzufügen</h2></div><button onClick={onClose} aria-label="Schließen"><X/></button></header>
     <form onSubmit={submit}>
-      <label className="vehicle-photo-upload">
+      {!claimLookup?.existsInMotorAtlas&&<label className="vehicle-photo-upload">
         <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>setPhoto(e.target.files?.[0]??null)} required/>
-        {preview?<img src={preview} alt="Fahrzeugvorschau"/>:<><Camera/><b>Fahrzeugbild aufnehmen oder auswählen</b><span>Pflichtangabe · JPG, PNG oder WebP</span></>}
-      </label>
+        {preview?<img src={preview} alt="Fahrzeugvorschau"/>:<><Camera/><b>Fahrzeugbild aufnehmen oder auswählen</b><span>Pflichtangabe bei einem neuen Fahrzeug · JPG, PNG oder WebP</span></>}
+      </label>}
       <div className="form-two"><label><span>Hersteller</span><input value={make} onChange={e=>setMake(e.target.value)} placeholder="BMW" required/></label><label><span>Modell</span><input value={model} onChange={e=>setModel(e.target.value)} placeholder="X3" required/></label></div>
       <div className="form-two"><label><span>Variante / Motorisierung</span><input value={variant} onChange={e=>setVariant(e.target.value)} placeholder="3.0i"/></label><label><span>Erstzulassung</span><input type="date" value={firstRegistration} onChange={e=>setFirstRegistration(e.target.value)}/></label></div>
       <div className="form-two"><label><span>Kennzeichen</span><input value={licensePlate} onChange={e=>setLicensePlate(e.target.value.toUpperCase())} placeholder="SAD XX 123" required/></label><label><span>Kilometerstand</span><input inputMode="numeric" value={mileage} onChange={e=>setMileage(e.target.value.replace(/\D/g,''))} placeholder="247318"/></label></div>
@@ -38,9 +58,18 @@ export function VehicleCreateModal({open,onClose,onDone}:{open:boolean;onClose:(
         <label><span>HSN <small>optional · Herstellerschlüsselnummer</small></span><input value={hsn} onChange={e=>setHsn(e.target.value.replace(/\D/g,''))} maxLength={4} inputMode="numeric" placeholder="z. B. 0005"/><small className="field-help">Steht in der Zulassungsbescheinigung Teil I im Feld 2.1.</small></label>
         <label><span>TSN <small>optional · Typschlüsselnummer</small></span><input value={tsn} onChange={e=>setTsn(e.target.value.toUpperCase().replace(/\s/g,''))} placeholder="z. B. ABC"/><small className="field-help">Steht in der Zulassungsbescheinigung Teil I im Feld 2.2.</small></label>
       </div>
-      <label><span>FIN / VIN <small>optional · Fahrzeug-Identifizierungsnummer</small></span><input value={vin} onChange={e=>setVin(e.target.value.toUpperCase().replace(/\s/g,''))} maxLength={17} placeholder="17-stellig, z. B. WBA…"/><small className="field-help">Die 17-stellige Fahrzeug-Identifizierungsnummer findest du im Feld E der Zulassungsbescheinigung Teil I und am Fahrzeug.</small></label>
+      <label><span>FIN / VIN <small>optional · Fahrzeug-Identifizierungsnummer</small></span><input value={vin} onChange={e=>setVin(e.target.value.toUpperCase().replace(/\s/g,''))} maxLength={17} placeholder="17-stellig, z. B. WBA…"/><small className="field-help">Bei 17 Zeichen prüft MotorAtlas automatisch, ob das Fahrzeug bereits vorhanden ist.</small></label>
+      {claimLookupBusy&&<div className="vehicle-vin-check"><ShieldCheck/><span>FIN wird in MotorAtlas geprüft …</span></div>}
+      {claimLookup?.alreadyMine&&<div className="vehicle-vin-check own"><ShieldCheck/><span>Dieses Fahrzeug ist bereits deiner Garage zugeordnet.</span></div>}
+      {claimLookup?.existsInMotorAtlas&&!claimLookup.alreadyMine&&<VehicleTransferOptions
+        vin={vin}
+        lookup={claimLookup}
+        onDone={async()=>{await onDone();onClose()}}
+        onFindWorkshop={onFindWorkshop?()=>{onClose();onFindWorkshop()}:undefined}
+      />}
       {error&&<div className="modal-error">{error}</div>}
-      <div className="modal-actions"><button type="button" className="btn secondary" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={busy||!photo}>{busy?'Fahrzeug wird gespeichert …':'Fahrzeug speichern'}</button></div>
+      {!claimLookup?.existsInMotorAtlas&&<div className="modal-actions"><button type="button" className="btn secondary" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={busy||!photo}>{busy?'Fahrzeug wird gespeichert …':'Fahrzeug speichern'}</button></div>}
+      {claimLookup?.existsInMotorAtlas&&<div className="modal-actions"><button type="button" className="btn secondary" onClick={onClose}>Schließen</button></div>}
     </form>
   </section></div>;
 }
