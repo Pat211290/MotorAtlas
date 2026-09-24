@@ -528,6 +528,15 @@ export type LiveJob={
   hsn?:string|null;
   tsn?:string|null;
   vin?:string|null;
+  typeVariantVersion?:string|null;
+  engineCode?:string|null;
+  displacementCcm?:number|null;
+  powerKw?:number|null;
+  fuelType?:string|null;
+  transmissionCode?:string|null;
+  driveType?:string|null;
+  identityVerifiedAt?:string|null;
+  identityVerifiedWorkshopId?:string|null;
   photoPath?:string|null;
   complaint:string;
   customerNotes?:string|null;
@@ -624,7 +633,7 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
   const requestIds=[...new Set(rows.map(r=>r.service_request_id).filter(Boolean))];
   const orderIds=rows.map(r=>r.id);
 
-  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,first_registration,license_plate,hsn,tsn,vin,mileage,photo_path').in('id',vehicleIds);
+  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,first_registration,license_plate,hsn,tsn,vin,mileage,type_variant_version,engine_code,displacement_ccm,power_kw,fuel_type,transmission_code,drive_type,identity_verified_at,identity_verified_workshop_id,photo_path').in('id',vehicleIds);
   if(vehicleResult.error)throw vehicleResult.error;
   const requestResult=requestIds.length
     ?await client.from('service_requests').select('id,complaint,customer_notes,driveable,warning_level').in('id',requestIds)
@@ -669,6 +678,10 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
       plate:vehicle?.license_plate??'—',
       mileage:vehicle?.mileage??null,firstRegistration:vehicle?.first_registration??null,
       hsn:vehicle?.hsn??null,tsn:vehicle?.tsn??null,vin:vehicle?.vin??null,
+      typeVariantVersion:vehicle?.type_variant_version??null,engineCode:vehicle?.engine_code??null,
+      displacementCcm:vehicle?.displacement_ccm??null,powerKw:vehicle?.power_kw??null,
+      fuelType:vehicle?.fuel_type??null,transmissionCode:vehicle?.transmission_code??null,driveType:vehicle?.drive_type??null,
+      identityVerifiedAt:vehicle?.identity_verified_at??null,identityVerifiedWorkshopId:vehicle?.identity_verified_workshop_id??null,
       photoPath:vehicle?.photo_path??null,
       complaint:request?.complaint??'Kein Beanstandungstext hinterlegt.',
       customerNotes:request?.customer_notes??null,driveable:request?.driveable??null,warningLevel:request?.warning_level??null,
@@ -692,7 +705,10 @@ export async function listWorkshopJobs(workshopId:string):Promise<LiveJob[]>{
 
 export type CustomerVehicle={
   id:string;make:string;model:string;variant?:string|null;licensePlate:string;mileage?:number|null;
-  firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;vin?:string|null;photoPath:string;
+  firstRegistration?:string|null;hsn?:string|null;tsn?:string|null;vin?:string|null;
+  typeVariantVersion?:string|null;engineCode?:string|null;displacementCcm?:number|null;powerKw?:number|null;
+  fuelType?:string|null;transmissionCode?:string|null;driveType?:string|null;
+  identityVerifiedAt?:string|null;identityVerifiedWorkshopId?:string|null;photoPath:string;
 };
 export type CustomerOrderProgress={
   workOrderId:string;
@@ -740,7 +756,7 @@ export async function loadCustomerWorkspace():Promise<{
   const {data:auth}=await client.auth.getUser();
   if(!auth.user)throw new Error('Not signed in');
 
-  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,license_plate,mileage,first_registration,hsn,tsn,vin,photo_path')
+  const vehicleResult=await client.from('vehicles').select('id,make,model,variant,license_plate,mileage,first_registration,hsn,tsn,vin,type_variant_version,engine_code,displacement_ccm,power_kw,fuel_type,transmission_code,drive_type,identity_verified_at,identity_verified_workshop_id,photo_path')
       .eq('owner_user_id',auth.user.id).is('archived_at',null).order('created_at',{ascending:true});
   if(vehicleResult.error)throw vehicleResult.error;
 
@@ -795,7 +811,10 @@ export async function loadCustomerWorkspace():Promise<{
   return{
     vehicles:((vehicleResult.data??[]) as any[]).map(v=>({
       id:v.id,make:v.make,model:v.model,variant:v.variant,licensePlate:v.license_plate,mileage:v.mileage,
-      firstRegistration:v.first_registration,hsn:v.hsn,tsn:v.tsn,vin:v.vin,photoPath:v.photo_path
+      firstRegistration:v.first_registration,hsn:v.hsn,tsn:v.tsn,vin:v.vin,
+      typeVariantVersion:v.type_variant_version,engineCode:v.engine_code,displacementCcm:v.displacement_ccm,powerKw:v.power_kw,
+      fuelType:v.fuel_type,transmissionCode:v.transmission_code,driveType:v.drive_type,
+      identityVerifiedAt:v.identity_verified_at,identityVerifiedWorkshopId:v.identity_verified_workshop_id,photoPath:v.photo_path
     })),
     orders:((orderResult.data??[]) as any[]).map(o=>({
       id:o.id,orderNumber:o.order_number,vehicleId:o.vehicle_id,serviceRequestId:o.service_request_id,appointmentId:o.appointment_id,
@@ -1179,6 +1198,53 @@ export async function createVehicleWithPhoto(input:{
     }).select().single();
     if(error)throw error;return data;
   }catch(error){await client.storage.from('vehicle-images').remove([path]);throw error}
+}
+
+export async function archiveMyVehicle(vehicleId:string){
+  const {data,error}=await db().rpc('archive_my_vehicle',{p_vehicle_id:vehicleId});
+  if(error){
+    const message=error.message.includes('vehicle_has_active_work_order')
+      ?'Das Fahrzeug hat noch einen aktiven Werkstattauftrag und kann noch nicht als verkauft markiert werden.'
+      :error.message.includes('vehicle_has_active_request')
+        ?'Für dieses Fahrzeug läuft noch eine Werkstattanfrage.'
+        :error.message.includes('vehicle_has_active_appointment')
+          ?'Für dieses Fahrzeug besteht noch ein offener Termin.'
+          :error.message.includes('vehicle_not_found')
+            ?'Das Fahrzeug wurde nicht gefunden.'
+            :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
+
+export async function updateVehicleIdentityAsWorkshop(input:{
+  vehicleId:string;workOrderId:string;make:string;model:string;variant?:string|null;firstRegistration?:string|null;
+  licensePlate:string;hsn?:string|null;tsn?:string|null;vin?:string|null;mileage?:number|null;
+  typeVariantVersion?:string|null;engineCode?:string|null;displacementCcm?:number|null;powerKw?:number|null;
+  fuelType?:string|null;transmissionCode?:string|null;driveType?:string|null;
+}){
+  const {data,error}=await db().rpc('update_vehicle_identity_as_workshop',{
+    p_vehicle_id:input.vehicleId,p_work_order_id:input.workOrderId,p_make:input.make.trim(),p_model:input.model.trim(),
+    p_variant:input.variant?.trim()||null,p_first_registration:input.firstRegistration||null,
+    p_license_plate:input.licensePlate.trim().toUpperCase(),p_hsn:input.hsn?.trim()||null,p_tsn:input.tsn?.trim().toUpperCase()||null,
+    p_vin:input.vin?.trim().toUpperCase()||null,p_mileage:input.mileage??null,
+    p_type_variant_version:input.typeVariantVersion?.trim()||null,p_engine_code:input.engineCode?.trim().toUpperCase()||null,
+    p_displacement_ccm:input.displacementCcm??null,p_power_kw:input.powerKw??null,p_fuel_type:input.fuelType?.trim()||null,
+    p_transmission_code:input.transmissionCode?.trim().toUpperCase()||null,p_drive_type:input.driveType?.trim()||null
+  });
+  if(error){
+    const message=error.message.includes('vehicle_not_checked_in')
+      ?'Fahrzeugdaten dürfen erst geändert werden, nachdem das Fahrzeug als eingetroffen erfasst wurde.'
+      :error.message.includes('vehicle_not_in_workshop')
+        ?'Das Fahrzeug befindet sich nicht mehr in einem aktiven Werkstattvorgang.'
+        :error.message.includes('not_authorized')
+          ?'Du bist für Änderungen an Fahrzeugdaten nicht berechtigt.'
+          :error.message.includes('work_order_vehicle_mismatch')
+            ?'Auftrag und Fahrzeug passen nicht zusammen.'
+            :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function getVehicleImageUrl(path:string,expiresIn=900){
