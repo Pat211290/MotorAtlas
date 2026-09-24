@@ -268,6 +268,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [scheduleRange,setScheduleRange]=useState<AppointmentView>('week');
  const [now,setNow]=useState(()=>new Date());
  const [chat,setChat]=useState(false);
+ const [notificationChatThreadId,setNotificationChatThreadId]=useState<string|null>(null);
  const [chatInboxTarget,setChatInboxTarget]=useState<WorkshopChatInboxItem|null>(null);
  const [workshopOverviewOpen,setWorkshopOverviewOpen]=useState(false);
  const [selectedId,setSelectedId]=useState<string>(displayJobs[0]?.id??jobs[0].id);
@@ -475,13 +476,15 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    }
    if(notification.kind==='chat'){
      openSection('Übersicht');
+     if(notification.workOrderId)setSelectedId(notification.workOrderId);
      if(notification.targetType==='chat_thread'&&notification.targetId){
-       const target=live.chatInbox.find(item=>item.threadId===notification.targetId);
-       if(target){setChatInboxTarget(target);return true}
-       if(!notification.workOrderId)return false;
+       setNotificationChatThreadId(notification.targetId);
+       setChat(false);
+       setChatInboxTarget(null);
+       return true;
      }
      if(notification.workOrderId){
-       setSelectedId(notification.workOrderId);
+       setNotificationChatThreadId(null);
        setChat(true);
      }
      return true;
@@ -615,7 +618,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      <div className="board">{orderStages.map(stage=><section key={stage}><header><span>{stageLabels[stage]}</span><b>{counts[stage]??0}</b></header><div>{displayJobs.filter(job=>job.stage===stage).map(job=><button className="card-button" onClick={()=>setSelectedId(job.id)} key={job.id}><JobCard job={job}/></button>)}</div></section>)}</div>
      <div className="lower-grid">{selected?<section className="panel focus-card workflow-focus-card">
        <div><span className="overline">AUSGEWÄHLTER VORGANG</span><h3>{selected.vehicle}</h3><small>{selected.plate} · Auftrag #{selected.orderNumber??selected.id.slice(-6)}</small>{selected.workflowPath&&<span className="workflow-path-label">{selected.workflowPath==='direct_work'?'Direktauftrag':selected.workflowPath==='diagnosis_only'?'Nur Diagnose':selected.workflowPath==='diagnosis_then_decide'?'Diagnose → Entscheidung':selected.workflowPath==='quote_before_work'?'Kostenvoranschlag vor Arbeit':'Diagnose → Kostenvoranschlag'}</span>}</div>
-       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>setChat(true)}><MessageCircle size={16}/> Fahrzeugchat</button>{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
+       <div className="focus-action"><Status stage={selected.stage}/><button className="btn secondary" onClick={()=>{setNotificationChatThreadId(null);setChat(true)}}><MessageCircle size={16}/> Fahrzeugchat</button>{!['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&!(selected.rawStage==='repair_complete'&&selected.invoiceRequired!==false)&&<button className="btn primary" disabled={busy||Boolean(live.isLive&&selected.rawStage==='awaiting_customer_approval')} onClick={()=>void runPrimary()}>{busy?'Bitte warten …':actionLabel()}</button>}</div>
        {['awaiting_quote','awaiting_customer_decision'].includes(selected.rawStage??'')&&<div className="workflow-next-steps">
          <div className="workflow-choice-grid">
            <button className="workflow-choice primary" onClick={async()=>{setBusy(true);setActionError(null);try{if(selected.rawStage==='awaiting_customer_decision')await resolveWorkOrderNextStep({workOrderId:selected.id,decision:'motoratlas_quote'});setDocType('quote');await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Kostenvoranschlag konnte nicht vorbereitet werden.')}finally{setBusy(false)}}}>
@@ -723,6 +726,17 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    </>}
  </div>
  {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
+ <VehicleChat
+   open={Boolean(notificationChatThreadId)}
+   onClose={()=>setNotificationChatThreadId(null)}
+   audience="workshop"
+   chatThreadId={notificationChatThreadId}
+   workOrderId={selected?.id??null}
+   vehicleLabel={live.chatInbox.find(item=>item.threadId===notificationChatThreadId)?.vehicleName??selected?.vehicle??'Fahrzeug'}
+   plate={live.chatInbox.find(item=>item.threadId===notificationChatThreadId)?.plate??selected?.plate??'—'}
+   orderNumber={selected?.orderNumber??selected?.id?.slice(-6)??''}
+   chatEnabled={live.identity?.chatEnabled}
+ />
  <VehicleChat open={Boolean(chatInboxTarget)} onClose={()=>setChatInboxTarget(null)} audience="workshop" chatThreadId={chatInboxTarget?.threadId} workshopId={live.identity?.workshopId} vehicleId={chatInboxTarget?.vehicleId} vehicleLabel={chatInboxTarget?.vehicleName??'Fahrzeug'} plate={chatInboxTarget?.plate??'—'} chatEnabled={live.identity?.chatEnabled}/>
  {selected&&live.identity&&docType&&<DocumentUploadModal open={Boolean(docType)} onClose={()=>setDocType(null)} onDone={documentDone} workOrderId={selected.id} workshopId={live.identity.workshopId} vehicle={selected.vehicle} type={docType}/>}
  {selected&&<WorkDecisionModal open={Boolean(workDecision)} onClose={()=>setWorkDecision(null)} onDone={live.reload} workOrderId={selected.id} vehicle={selected.vehicle} decision={workDecision}/>}
