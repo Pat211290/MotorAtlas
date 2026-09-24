@@ -1,9 +1,8 @@
 name: MotorAtlas Production Smoke
 
+# Deliberately manual-only: automatic smoke runs caused GitHub failure-email spam
+# on every deployment while MotorAtlas is under active development.
 on:
-  workflow_run:
-    workflows: ["MotorAtlas Web Preview"]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +14,6 @@ concurrency:
 
 jobs:
   smoke:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
