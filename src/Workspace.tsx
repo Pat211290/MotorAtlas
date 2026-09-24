@@ -284,6 +284,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [documents,setDocuments]=useState<any[]>([]);
  const [documentsBusy,setDocumentsBusy]=useState(false);
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
+ const [notificationAppointmentId,setNotificationAppointmentId]=useState<string|null>(null);
  const [pendingNotification,setPendingNotification]=useState<AppNotification|null>(()=>{
    const raw=sessionStorage.getItem('motoratlas_pending_notification');
    if(!raw)return null;
@@ -337,13 +338,14 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    endDate.setDate(endDate.getDate()+(scheduleRange==='day'?1:scheduleRange==='week'?7:31));
    return live.appointments
      .filter(item=>{
+       if(notificationAppointmentId&&item.id===notificationAppointmentId)return true;
        const phase=appointmentPhase(item,now);
        if(phase==='late')return true;
        const startDate=new Date(item.startsAt);
        return startDate>=begin&&startDate<endDate;
      })
      .sort((a,b)=>new Date(a.startsAt).getTime()-new Date(b.startsAt).getTime());
- },[live.appointments,scheduleRange,now]);
+ },[live.appointments,scheduleRange,now,notificationAppointmentId]);
 
  const appointmentGroups=useMemo(()=>{
    const groups=new Map<string,WorkshopAppointment[]>();
@@ -452,32 +454,36 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  },[live.serviceRequests,live.appointments,live.customerRequests]);
 
  const openNotification=(notification:AppNotification)=>{
-   if(notification.kind==='customer_request'){
+   const targetType=notification.targetType;
+   if(targetType==='customer_request'||notification.kind==='customer_request'){
      openSection('Kunden');
-     if(notification.targetType==='customer_request'&&notification.targetId){
+     if(notification.targetId){
        const target=live.customerRequests.find(item=>item.id===notification.targetId);
        if(target)setCustomerRequest(target);
      }
      return true;
    }
-   if(notification.kind==='request'){
+   if(targetType==='service_request'||notification.kind==='request'){
      openSection('Termine');
-     if(notification.targetType==='service_request'&&notification.targetId){
+     if(notification.targetId){
        const target=live.serviceRequests.find(item=>item.id===notification.targetId);
        if(target)setServiceRequest(target);
      }
      return true;
    }
-   if(notification.kind==='appointment'){
+   if(targetType==='appointment'||notification.kind==='appointment'){
      openSection('Termine');
      setScheduleRange('month');
-     if(notification.targetType==='appointment'&&notification.targetId)setNotificationScrollId('appointment-'+notification.targetId);
+     if(notification.targetId){
+       setNotificationAppointmentId(notification.targetId);
+       setNotificationScrollId('appointment-'+notification.targetId);
+     }
      return true;
    }
-   if(notification.kind==='chat'){
+   if(targetType==='chat_thread'||notification.kind==='chat'){
      openSection('Übersicht');
      if(notification.workOrderId)setSelectedId(notification.workOrderId);
-     if(notification.targetType==='chat_thread'&&notification.targetId){
+     if(targetType==='chat_thread'&&notification.targetId){
        setNotificationChatThreadId(notification.targetId);
        setChat(false);
        setChatInboxTarget(null);
@@ -489,13 +495,14 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
      }
      return true;
    }
-   if(notification.kind==='document'){
+   if(targetType==='document'||notification.kind==='document'){
      openSection('Dokumente');
-     if(notification.targetType==='document'&&notification.targetId)setNotificationScrollId('office-document-'+notification.targetId);
+     if(notification.targetId)setNotificationScrollId('office-document-'+notification.targetId);
      return true;
    }
-   if(notification.workOrderId){
-     setSelectedId(notification.workOrderId);
+   if(targetType==='work_order'||notification.kind==='order'||notification.workOrderId){
+     const orderId=notification.targetId??notification.workOrderId;
+     if(orderId)setSelectedId(orderId);
      openSection('Übersicht');
      return true;
    }
@@ -654,9 +661,9 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    {section==='Termine'&&<>
      <PageHead title="Terminplanung & Auslastung" subtitle="Bestätigte Termine bleiben geplant. Erst der echte Check-in verschiebt das Fahrzeug in die Werkstatt.">
        <div className="schedule-range">
-         <button className={scheduleRange==='day'?'active':''} onClick={()=>setScheduleRange('day')}>Heute</button>
-         <button className={scheduleRange==='week'?'active':''} onClick={()=>setScheduleRange('week')}>7 Tage</button>
-         <button className={scheduleRange==='month'?'active':''} onClick={()=>setScheduleRange('month')}>31 Tage</button>
+         <button className={scheduleRange==='day'?'active':''} onClick={()=>{setNotificationAppointmentId(null);setScheduleRange('day')}}>Heute</button>
+         <button className={scheduleRange==='week'?'active':''} onClick={()=>{setNotificationAppointmentId(null);setScheduleRange('week')}}>7 Tage</button>
+         <button className={scheduleRange==='month'?'active':''} onClick={()=>{setNotificationAppointmentId(null);setScheduleRange('month')}}>31 Tage</button>
        </div>
      </PageHead>
 
@@ -856,21 +863,23 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
    :'—';
 
  const openWorkshopNotification=(notification:AppNotification)=>{
-   if(notification.kind==='chat'&&notification.workOrderId&&queue.some(job=>job.id===notification.workOrderId)){
-     setSelectedId(notification.workOrderId);
-     setNotificationChatThreadId(notification.targetType==='chat_thread'?notification.targetId??null:null);
+   const targetType=notification.targetType;
+   const orderId=(targetType==='work_order'?notification.targetId:null)??notification.workOrderId;
+   if((targetType==='chat_thread'||notification.kind==='chat')&&orderId&&queue.some(job=>job.id===orderId)){
+     setSelectedId(orderId);
+     setNotificationChatThreadId(targetType==='chat_thread'?notification.targetId??null:null);
      setChat(true);
      return;
    }
-   if(notification.kind==='order'&&notification.workOrderId&&queue.some(job=>job.id===notification.workOrderId)){
-     setSelectedId(notification.workOrderId);
+   if((targetType==='work_order'||notification.kind==='order')&&orderId&&queue.some(job=>job.id===orderId)){
+     setSelectedId(orderId);
      return;
    }
-   const targetSection:ShellSection=notification.kind==='customer_request'
+   const targetSection:ShellSection=targetType==='customer_request'||notification.kind==='customer_request'
      ?'Kunden'
-     :notification.kind==='document'
+     :targetType==='document'||notification.kind==='document'
        ?'Dokumente'
-       :notification.kind==='request'||notification.kind==='appointment'
+       :targetType==='service_request'||targetType==='appointment'||notification.kind==='request'||notification.kind==='appointment'
          ?'Termine'
          :'Übersicht';
    sessionStorage.setItem('motoratlas_pending_notification',JSON.stringify(notification));
@@ -1356,38 +1365,39 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    navItems={customerNav}
    notifications={live.notifications}
    onNotificationOpen={notification=>{
-     if(notification.kind==='chat'){
+     const targetType=notification.targetType;
+     if(targetType==='chat_thread'||notification.kind==='chat'){
        setNotificationOrderId(notification.workOrderId??null);
-       setNotificationChatThreadId(notification.targetType==='chat_thread'?notification.targetId??null:null);
+       setNotificationChatThreadId(targetType==='chat_thread'?notification.targetId??null:null);
        setSection('Übersicht');
        setChatTarget(notification.workOrderId?'order':'workshop');
        return;
      }
      setNotificationChatThreadId(null);
-     if(notification.kind==='order'){
-       setNotificationOrderId(notification.workOrderId??null);
+     if(targetType==='work_order'||notification.kind==='order'){
+       setNotificationOrderId((targetType==='work_order'?notification.targetId:null)??notification.workOrderId??null);
        setSection('Übersicht');
        return;
      }
      setNotificationOrderId(null);
-     if(notification.kind==='appointment'){
+     if(targetType==='appointment'||notification.kind==='appointment'){
        setSection('Termine');
-       if(notification.targetType==='appointment'&&notification.targetId)setNotificationScrollId('customer-appointment-'+notification.targetId);
+       if(notification.targetId)setNotificationScrollId('customer-appointment-'+notification.targetId);
        return;
      }
-     if(notification.kind==='request'){
+     if(targetType==='service_request'||notification.kind==='request'){
        setSection('Termine');
-       if(notification.targetType==='service_request'&&notification.targetId)setNotificationScrollId('customer-request-'+notification.targetId);
+       if(notification.targetId)setNotificationScrollId('customer-request-'+notification.targetId);
        return;
      }
-     if(notification.kind==='document'){
+     if(targetType==='document'||notification.kind==='document'){
        setSection('Dokumente');
-       if(notification.targetType==='document'&&notification.targetId)setNotificationScrollId('customer-document-'+notification.targetId);
+       if(notification.targetId)setNotificationScrollId('customer-document-'+notification.targetId);
        return;
      }
-     if(notification.kind==='customer_request'){
+     if(targetType==='customer_request'||notification.kind==='customer_request'){
        setSection('Stammwerkstatt');
-       if(notification.targetType==='customer_request'&&notification.targetId)setNotificationScrollId('customer-relationship-'+notification.targetId);
+       if(notification.targetId)setNotificationScrollId('customer-relationship-'+notification.targetId);
        return;
      }
      setSection('Übersicht');
