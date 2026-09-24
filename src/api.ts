@@ -1184,6 +1184,22 @@ export type VehicleClaimPreview={
   claimMode:'onboarding'|'transfer';expiresAt:string;valid:boolean;
 };
 
+export type VehicleClaimLookup={
+  existsInMotorAtlas:boolean;alreadyMine:boolean;vehicleId?:string|null;make?:string|null;model?:string|null;
+  variant?:string|null;licensePlate?:string|null;previousOwnerReleased:boolean;
+};
+
+export type MyVehicleClaimRequest={
+  id:string;status:'pending'|'approved'|'rejected'|'cancelled';vehicleId:string;make:string;model:string;
+  variant?:string|null;licensePlate:string;evidenceUploaded:boolean;reviewNote?:string|null;createdAt:string;reviewedAt?:string|null;
+};
+
+export type SupportVehicleClaimRequest={
+  id:string;status:'pending'|'approved'|'rejected'|'cancelled';claimantUserId:string;claimantName?:string|null;
+  claimantEmail?:string|null;claimantNote?:string|null;vehicleId:string;make:string;model:string;variant?:string|null;
+  licensePlate:string;vin:string;evidencePath?:string|null;createdAt:string;reviewedAt?:string|null;reviewNote?:string|null;
+};
+
 export async function listWorkshopCustomerDirectory(workshopId:string,search=''):Promise<WorkshopCustomerDirectoryItem[]>{
   const {data,error}=await db().rpc('list_workshop_customer_directory',{p_workshop_id:workshopId,p_search:search.trim()||null});
   if(error)throw error;
@@ -1268,6 +1284,157 @@ export async function addVehicleHistoryEntry(input:{
     p_summary:input.summary?.trim()||null,p_mileage:input.mileage??null,p_occurred_at:input.occurredAt||new Date().toISOString()
   });
   if(error)throw error;return data;
+}
+
+export async function lookupVehicleForClaim(vin:string):Promise<VehicleClaimLookup>{
+  const {data,error}=await db().rpc('lookup_vehicle_for_claim',{p_vin:vin.trim().toUpperCase()});
+  if(error){
+    if(error.message.includes('invalid_vin'))throw new Error('Bitte eine gültige 17-stellige FIN/VIN eingeben.');
+    throw error;
+  }
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  return{
+    existsInMotorAtlas:Boolean(row?.exists_in_motoratlas),
+    alreadyMine:Boolean(row?.already_mine),
+    vehicleId:row?.vehicle_id??null,
+    make:row?.make??null,
+    model:row?.model??null,
+    variant:row?.variant??null,
+    licensePlate:row?.license_plate??null,
+    previousOwnerReleased:Boolean(row?.previous_owner_released)
+  };
+}
+
+export async function createOwnerVehicleTransferToken(vehicleId:string):Promise<{token:string;expiresAt:string}>{
+  const {data,error}=await db().rpc('create_owner_vehicle_transfer_token',{p_vehicle_id:vehicleId});
+  if(error){
+    const message=error.message.includes('vehicle_has_active_work_order')
+      ?'Das Fahrzeug hat noch einen aktiven Werkstattauftrag. Schließe ihn zuerst ab.'
+      :error.message.includes('vehicle_has_active_request')
+        ?'Für das Fahrzeug läuft noch eine Werkstattanfrage. Beende sie zuerst.'
+        :error.message.includes('vehicle_not_found')
+          ?'Das Fahrzeug wurde nicht gefunden oder gehört nicht zu deinem Konto.'
+          :error.message;
+    throw new Error(message);
+  }
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  return{token:row.token,expiresAt:row.expires_at};
+}
+
+export async function createVerifiedVehicleTransferToken(workshopId:string,vin:string):Promise<{
+  token:string;expiresAt:string;vehicleId:string;make:string;model:string;variant?:string|null;licensePlate:string;
+}>{
+  const {data,error}=await db().rpc('create_verified_vehicle_transfer_token',{
+    p_workshop_id:workshopId,p_vin:vin.trim().toUpperCase()
+  });
+  if(error){
+    const message=error.message.includes('active_owner_requires_release_or_support')
+      ?'Das Fahrzeug ist noch einem aktiven MotorAtlas-Konto zugeordnet. Der bisherige Nutzer muss es freigeben oder der neue Besitzer nutzt die Supportprüfung mit Kaufvertrag.'
+      :error.message.includes('vehicle_not_found')
+        ?'Zu dieser FIN ist kein MotorAtlas-Fahrzeug vorhanden.'
+        :error.message.includes('invalid_vin')
+          ?'Bitte die vollständige 17-stellige FIN eingeben.'
+          :error.message.includes('not_authorized')
+            ?'Du bist für Besitzerwechsel-Prüfungen nicht berechtigt.'
+            :error.message;
+    throw new Error(message);
+  }
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  return{
+    token:row.token,expiresAt:row.expires_at,vehicleId:row.vehicle_id,make:row.make,model:row.model,
+    variant:row.variant??null,licensePlate:row.license_plate
+  };
+}
+
+export async function createSupportVehicleClaim(vin:string,note?:string):Promise<{
+  claimId:string;vehicleId:string;make:string;model:string;variant?:string|null;licensePlate:string;
+}>{
+  const {data,error}=await db().rpc('create_support_vehicle_claim',{p_vin:vin.trim().toUpperCase(),p_note:note?.trim()||null});
+  if(error){
+    const message=error.message.includes('vehicle_already_mine')
+      ?'Dieses Fahrzeug gehört bereits zu deiner MotorAtlas-Garage.'
+      :error.message.includes('vehicle_not_found')
+        ?'Zu dieser FIN ist kein Fahrzeug in MotorAtlas vorhanden.'
+        :error.message.includes('invalid_vin')
+          ?'Bitte die vollständige 17-stellige FIN eingeben.'
+          :error.message;
+    throw new Error(message);
+  }
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  return{
+    claimId:row.claim_id,vehicleId:row.vehicle_id,make:row.make,model:row.model,
+    variant:row.variant??null,licensePlate:row.license_plate
+  };
+}
+
+export async function uploadSupportVehicleClaimEvidence(claimId:string,file:File){
+  if(!['application/pdf','image/jpeg','image/png','image/webp'].includes(file.type)){
+    throw new Error('Bitte Kaufvertrag als PDF, JPG, PNG oder WebP hochladen.');
+  }
+  if(file.size>15*1024*1024)throw new Error('Die Datei darf maximal 15 MB groß sein.');
+  const client=db();
+  const {data:auth}=await client.auth.getUser();
+  if(!auth.user)throw new Error('Bitte zuerst anmelden.');
+  const safeName=file.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
+  const path=`${auth.user.id}/${claimId}/${Date.now()}-${safeName}`;
+  const {error:uploadError}=await client.storage.from('vehicle-claim-evidence').upload(path,file,{upsert:false,contentType:file.type});
+  if(uploadError)throw uploadError;
+  const {error}=await client.rpc('attach_support_vehicle_claim_evidence',{p_claim_id:claimId,p_storage_path:path});
+  if(error){
+    await client.storage.from('vehicle-claim-evidence').remove([path]);
+    throw error;
+  }
+  return path;
+}
+
+export async function listMyVehicleClaimRequests():Promise<MyVehicleClaimRequest[]>{
+  const {data,error}=await db().rpc('list_my_vehicle_claim_requests');
+  if(error)throw error;
+  return((data??[]) as any[]).map(row=>({
+    id:row.id,status:row.status,vehicleId:row.vehicle_id,make:row.make,model:row.model,variant:row.variant??null,
+    licensePlate:row.license_plate,evidenceUploaded:Boolean(row.evidence_uploaded),reviewNote:row.review_note??null,
+    createdAt:row.created_at,reviewedAt:row.reviewed_at??null
+  }));
+}
+
+export async function isSupportAdmin(){
+  const {data,error}=await db().rpc('is_support_admin');
+  if(error)return false;
+  return Boolean(data);
+}
+
+export async function listSupportVehicleClaimRequests():Promise<SupportVehicleClaimRequest[]>{
+  const {data,error}=await db().rpc('list_support_vehicle_claim_requests');
+  if(error)throw error;
+  return((data??[]) as any[]).map(row=>({
+    id:row.id,status:row.status,claimantUserId:row.claimant_user_id,claimantName:row.claimant_name??null,
+    claimantEmail:row.claimant_email??null,claimantNote:row.claimant_note??null,vehicleId:row.vehicle_id,
+    make:row.make,model:row.model,variant:row.variant??null,licensePlate:row.license_plate,vin:row.vin,
+    evidencePath:row.evidence_path??null,createdAt:row.created_at,reviewedAt:row.reviewed_at??null,reviewNote:row.review_note??null
+  }));
+}
+
+export async function getSupportVehicleClaimEvidenceUrl(path:string,expiresIn=900){
+  const {data,error}=await db().storage.from('vehicle-claim-evidence').createSignedUrl(path,expiresIn);
+  if(error)throw error;
+  return data.signedUrl;
+}
+
+export async function reviewSupportVehicleClaim(claimId:string,decision:'approved'|'rejected',reviewNote?:string){
+  const {data,error}=await db().rpc('review_support_vehicle_claim',{
+    p_claim_id:claimId,p_decision:decision,p_review_note:reviewNote?.trim()||null
+  });
+  if(error){
+    const message=error.message.includes('evidence_required')
+      ?'Vor der Freigabe muss ein Kaufvertrag oder anderer Nachweis hochgeladen sein.'
+      :error.message.includes('claim_not_pending')
+        ?'Dieser Antrag wurde bereits bearbeitet.'
+        :error.message.includes('not_authorized')
+          ?'Nur MotorAtlas Support darf diese Prüfung abschließen.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function createVehicleClaimToken(input:{
