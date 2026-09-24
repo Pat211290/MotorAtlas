@@ -15,11 +15,11 @@ export function authReturnUrl(path:string,query?:string){
 
 export async function signUpCustomer(
   email:string,password:string,fullName:string,
-  input?:{accountIntent?:'customer'|'workshop';phone?:string;street?:string;postalCode?:string;city?:string}
+  input?:{accountIntent?:'customer'|'workshop';phone?:string;street?:string;postalCode?:string;city?:string;emailRedirectQuery?:string}
 ){
   const {data,error}=await db().auth.signUp({
     email,password,
-    options:{emailRedirectTo:authReturnUrl('/bestaetigung'),data:{
+    options:{emailRedirectTo:authReturnUrl('/bestaetigung',input?.emailRedirectQuery),data:{
       full_name:fullName.trim(),
       account_intent:input?.accountIntent??'customer',
       phone:input?.phone?.trim()||null,
