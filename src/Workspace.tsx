@@ -1003,8 +1003,10 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [notificationChatThreadId,setNotificationChatThreadId]=useState<string|null>(null);
  const [notificationOrderId,setNotificationOrderId]=useState<string|null>(null);
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
+ const [garageVehicleId,setGarageVehicleId]=useState<string|null>(null);
  const [vehicleModal,setVehicleModal]=useState(false);
  const [requestModal,setRequestModal]=useState(false);
+ const [requestVehicleId,setRequestVehicleId]=useState<string|null>(null);
  const [directory,setDirectory]=useState(false);
  const [profileModal,setProfileModal]=useState(false);
  const [cancelTarget,setCancelTarget]=useState<(typeof live.appointments)[number]|null>(null);
@@ -1032,6 +1034,12 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
      :primaryWorkshop;
  const activeVehicleId=activeOrder?.vehicleId??activeRequest?.vehicleId??undefined;
  const activeVehicle=(activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):null)??live.vehicles[0]??null;
+
+ useEffect(()=>{
+   if(!live.vehicles.length){setGarageVehicleId(null);return}
+   if(garageVehicleId&&live.vehicles.some(vehicle=>vehicle.id===garageVehicleId))return;
+   setGarageVehicleId(activeVehicle?.id??live.vehicles[0].id);
+ },[live.vehicles,garageVehicleId,activeVehicle?.id]);
 
  const customerNav:ShellNavItem[]=[
    ['Übersicht',Home,'Status'],
@@ -1300,17 +1308,81 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    </div>;
  };
 
- const renderGarage=()=>live.vehicles.length?<div className="customer-garage-deck">{live.vehicles.map(vehicle=><article className="panel customer-garage-card" key={vehicle.id}>
-   <div className="garage-card-image"><VehiclePhoto path={vehicle.photoPath} alt={[vehicle.make,vehicle.model].filter(Boolean).join(' ')}/><span className="plate">{vehicle.licensePlate}</span></div>
-   <div className="garage-card-head"><small>MEIN FAHRZEUG</small><h3>{[vehicle.make,vehicle.model].filter(Boolean).join(' ')}</h3>{vehicle.variant&&<p>{vehicle.variant}</p>}</div>
-   <div className="garage-specs">
-     <span><small>ERSTZULASSUNG</small><b>{vehicle.firstRegistration?new Date(vehicle.firstRegistration).toLocaleDateString('de-DE',{month:'2-digit',year:'numeric'}):'—'}</b></span>
-     <span><small>KILOMETER</small><b>{vehicle.mileage!=null?vehicle.mileage.toLocaleString('de-DE')+' km':'—'}</b></span>
-     <span><small>HSN</small><b>{vehicle.hsn||'—'}</b></span>
-     <span><small>TSN</small><b>{vehicle.tsn||'—'}</b></span>
-     <span className="wide"><small>FIN / VIN</small><b>{vehicle.vin||'Nicht hinterlegt'}</b></span>
-   </div>
- </article>)}</div>:<section className="panel customer-simple-empty"><Car/><h3>Noch kein Fahrzeug in deiner Garage.</h3><p>Lege deinen ersten PKW an.</p><button className="btn primary" onClick={()=>setVehicleModal(true)}>Fahrzeug hinzufügen</button></section>;
+ const renderGarage=()=>{
+   if(!live.vehicles.length)return <section className="panel customer-simple-empty"><Car/><h3>Noch kein Fahrzeug in deiner Garage.</h3><p>Lege deinen ersten PKW an.</p><button className="btn primary" onClick={()=>setVehicleModal(true)}>Fahrzeug hinzufügen</button></section>;
+
+   const selectedVehicle=live.vehicles.find(vehicle=>vehicle.id===garageVehicleId)??activeVehicle??live.vehicles[0];
+   const selectedOrder=live.orders.find(order=>order.vehicleId===selectedVehicle.id&&order.rawStage!=='closed'&&order.rawStage!=='cancelled');
+   const selectedRequest=live.requests.find(request=>request.vehicleId===selectedVehicle.id&&['submitted','accepted','appointment_pending'].includes(request.status));
+   const selectedAppointment=selectedRequest?live.appointments.find(item=>item.serviceRequestId===selectedRequest.id&&item.status!=='cancelled'):null;
+   const filledDetails=[
+     selectedVehicle.firstRegistration,
+     selectedVehicle.mileage!=null?String(selectedVehicle.mileage):'',
+     selectedVehicle.hsn,
+     selectedVehicle.tsn,
+     selectedVehicle.vin
+   ].filter(Boolean).length;
+
+   return <div className="customer-garage-workspace">
+     <aside className="panel customer-garage-selector">
+       <header>
+         <div><span className="overline">MEINE GARAGE</span><h3>{live.vehicles.length} {live.vehicles.length===1?'Fahrzeug':'Fahrzeuge'}</h3></div>
+         <button className="garage-add-mini" onClick={()=>setVehicleModal(true)} aria-label="Fahrzeug hinzufügen"><Plus size={16}/></button>
+       </header>
+       <div className="customer-garage-list">
+         {live.vehicles.map((vehicle,index)=>{
+           const order=live.orders.find(item=>item.vehicleId===vehicle.id&&item.rawStage!=='closed'&&item.rawStage!=='cancelled');
+           const request=live.requests.find(item=>item.vehicleId===vehicle.id&&['submitted','accepted','appointment_pending'].includes(item.status));
+           const state=order?'Werkstattauftrag':request?'Anfrage läuft':'Bereit';
+           return <button type="button" key={vehicle.id} className={'garage-selector-card '+(selectedVehicle.id===vehicle.id?'active':'')} onClick={()=>setGarageVehicleId(vehicle.id)}>
+             <VehiclePhoto path={vehicle.photoPath} alt={[vehicle.make,vehicle.model].filter(Boolean).join(' ')}/>
+             <span className="garage-selector-copy">
+               <small>FAHRZEUG {index+1}</small>
+               <b>{[vehicle.make,vehicle.model].filter(Boolean).join(' ')||'Fahrzeug'}</b>
+               <span>{vehicle.variant||'Variante nicht hinterlegt'}</span>
+               <em>{vehicle.licensePlate}</em>
+             </span>
+             <span className={'garage-selector-state '+(order||request?'busy':'')}>{state}</span>
+           </button>;
+         })}
+       </div>
+     </aside>
+
+     <section className="panel customer-garage-detail">
+       <div className="garage-detail-hero">
+         <div className="garage-detail-photo"><VehiclePhoto path={selectedVehicle.photoPath} alt={[selectedVehicle.make,selectedVehicle.model].filter(Boolean).join(' ')}/><span className="plate">{selectedVehicle.licensePlate}</span></div>
+         <div className="garage-detail-title">
+           <span className="overline">FAHRZEUGDATEN</span>
+           <h2>{[selectedVehicle.make,selectedVehicle.model].filter(Boolean).join(' ')||'Fahrzeug'}</h2>
+           <p>{selectedVehicle.variant||'Keine Variante / Motorisierung hinterlegt'}</p>
+           <div className="garage-detail-status">
+             {selectedOrder?<span className="active">Aktiver Werkstattauftrag #{selectedOrder.orderNumber}</span>:selectedRequest?<span className="pending">Werkstattanfrage läuft</span>:<span>Kein aktiver Vorgang</span>}
+             <small>{filledDetails}/5 Zusatzdaten hinterlegt</small>
+           </div>
+         </div>
+       </div>
+
+       <div className="garage-detail-data">
+         <div><small>KENNZEICHEN</small><b>{selectedVehicle.licensePlate||'Nicht hinterlegt'}</b></div>
+         <div><small>ERSTZULASSUNG</small><b>{selectedVehicle.firstRegistration?new Date(selectedVehicle.firstRegistration).toLocaleDateString('de-DE'):'Nicht hinterlegt'}</b></div>
+         <div><small>KILOMETERSTAND</small><b>{selectedVehicle.mileage!=null?selectedVehicle.mileage.toLocaleString('de-DE')+' km':'Nicht hinterlegt'}</b></div>
+         <div><small>HSN</small><b>{selectedVehicle.hsn||'Nicht hinterlegt'}</b></div>
+         <div><small>TSN</small><b>{selectedVehicle.tsn||'Nicht hinterlegt'}</b></div>
+         <div className="wide"><small>FIN / VIN</small><b>{selectedVehicle.vin||'Nicht hinterlegt'}</b></div>
+       </div>
+
+       {(selectedOrder||selectedRequest||selectedAppointment)&&<div className="garage-related">
+         <small>AKTUELLER VORGANG</small>
+         {selectedOrder?<><b>{customerOrderTitle(selectedOrder.rawStage,selectedOrder.commercialState)}</b><span>Auftrag #{selectedOrder.orderNumber} · {customerOrderDetail(selectedOrder.rawStage,selectedOrder.commercialState,selectedOrder.invoiceRequired)}</span></>:selectedAppointment?<><b>{selectedAppointment.status==='proposed'?'Terminvorschlag':'Werkstatttermin'}</b><span>{new Date(selectedAppointment.startsAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</span></>:selectedRequest?<><b>{requestStatusLabel(selectedRequest.status)}</b><span>{selectedRequest.complaint==='Keine Fehlerbeschreibung angegeben.'?'Keine zusätzliche Beschreibung angegeben.':selectedRequest.complaint}</span></>:null}
+       </div>}
+
+       <div className="garage-detail-actions">
+         <button className="btn primary" onClick={()=>{setRequestVehicleId(selectedVehicle.id);setRequestModal(true)}}><Plus size={16}/> Werkstattanfrage für dieses Fahrzeug</button>
+         {selectedOrder&&<button className="btn secondary" onClick={()=>{setNotificationOrderId(selectedOrder.id);setSection('Übersicht')}}>Aktuellen Auftrag öffnen</button>}
+       </div>
+     </section>
+   </div>;
+ };
 
  const renderDocuments=()=>live.documents.length?<div className="customer-document-list">{live.documents.map(document=>{
    const order=live.orders.find(item=>item.id===document.work_order_id);
@@ -1424,7 +1496,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  <CustomerProfileModal open={profileModal} onClose={()=>setProfileModal(false)} onSaved={live.reload}/>
  <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
  <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
- <ServiceRequestModal open={requestModal} onClose={()=>setRequestModal(false)} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops}/>
+ <ServiceRequestModal open={requestModal} onClose={()=>{setRequestModal(false);setRequestVehicleId(null)}} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops} initialVehicleId={requestVehicleId}/>
  <VehicleChat
    open={chatTarget!==null}
    onClose={()=>{setChatTarget(null);setNotificationChatThreadId(null)}}
