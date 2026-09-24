@@ -11,6 +11,7 @@ import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
 import { VehicleIdentityModal } from './VehicleIdentityModal';
+import { CustomerVehicleEditModal } from './CustomerVehicleEditModal';
 import { ServiceRequestModal } from './ServiceRequestModal';
 import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeRequestModals';
 import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
@@ -1016,6 +1017,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [notificationOrderId,setNotificationOrderId]=useState<string|null>(null);
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
  const [garageVehicleId,setGarageVehicleId]=useState<string|null>(null);
+ const [editVehicleId,setEditVehicleId]=useState<string|null>(null);
  const [vehicleModal,setVehicleModal]=useState(false);
  const [requestModal,setRequestModal]=useState(false);
  const [requestVehicleId,setRequestVehicleId]=useState<string|null>(null);
@@ -1050,10 +1052,10 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const activeVehicle=(activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):null)??live.vehicles[0]??null;
 
  useEffect(()=>{
-   if(!live.vehicles.length){setGarageVehicleId(null);return}
-   if(garageVehicleId&&live.vehicles.some(vehicle=>vehicle.id===garageVehicleId))return;
-   setGarageVehicleId(activeVehicle?.id??live.vehicles[0].id);
- },[live.vehicles,garageVehicleId,activeVehicle?.id]);
+   if(!garageVehicleId)return;
+   if(live.vehicles.some(vehicle=>vehicle.id===garageVehicleId))return;
+   setGarageVehicleId(null);
+ },[live.vehicles,garageVehicleId]);
 
  const customerNav:ShellNavItem[]=[
    ['Übersicht',Home,'Status'],
@@ -1325,44 +1327,50 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const renderGarage=()=>{
    if(!live.vehicles.length)return <section className="panel customer-simple-empty"><Car/><h3>Noch kein Fahrzeug in deiner Garage.</h3><p>Lege deinen ersten PKW an.</p><button className="btn primary" onClick={()=>setVehicleModal(true)}>Fahrzeug hinzufügen</button></section>;
 
-   const selectedVehicle=live.vehicles.find(vehicle=>vehicle.id===garageVehicleId)??activeVehicle??live.vehicles[0];
-   const selectedOrder=live.orders.find(order=>order.vehicleId===selectedVehicle.id&&order.rawStage!=='closed'&&order.rawStage!=='cancelled');
-   const selectedRequest=live.requests.find(request=>request.vehicleId===selectedVehicle.id&&['submitted','accepted','appointment_pending'].includes(request.status));
+   const selectedVehicle=garageVehicleId?live.vehicles.find(vehicle=>vehicle.id===garageVehicleId)??null:null;
+   const selectedOrder=selectedVehicle?live.orders.find(order=>order.vehicleId===selectedVehicle.id&&order.rawStage!=='closed'&&order.rawStage!=='cancelled'):null;
+   const selectedRequest=selectedVehicle?live.requests.find(request=>request.vehicleId===selectedVehicle.id&&['submitted','accepted','appointment_pending'].includes(request.status)):null;
    const selectedAppointment=selectedRequest?live.appointments.find(item=>item.serviceRequestId===selectedRequest.id&&item.status!=='cancelled'):null;
-   const filledDetails=[
+   const filledDetails=selectedVehicle?[
      selectedVehicle.firstRegistration,
      selectedVehicle.mileage!=null?String(selectedVehicle.mileage):'',
      selectedVehicle.hsn,
      selectedVehicle.tsn,
      selectedVehicle.vin
-   ].filter(Boolean).length;
+   ].filter(Boolean).length:0;
 
-   return <div className="customer-garage-workspace">
-     <aside className="panel customer-garage-selector">
+   return <div className="customer-garage-overview">
+     <section className="panel customer-garage-compact">
        <header>
-         <div><span className="overline">MEINE GARAGE</span><h3>{live.vehicles.length} {live.vehicles.length===1?'Fahrzeug':'Fahrzeuge'}</h3></div>
+         <div><span className="overline">MEINE GARAGE</span><h3>{live.vehicles.length} {live.vehicles.length===1?'Fahrzeug':'Fahrzeuge'}</h3><p>Fahrzeug auswählen, um Details und Aktionen zu öffnen.</p></div>
          <button className="garage-add-mini" onClick={()=>setVehicleModal(true)} aria-label="Fahrzeug hinzufügen"><Plus size={16}/></button>
        </header>
-       <div className="customer-garage-list">
+       <div className="customer-garage-compact-list">
          {live.vehicles.map((vehicle,index)=>{
            const order=live.orders.find(item=>item.vehicleId===vehicle.id&&item.rawStage!=='closed'&&item.rawStage!=='cancelled');
            const request=live.requests.find(item=>item.vehicleId===vehicle.id&&['submitted','accepted','appointment_pending'].includes(item.status));
            const state=order?'Werkstattauftrag':request?'Anfrage läuft':'Bereit';
-           return <button type="button" key={vehicle.id} className={'garage-selector-card '+(selectedVehicle.id===vehicle.id?'active':'')} onClick={()=>setGarageVehicleId(vehicle.id)}>
+           const selected=garageVehicleId===vehicle.id;
+           return <button type="button" key={vehicle.id} className={'garage-compact-card '+(selected?'active':'')} onClick={()=>setGarageVehicleId(selected?null:vehicle.id)}>
              <VehiclePhoto path={vehicle.photoPath} alt={[vehicle.make,vehicle.model].filter(Boolean).join(' ')}/>
-             <span className="garage-selector-copy">
+             <span className="garage-compact-copy">
                <small>FAHRZEUG {index+1}</small>
                <b>{[vehicle.make,vehicle.model].filter(Boolean).join(' ')||'Fahrzeug'}</b>
-               <span>{vehicle.variant||'Variante nicht hinterlegt'}</span>
+               <span>{vehicle.variant||'Variante / Motorisierung nicht hinterlegt'}</span>
                <em>{vehicle.licensePlate}</em>
              </span>
-             <span className={'garage-selector-state '+(order||request?'busy':'')}>{state}</span>
+             <span className={'garage-compact-state '+(order||request?'busy':'')}>{state}</span>
+             <span className="garage-compact-open">{selected?'Details schließen':'Details öffnen'}</span>
            </button>;
          })}
        </div>
-     </aside>
+     </section>
 
-     <section className="panel customer-garage-detail">
+     {selectedVehicle&&<section className="panel customer-garage-detail">
+       <div className="garage-detail-toolbar">
+         <button type="button" className="btn secondary" onClick={()=>setGarageVehicleId(null)}>← Fahrzeugübersicht</button>
+         <button type="button" className="btn secondary" onClick={()=>setEditVehicleId(selectedVehicle.id)}><Settings size={15}/> Daten bearbeiten</button>
+       </div>
        <div className="garage-detail-hero">
          <div className="garage-detail-photo"><VehiclePhoto path={selectedVehicle.photoPath} alt={[selectedVehicle.make,selectedVehicle.model].filter(Boolean).join(' ')}/><span className="plate">{selectedVehicle.licensePlate}</span></div>
          <div className="garage-detail-title">
@@ -1386,7 +1394,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        </div>
 
        <div className="garage-workshop-data">
-         <header><ShieldCheck/><div><small>WERKSTATTGEPRÜFTE IDENTIFIKATION</small><h3>Technische Fahrzeugdaten</h3><p>Diese Angaben sind für eine sichere Teile- und Fahrzeugidentifikation gedacht und können nur von einer autorisierten Werkstatt geändert werden, wenn das Fahrzeug eingecheckt ist.</p></div></header>
+         <header><ShieldCheck/><div><small>FAHRZEUGIDENTIFIKATION</small><h3>Technische Fahrzeugdaten</h3><p>Du kannst die Daten deines eigenen Fahrzeugs jederzeit ergänzen oder korrigieren. Eine Werkstatt darf sie nur ändern, wenn genau dieses Fahrzeug dort eingecheckt ist. Änderungen durch dich setzen eine frühere Werkstattprüfung zurück.</p></div></header>
          <div className="garage-workshop-data-grid">
            <div><small>TYP / VARIANTE / VERSION (D.2)</small><b>{selectedVehicle.typeVariantVersion||'Nicht hinterlegt'}</b></div>
            <div><small>MOTORCODE</small><b>{selectedVehicle.engineCode||'Nicht hinterlegt'}</b></div>
@@ -1409,7 +1417,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
          {selectedOrder&&<button className="btn secondary" onClick={()=>{setNotificationOrderId(selectedOrder.id);setSection('Übersicht')}}>Aktuellen Auftrag öffnen</button>}
          <button className="btn secondary garage-archive-button" disabled={Boolean(selectedOrder||selectedRequest||selectedAppointment)} title={selectedOrder||selectedRequest||selectedAppointment?'Erst nach Abschluss aller offenen Vorgänge möglich':'Fahrzeug als verkauft markieren'} onClick={()=>setArchiveVehicleId(selectedVehicle.id)}><Archive size={16}/> {selectedOrder||selectedRequest||selectedAppointment?'Verkauf erst nach Abschluss':'Fahrzeug verkauft / aus Garage'}</button>
        </div>
-     </section>
+     </section>}
    </div>;
  };
 
@@ -1530,6 +1538,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
      <div className="modal-actions"><button type="button" className="btn secondary" disabled={archiveVehicleBusy} onClick={()=>setArchiveVehicleId(null)}>Abbrechen</button><button type="button" className="btn primary" disabled={archiveVehicleBusy} onClick={async()=>{if(!archiveVehicleId)return;setArchiveVehicleBusy(true);setActionError(null);try{await archiveMyVehicle(archiveVehicleId);setArchiveVehicleId(null);setGarageVehicleId(null);await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Fahrzeug konnte nicht archiviert werden.')}finally{setArchiveVehicleBusy(false)}}}>{archiveVehicleBusy?'Wird archiviert …':'Ja, Fahrzeug verkauft'}</button></div>
    </section>
  </div>}
+ <CustomerVehicleEditModal open={Boolean(editVehicleId)} onClose={()=>setEditVehicleId(null)} onDone={live.reload} vehicle={live.vehicles.find(vehicle=>vehicle.id===editVehicleId)??null}/>
  <CustomerProfileModal open={profileModal} onClose={()=>setProfileModal(false)} onSaved={live.reload}/>
  <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
  <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
