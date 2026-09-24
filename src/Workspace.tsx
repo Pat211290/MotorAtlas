@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Archive, Bell, Building2, CalendarDays, Car, Clock3, FileText, Home, Mail, MapPin, MessageCircle,
+  AlertTriangle, Archive, Bell, Building2, CalendarDays, Car, Clock3, FileText, History, Home, Mail, MapPin, MessageCircle,
   Phone, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, Wrench
 } from 'lucide-react';
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { archiveMyVehicle, assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
+import { archiveMyVehicle, assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getVehicleHistory, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type VehicleHistoryEntry, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
 import { VehicleIdentityModal } from './VehicleIdentityModal';
 import { CustomerVehicleEditModal } from './CustomerVehicleEditModal';
+import { WorkshopCustomerManager } from './WorkshopCustomerManager';
 import { ServiceRequestModal } from './ServiceRequestModal';
 import { CustomerAdmissionModal, ServiceRequestOfficeModal } from './OfficeRequestModals';
 import { WorkshopDirectoryModal } from './WorkshopDirectoryModal';
@@ -696,15 +697,16 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    </>}
 
    {section==='Kunden'&&<>
-     <PageHead title="Kunden" subtitle="Kontaktdaten und offene Aufnahmeanfragen deiner Werkstatt."/>
-     <section className="panel office-inbox">
-       <header><div><span className="overline">KUNDEN</span><h3>{customers.length} aktuelle Kontakte</h3></div></header>
-       {customers.length?customers.map(customer=><button key={customer.id} className="inbox-row customer" onClick={()=>customer.request&&setCustomerRequest(customer.request)}>
+     <PageHead title="Kunden & Fahrzeuge" subtitle="Werkstattkunden verwalten, nach Name, Fahrzeug, Kennzeichen oder FIN suchen und die Fahrzeugakte öffnen."/>
+     {live.customerRequests.length>0&&<section className="panel office-inbox">
+       <header><div><span className="overline">OFFENE AUFNAHMEANFRAGEN</span><h3>{live.customerRequests.length} Anfragen</h3></div></header>
+       {live.customerRequests.map(request=><button key={request.id} className="inbox-row customer" onClick={()=>setCustomerRequest(request)}>
          <span className="inbox-icon"><Users/></span>
-         <span><b>{customer.name}</b><small>{customer.detail}</small></span>
-         <strong>{customer.request?'Prüfen':'Aktiv'}</strong>
-       </button>):<div className="inbox-empty">Noch keine Kundenkontakte vorhanden.</div>}
-     </section>
+         <span><b>{request.profile?.full_name||'Kundenanfrage'}</b><small>{request.profile?.phone||[request.profile?.postal_code,request.profile?.city].filter(Boolean).join(' ')||'Aufnahme angefragt'}</small></span>
+         <strong>Prüfen</strong>
+       </button>)}
+     </section>}
+     {live.identity&&<WorkshopCustomerManager workshopId={live.identity.workshopId} onChanged={live.reload}/>}
    </>}
 
    {section==='Fahrzeuge'&&<>
@@ -1017,6 +1019,8 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [notificationOrderId,setNotificationOrderId]=useState<string|null>(null);
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
  const [garageVehicleId,setGarageVehicleId]=useState<string|null>(null);
+ const [garageHistory,setGarageHistory]=useState<VehicleHistoryEntry[]>([]);
+ const [garageHistoryBusy,setGarageHistoryBusy]=useState(false);
  const [editVehicleId,setEditVehicleId]=useState<string|null>(null);
  const [vehicleModal,setVehicleModal]=useState(false);
  const [requestModal,setRequestModal]=useState(false);
@@ -1056,6 +1060,17 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
    if(live.vehicles.some(vehicle=>vehicle.id===garageVehicleId))return;
    setGarageVehicleId(null);
  },[live.vehicles,garageVehicleId]);
+
+ useEffect(()=>{
+   if(!garageVehicleId){setGarageHistory([]);return}
+   let cancelled=false;
+   setGarageHistoryBusy(true);
+   getVehicleHistory(garageVehicleId)
+     .then(rows=>{if(!cancelled)setGarageHistory(rows)})
+     .catch(()=>{if(!cancelled)setGarageHistory([])})
+     .finally(()=>{if(!cancelled)setGarageHistoryBusy(false)});
+   return()=>{cancelled=true};
+ },[garageVehicleId]);
 
  const customerNav:ShellNavItem[]=[
    ['Übersicht',Home,'Status'],
@@ -1405,6 +1420,13 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
            <div><small>ANTRIEB</small><b>{selectedVehicle.driveType||'Nicht hinterlegt'}</b></div>
            <div><small>LETZTE WERKSTATTPRÜFUNG</small><b>{selectedVehicle.identityVerifiedAt?new Date(selectedVehicle.identityVerifiedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'Noch nicht werkstattgeprüft'}</b></div>
          </div>
+       </div>
+
+       <div className="garage-history-panel">
+         <header><div><History/><span><small>FAHRZEUGHISTORIE</small><h3>Wann wurde was gemacht?</h3></span></div><strong>{garageHistory.length}</strong></header>
+         {garageHistoryBusy?<div className="inbox-empty">Historie wird geladen …</div>:garageHistory.length?<div className="garage-history-list">
+           {garageHistory.map(entry=><article key={entry.id}><i/><div><small>{new Date(entry.occurredAt).toLocaleDateString('de-DE')} · {entry.workshopName}{entry.orderNumber?' · Auftrag #'+entry.orderNumber:''}</small><b>{entry.title}</b>{entry.summary&&<p>{entry.summary}</p>}{entry.mileage!=null&&<span>{entry.mileage.toLocaleString('de-DE')} km</span>}</div></article>)}
+         </div>:<div className="inbox-empty">Für dieses Fahrzeug ist noch keine MotorAtlas-Historie vorhanden.</div>}
        </div>
 
        {(selectedOrder||selectedRequest||selectedAppointment)&&<div className="garage-related">
