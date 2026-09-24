@@ -180,8 +180,8 @@ create or replace function public.create_document_draft(
   p_document_type text,
   p_document_number text,
   p_title text,
-  p_amount_total numeric,
-  p_currency text
+  p_amount_total numeric default null,
+  p_currency text default 'EUR'
 )
 returns public.documents
 language plpgsql
