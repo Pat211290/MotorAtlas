@@ -4,7 +4,7 @@ import {
   CalendarClock, Car, FileClock, History, Mail, MapPin, Phone, Plus, QrCode, Search, ShieldCheck, UserRound, X
 } from 'lucide-react';
 import {
-  addVehicleHistoryEntry, createVehicleClaimToken, createWalkInWorkOrder, createWorkshopCustomerVehicle, getVehicleHistory,
+  addVehicleHistoryEntry, createVehicleClaimToken, createVerifiedVehicleTransferToken, createWalkInWorkOrder, createWorkshopCustomerVehicle, getVehicleHistory,
   listWorkshopCustomerDirectory, type ServiceRequestIntent, type VehicleHistoryEntry, type WorkshopCustomerDirectoryItem
 } from './api';
 
@@ -29,6 +29,7 @@ export function WorkshopCustomerManager({workshopId,onChanged,onOpenOrder}:{work
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
   const [createOpen,setCreateOpen]=useState(false);
+  const [transferVerifyOpen,setTransferVerifyOpen]=useState(false);
   const [autoQrVehicleId,setAutoQrVehicleId]=useState<string|null>(null);
 
   const load=async(query=search)=>{
@@ -49,7 +50,10 @@ export function WorkshopCustomerManager({workshopId,onChanged,onOpenOrder}:{work
   return <div className="workshop-customer-manager">
     <section className="panel workshop-customer-toolbar">
       <div className="workshop-customer-search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name, Fahrzeug, Kennzeichen oder FIN suchen …"/></div>
-      <button className="btn primary" onClick={()=>setCreateOpen(true)}><Plus size={16}/> Kunde + Fahrzeug anlegen</button>
+      <div className="workshop-customer-toolbar-actions">
+        <button className="btn secondary" onClick={()=>setTransferVerifyOpen(true)}><ShieldCheck size={16}/> Besitzerwechsel prüfen</button>
+        <button className="btn primary" onClick={()=>setCreateOpen(true)}><Plus size={16}/> Kunde + Fahrzeug anlegen</button>
+      </div>
     </section>
 
     {error&&<div className="modal-error">{error}</div>}
@@ -79,6 +83,7 @@ export function WorkshopCustomerManager({workshopId,onChanged,onOpenOrder}:{work
     </div>
 
     <WorkshopCustomerCreateModal open={createOpen} onClose={()=>setCreateOpen(false)} workshopId={workshopId} onDone={async(vehicleId)=>{setCreateOpen(false);await load(search);setSelectedId(vehicleId);setAutoQrVehicleId(vehicleId);await onChanged()}}/>
+    <WorkshopTransferVerificationModal open={transferVerifyOpen} onClose={()=>setTransferVerifyOpen(false)} workshopId={workshopId}/>
   </div>;
 }
 
@@ -136,6 +141,53 @@ function WorkshopCustomerVehicleDetail({item,workshopId,onChanged,onOpenOrder,au
     <VehicleClaimQrModal open={qrOpen} onClose={()=>setQrOpen(false)} item={item} workshopId={workshopId}/>
     <HistoryEntryModal open={historyOpen} onClose={()=>setHistoryOpen(false)} item={item} workshopId={workshopId} onDone={async()=>{setHistory(await getVehicleHistory(item.vehicleId));await onChanged()}}/>
   </section>;
+}
+
+function WorkshopTransferVerificationModal({open,onClose,workshopId}:{open:boolean;onClose:()=>void;workshopId:string}){
+  const [vin,setVin]=useState('');
+  const [confirmed,setConfirmed]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+  const [qr,setQr]=useState<string|null>(null);
+  const [url,setUrl]=useState('');
+  const [vehicle,setVehicle]=useState<{make:string;model:string;variant?:string|null;licensePlate:string;expiresAt:string}|null>(null);
+
+  useEffect(()=>{if(open){setVin('');setConfirmed(false);setBusy(false);setError(null);setQr(null);setUrl('');setVehicle(null)}},[open]);
+  if(!open)return null;
+
+  const generate=async()=>{
+    if(vin.trim().length!==17){setError('Bitte die vollständige 17-stellige FIN eingeben.');return}
+    if(!confirmed){setError('Bestätige zuerst, dass Fahrzeug und Unterlagen vor Ort geprüft wurden.');return}
+    setBusy(true);setError(null);
+    try{
+      const result=await createVerifiedVehicleTransferToken(workshopId,vin);
+      const nextUrl=claimUrl(result.token);
+      setUrl(nextUrl);
+      setQr(await QRCode.toDataURL(nextUrl,{width:320,margin:2,errorCorrectionLevel:'M'}));
+      setVehicle({make:result.make,model:result.model,variant:result.variant,licensePlate:result.licensePlate,expiresAt:result.expiresAt});
+    }catch(err){setError(err instanceof Error?err.message:'Besitzerwechsel konnte nicht geprüft werden.')}
+    finally{setBusy(false)}
+  };
+
+  return <div className="modal-backdrop" onMouseDown={()=>{if(!busy)onClose()}}>
+    <section className="workflow-modal vehicle-transfer-verify-modal" onMouseDown={event=>event.stopPropagation()}>
+      <header><div className="modal-icon"><ShieldCheck/></div><div><span>BESITZERWECHSEL</span><h2>Fahrzeug vor Ort prüfen</h2><small>Für Fahrzeuge, die bereits in MotorAtlas existieren – unabhängig von der früheren Werkstatt.</small></div><button disabled={busy} onClick={onClose}><X/></button></header>
+      {!qr?<div className="vehicle-transfer-verify-body">
+        <div className="vehicle-identity-lock"><ShieldCheck/><div><b>Nur nach echter Vor-Ort-Prüfung</b><span>FIN am Fahrzeug und geeignete Fahrzeug-/Erwerbsunterlagen müssen mit dem vorgeführten Fahrzeug übereinstimmen. MotorAtlas überträgt keine personenbezogenen Daten des Vorbesitzers.</span></div></div>
+        <label><span>FIN / VIN</span><input value={vin} onChange={e=>setVin(e.target.value.toUpperCase().replace(/\s/g,''))} maxLength={17} placeholder="17-stellige FIN"/></label>
+        <label className="modal-check-row"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/><span><b>Fahrzeug und Unterlagen wurden vor Ort geprüft</b><small>Mit dieser Bestätigung wird die Prüfung mit Werkstatt, Mitarbeiter und Zeitpunkt protokolliert.</small></span></label>
+        {error&&<div className="modal-error">{error}</div>}
+        <div className="modal-actions"><button type="button" className="btn secondary" onClick={onClose}>Abbrechen</button><button type="button" className="btn primary" disabled={busy||!confirmed} onClick={()=>void generate()}>{busy?'Prüft …':'Prüfen & QR-Code erzeugen'}</button></div>
+      </div>:<div className="vehicle-claim-code">
+        <img src={qr} alt="QR-Code für geprüften Besitzerwechsel"/>
+        <b>{vehicle?.make} {vehicle?.model} {vehicle?.variant||''}</b>
+        <span>{vehicle?.licensePlate}</span>
+        <small>Gültig bis {vehicle&&new Date(vehicle.expiresAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</small>
+        <button className="btn secondary" onClick={()=>window.print()}>Drucken</button>
+        <button className="btn secondary" onClick={()=>navigator.clipboard?.writeText(url)}>Link kopieren</button>
+      </div>}
+    </section>
+  </div>;
 }
 
 function WalkInOrderModal({open,onClose,item,workshopId,onDone}:{
