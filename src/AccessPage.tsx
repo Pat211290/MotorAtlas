@@ -120,6 +120,16 @@ function readPendingVehicleClaim(){
 function savePendingVehicleClaim(token:string){
   try{if(token)localStorage.setItem(PENDING_VEHICLE_CLAIM_KEY,token);else localStorage.removeItem(PENDING_VEHICLE_CLAIM_KEY)}catch{}
 }
+function claimTokenFromLocation(){
+  const direct=new URLSearchParams(location.search).get('claim')?.trim();
+  if(direct)return direct;
+  const queryIndex=location.hash.indexOf('?');
+  if(queryIndex<0)return'';
+  return new URLSearchParams(location.hash.slice(queryIndex+1)).get('claim')?.trim()??'';
+}
+function isVehicleClaimLocation(){
+  return location.pathname.replace(/\/+$/,'').endsWith('/fahrzeug-uebernehmen')||location.hash.startsWith('#/fahrzeug-uebernehmen');
+}
 
 function readPendingSignupEmail(){
   try{return localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY)?.trim()??''}catch{return''}
@@ -172,15 +182,15 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     initialTab()==='confirmed'?'checking':'success'
   );
   const [confirmationError,setConfirmationError]=useState('');
-  const claimTokenFromUrl=new URLSearchParams(location.search).get('claim')?.trim()??'';
-  const claimPage=location.pathname.replace(/\/+$/,'').endsWith('/fahrzeug-uebernehmen');
+  const claimTokenFromUrl=claimTokenFromLocation();
+  const claimPage=isVehicleClaimLocation();
   const [claimPreview,setClaimPreview]=useState<VehicleClaimPreview|null>(null);
   const [claimLoading,setClaimLoading]=useState(Boolean(claimPage&&claimTokenFromUrl));
   const [claimAccountMode,setClaimAccountMode]=useState<'login'|'register'>('register');
   const [claimSignedIn,setClaimSignedIn]=useState(false);
 
   useEffect(()=>{
-    const token=claimTokenFromUrl||new URLSearchParams(location.search).get('claim')?.trim()||'';
+    const token=claimTokenFromUrl||claimTokenFromLocation();
     if(token)savePendingVehicleClaim(token);
     if(!claimPage||!token)return;
     let cancelled=false;
