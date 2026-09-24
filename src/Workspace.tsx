@@ -6,7 +6,7 @@ import {
 import { jobs, type Job, type Stage } from './demo';
 import { applyPalette, paletteFromLogo, paletteFromStoredColors } from './lib';
 import { Brand, CarArt, Status, stageLabels, type AppView } from './components';
-import { archiveMyVehicle, assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getVehicleHistory, getWorkshopLogoPublicUrl, getWorkshopProfile, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type VehicleHistoryEntry, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
+import { assignWorkToMember, closeWorkOrder, completeRepair, createWorkshop, customerResolveAfterDiagnosis, getDocumentVersionUrl, getVehicleHistory, getWorkshopLogoPublicUrl, getWorkshopProfile, isSupportAdmin, listWorkOrderDocuments, markNoCostsAndReadyForPickup, markNotificationRead, markReadyForPickup, markVehicleArrived, recordApproval, resolveWorkOrderNextStep, respondAppointment, updateWorkshopProfile, uploadWorkshopLogo, type AppNotification, type LiveJob, type ServiceRequestIntent, type VehicleHistoryEntry, type WorkNextStepDecision, type WorkshopAppointment, type WorkshopChatInboxItem } from './api';
 import { useCustomerWorkspace, useWorkshopWorkspace } from './hooks';
 import { VehicleChat } from './VehicleChat';
 import { VehicleCreateModal, VehiclePhoto } from './VehicleModal';
@@ -23,9 +23,11 @@ import { CustomerProfileModal } from './CustomerProfileModal';
 import { AppointmentCancelModal } from './AppointmentCancelModal';
 import { WorkDecisionModal } from './WorkDecisionModal';
 import { ExternalApprovalModal } from './ExternalApprovalModal';
+import { OwnerVehicleSaleModal } from './OwnerVehicleSaleModal';
+import { SupportVehicleClaimsPanel } from './SupportVehicleClaimsPanel';
 import { WORKSHOP_SERVICE_OPTIONS } from './verification';
 
-type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente'|'Stammwerkstatt';
+type ShellSection='Übersicht'|'Werkstatt'|'Termine'|'Kunden'|'Fahrzeuge'|'Dokumente'|'Stammwerkstatt'|'Support';
 type ShellNavItem=[ShellSection,typeof Home,string?];
 
 function Shell({
@@ -267,7 +269,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const displayJobs=(live.isLive?live.jobs:jobs) as DisplayJob[];
  const [section,setSection]=useState<ShellSection>(()=>{
    const saved=sessionStorage.getItem('motoratlas_office_section') as ShellSection|null;
-   return saved&&['Übersicht','Termine','Kunden','Fahrzeuge','Dokumente'].includes(saved)?saved:'Übersicht';
+   return saved&&['Übersicht','Termine','Kunden','Fahrzeuge','Dokumente','Support'].includes(saved)?saved:'Übersicht';
  });
  const [scheduleRange,setScheduleRange]=useState<AppointmentView>('week');
  const [now,setNow]=useState(()=>new Date());
@@ -291,6 +293,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [documentsBusy,setDocumentsBusy]=useState(false);
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
  const [notificationAppointmentId,setNotificationAppointmentId]=useState<string|null>(null);
+ const [supportAdmin,setSupportAdmin]=useState(false);
  const [pendingNotification,setPendingNotification]=useState<AppNotification|null>(()=>{
    const raw=sessionStorage.getItem('motoratlas_pending_notification');
    if(!raw)return null;
@@ -315,6 +318,13 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    const timer=window.setInterval(()=>setNow(new Date()),60_000);
    return()=>window.clearInterval(timer);
  },[]);
+
+ useEffect(()=>{
+   if(!live.isLive){setSupportAdmin(false);return}
+   let cancelled=false;
+   isSupportAdmin().then(value=>{if(!cancelled)setSupportAdmin(value)}).catch(()=>{if(!cancelled)setSupportAdmin(false)});
+   return()=>{cancelled=true};
+ },[live.isLive,live.identity?.userId]);
 
  const openSection=(next:ShellSection)=>{
    if(next==='Werkstatt'){setView('workshop');return;}
@@ -574,10 +584,16 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
    </article>;
  };
 
+ const officeNav:ShellNavItem[]=[
+   ['Übersicht',Home],['Werkstatt',Wrench],['Termine',CalendarDays],['Kunden',Users],['Fahrzeuge',Car],['Dokumente',FileText],
+   ...(supportAdmin?[['Support',ShieldCheck,'SUPPORT'] as ShellNavItem]:[])
+ ];
+
  return <Shell
    onHome={()=>setView('home')}
    onSettings={live.identity?.role==='owner'?()=>setView('branding'):undefined}
    onNavigate={openSection}
+   navItems={officeNav}
    notifications={live.notifications}
    onNotificationOpen={openNotification}
    onNotificationsChanged={live.reload}
@@ -737,6 +753,11 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
          <strong>{document.amount_total!=null?Number(document.amount_total).toLocaleString('de-DE',{style:'currency',currency:document.currency||'EUR'}):'Öffnen'}</strong>
        </button>):!documentsBusy&&<div className="inbox-empty">Noch keine Dokumente vorhanden.</div>}
      </section>
+   </>}
+
+   {section==='Support'&&supportAdmin&&<>
+     <PageHead title="MotorAtlas Support" subtitle="Manuelle Besitzerwechsel prüfen und Fahrzeugzuordnungen nach Nachweis freigeben."/>
+     <SupportVehicleClaimsPanel/>
    </>}
  </div>
  {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
@@ -1028,8 +1049,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const [vehicleModal,setVehicleModal]=useState(false);
  const [requestModal,setRequestModal]=useState(false);
  const [requestVehicleId,setRequestVehicleId]=useState<string|null>(null);
- const [archiveVehicleId,setArchiveVehicleId]=useState<string|null>(null);
- const [archiveVehicleBusy,setArchiveVehicleBusy]=useState(false);
+ const [saleVehicle,setSaleVehicle]=useState<(typeof live.vehicles)[number]|null>(null);
  const [directory,setDirectory]=useState(false);
  const [profileModal,setProfileModal]=useState(false);
  const [cancelTarget,setCancelTarget]=useState<(typeof live.appointments)[number]|null>(null);
@@ -1440,7 +1460,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        <div className="garage-detail-actions">
          <button className="btn primary" onClick={()=>{setRequestVehicleId(selectedVehicle.id);setRequestModal(true)}}><Plus size={16}/> Werkstattanfrage für dieses Fahrzeug</button>
          {selectedOrder&&<button className="btn secondary" onClick={()=>{setNotificationOrderId(selectedOrder.id);setSection('Übersicht')}}>Aktuellen Auftrag öffnen</button>}
-         <button className="btn secondary garage-archive-button" disabled={Boolean(selectedOrder||selectedRequest||selectedAppointment)} title={selectedOrder||selectedRequest||selectedAppointment?'Erst nach Abschluss aller offenen Vorgänge möglich':'Fahrzeug als verkauft markieren'} onClick={()=>setArchiveVehicleId(selectedVehicle.id)}><Archive size={16}/> {selectedOrder||selectedRequest||selectedAppointment?'Verkauf erst nach Abschluss':'Fahrzeug verkauft / aus Garage'}</button>
+         <button className="btn secondary garage-archive-button" disabled={Boolean(selectedOrder||selectedRequest||selectedAppointment)} title={selectedOrder||selectedRequest||selectedAppointment?'Erst nach Abschluss aller offenen Vorgänge möglich':'Fahrzeug als verkauft markieren'} onClick={()=>setSaleVehicle(selectedVehicle)}><Archive size={16}/> {selectedOrder||selectedRequest||selectedAppointment?'Verkauf erst nach Abschluss':'Fahrzeug verkauft / aus Garage'}</button>
        </div>
      </section>}
    </div>;
@@ -1514,6 +1534,14 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        return;
      }
      setNotificationOrderId(null);
+     if(targetType==='vehicle'||notification.kind==='vehicle'){
+       setSection('Fahrzeuge');
+       if(notification.targetId){
+         if(live.vehicles.some(vehicle=>vehicle.id===notification.targetId))setGarageVehicleId(notification.targetId);
+         else void live.reload().then(()=>setGarageVehicleId(notification.targetId!));
+       }
+       return;
+     }
      if(targetType==='appointment'||notification.kind==='appointment'){
        setSection('Termine');
        if(notification.targetId)setNotificationScrollId('customer-appointment-'+notification.targetId);
@@ -1555,17 +1583,15 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
      {section==='Stammwerkstatt'&&renderWorkshop()}
    </>:<section className="panel customer-empty-status"><Car/><div><span className="overline">PRODUKTDEMO</span><h2>Dein MotorAtlas-Kundenportal</h2><p>Nach der Anmeldung erscheinen hier echte Termine, Fahrzeuge, Dokumente und deine Stammwerkstatt.</p></div></section>}
  </div>
- {archiveVehicleId&&<div className="modal-backdrop" onMouseDown={()=>{if(!archiveVehicleBusy)setArchiveVehicleId(null)}}>
-   <section className="workflow-modal garage-archive-modal" onMouseDown={event=>event.stopPropagation()}>
-     <header><div className="modal-icon"><Archive/></div><div><span>MEINE GARAGE</span><h2>Fahrzeug verkauft?</h2><small>Das Fahrzeug wird nicht gelöscht. Frühere Aufträge und Dokumente bleiben erhalten.</small></div><button disabled={archiveVehicleBusy} onClick={()=>setArchiveVehicleId(null)} aria-label="Schließen">×</button></header>
-     <div className="workflow-decision-note"><ShieldCheck/><p>Das Fahrzeug verschwindet aus deiner aktiven Garage und kann nicht mehr für neue Anfragen ausgewählt werden. Die Fahrzeugidentität und Historie bleiben unverändert gespeichert.</p></div>
-     {actionError&&<div className="modal-error">{actionError}</div>}
-     <div className="modal-actions"><button type="button" className="btn secondary" disabled={archiveVehicleBusy} onClick={()=>setArchiveVehicleId(null)}>Abbrechen</button><button type="button" className="btn primary" disabled={archiveVehicleBusy} onClick={async()=>{if(!archiveVehicleId)return;setArchiveVehicleBusy(true);setActionError(null);try{await archiveMyVehicle(archiveVehicleId);setArchiveVehicleId(null);setGarageVehicleId(null);await live.reload()}catch(err){setActionError(err instanceof Error?err.message:'Fahrzeug konnte nicht archiviert werden.')}finally{setArchiveVehicleBusy(false)}}}>{archiveVehicleBusy?'Wird archiviert …':'Ja, Fahrzeug verkauft'}</button></div>
-   </section>
- </div>}
+ <OwnerVehicleSaleModal
+   open={Boolean(saleVehicle)}
+   onClose={()=>setSaleVehicle(null)}
+   onDone={async()=>{setGarageVehicleId(null);await live.reload()}}
+   vehicle={saleVehicle}
+ />
  <CustomerVehicleEditModal open={Boolean(editVehicleId)} onClose={()=>setEditVehicleId(null)} onDone={live.reload} vehicle={live.vehicles.find(vehicle=>vehicle.id===editVehicleId)??null}/>
  <CustomerProfileModal open={profileModal} onClose={()=>setProfileModal(false)} onSaved={live.reload}/>
- <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload}/>
+ <VehicleCreateModal open={vehicleModal} onClose={()=>setVehicleModal(false)} onDone={live.reload} onFindWorkshop={()=>{setSection('Stammwerkstatt');setDirectory(true)}}/>
  <WorkshopDirectoryModal open={directory} onClose={()=>setDirectory(false)} onChanged={live.reload} relationships={live.workshops}/>
  <ServiceRequestModal open={requestModal} onClose={()=>{setRequestModal(false);setRequestVehicleId(null)}} onDone={live.reload} vehicles={live.vehicles} workshops={live.workshops} initialVehicleId={requestVehicleId}/>
  <VehicleChat
