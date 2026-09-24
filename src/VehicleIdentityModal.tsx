@@ -5,7 +5,8 @@ import { updateVehicleIdentityAsWorkshop, type LiveJob } from './api';
 export function VehicleIdentityModal({
   open,onClose,onDone,job
 }:{
-  open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void;job:LiveJob|null;
+  open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void;
+  job:(Partial<LiveJob>&{id:string;vehicle:string;plate:string;orderNumber?:string|null})|null;
 }){
   const [make,setMake]=useState('');
   const [model,setModel]=useState('');
@@ -57,6 +58,7 @@ export function VehicleIdentityModal({
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();
+    if(!job.vehicleId){setError('Die Fahrzeug-ID fehlt. Bitte den Live-Auftrag neu laden.');return}
     if(!make.trim()||!model.trim()||!licensePlate.trim()){
       setError('Hersteller, Modell und Kennzeichen sind erforderlich.');
       return;
