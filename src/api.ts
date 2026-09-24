@@ -1217,6 +1217,35 @@ export async function archiveMyVehicle(vehicleId:string){
   return data;
 }
 
+export async function updateMyVehicle(input:{
+  vehicleId:string;make:string;model:string;variant?:string|null;firstRegistration?:string|null;
+  licensePlate:string;hsn?:string|null;tsn?:string|null;vin?:string|null;mileage?:number|null;
+  typeVariantVersion?:string|null;engineCode?:string|null;displacementCcm?:number|null;powerKw?:number|null;
+  fuelType?:string|null;transmissionCode?:string|null;driveType?:string|null;
+}){
+  const {data,error}=await db().rpc('update_my_vehicle',{
+    p_vehicle_id:input.vehicleId,p_make:input.make.trim(),p_model:input.model.trim(),
+    p_variant:input.variant?.trim()||null,p_first_registration:input.firstRegistration||null,
+    p_license_plate:input.licensePlate.trim().toUpperCase(),p_hsn:input.hsn?.trim()||null,
+    p_tsn:input.tsn?.trim().toUpperCase()||null,p_vin:input.vin?.trim().toUpperCase()||null,
+    p_mileage:input.mileage??null,p_type_variant_version:input.typeVariantVersion?.trim()||null,
+    p_engine_code:input.engineCode?.trim().toUpperCase()||null,p_displacement_ccm:input.displacementCcm??null,
+    p_power_kw:input.powerKw??null,p_fuel_type:input.fuelType?.trim()||null,
+    p_transmission_code:input.transmissionCode?.trim().toUpperCase()||null,p_drive_type:input.driveType?.trim()||null
+  });
+  if(error){
+    const message=error.message.includes('vehicle_not_found')
+      ?'Das Fahrzeug wurde nicht gefunden oder gehört nicht zu deinem Konto.'
+      :error.message.includes('make_and_model_required')
+        ?'Hersteller und Modell müssen angegeben werden.'
+        :error.message.includes('license_plate_required')
+          ?'Das Kennzeichen muss angegeben werden.'
+          :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
+
 export async function updateVehicleIdentityAsWorkshop(input:{
   vehicleId:string;workOrderId:string;make:string;model:string;variant?:string|null;firstRegistration?:string|null;
   licensePlate:string;hsn?:string|null;tsn?:string|null;vin?:string|null;mileage?:number|null;
