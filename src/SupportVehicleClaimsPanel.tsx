@@ -5,7 +5,7 @@ import {
   type SupportVehicleClaimRequest
 } from './api';
 
-export function SupportVehicleClaimsPanel(){
+export function SupportVehicleClaimsPanel({focusClaimId}:{focusClaimId?:string|null}){
   const [items,setItems]=useState<SupportVehicleClaimRequest[]>([]);
   const [search,setSearch]=useState('');
   const [loading,setLoading]=useState(true);
@@ -21,6 +21,17 @@ export function SupportVehicleClaimsPanel(){
   };
 
   useEffect(()=>{void load()},[]);
+  useEffect(()=>{
+    if(!focusClaimId||loading)return;
+    const id=window.setTimeout(()=>{
+      const node=document.getElementById('support-claim-'+focusClaimId);
+      if(!node)return;
+      node.scrollIntoView({behavior:'smooth',block:'center'});
+      node.classList.add('notification-target');
+      window.setTimeout(()=>node.classList.remove('notification-target'),1800);
+    },80);
+    return()=>window.clearTimeout(id);
+  },[focusClaimId,loading,items.length]);
 
   const filtered=useMemo(()=>{
     const q=search.trim().toLowerCase();
@@ -70,7 +81,7 @@ export function SupportVehicleClaimsPanel(){
     <section className="support-claim-list">
       {loading&&<div className="panel inbox-empty">Support-Anträge werden geladen …</div>}
       {!loading&&!filtered.length&&<div className="panel inbox-empty">Keine passenden Besitzerwechsel-Anträge vorhanden.</div>}
-      {!loading&&filtered.map(item=><article className={'panel support-claim-card '+item.status} key={item.id}>
+      {!loading&&filtered.map(item=><article id={'support-claim-'+item.id} className={'panel support-claim-card '+item.status} key={item.id}>
         <header>
           <div><ShieldCheck/><span><small>{item.status==='pending'?'OFFENE PRÜFUNG':item.status==='approved'?'FREIGEGEBEN':'ABGELEHNT'}</small><h3>{[item.make,item.model,item.variant].filter(Boolean).join(' ')}</h3><p>{item.licensePlate} · FIN {item.vin}</p></span></div>
           <strong>{new Date(item.createdAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}</strong>
