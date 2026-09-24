@@ -5,7 +5,7 @@ import {
   Mail, MailCheck, MapPin, MessageCircle, Phone, RefreshCw, ShieldCheck, Sparkles, UserRound, Users, WalletCards
 } from 'lucide-react';
 import { backendConfigured, supabase } from './lib';
-import { authReturnUrl, claimMyWorkshopInvites, signUpCustomer } from './api';
+import { authReturnUrl, claimMyWorkshopInvites, claimVehicleWithToken, getVehicleClaimPreview, signUpCustomer, type VehicleClaimPreview } from './api';
 import type { AppView } from './components';
 
 async function resolveSignedInView():Promise<AppView>{
@@ -112,6 +112,14 @@ function appPath(segment:string){
 
 const SIGNUP_CONFIRM_EVENT_KEY='motoratlas_signup_confirmation_event';
 const PENDING_SIGNUP_EMAIL_KEY='motoratlas_pending_signup_email';
+const PENDING_VEHICLE_CLAIM_KEY='motoratlas_pending_vehicle_claim';
+
+function readPendingVehicleClaim(){
+  try{return localStorage.getItem(PENDING_VEHICLE_CLAIM_KEY)?.trim()??''}catch{return''}
+}
+function savePendingVehicleClaim(token:string){
+  try{if(token)localStorage.setItem(PENDING_VEHICLE_CLAIM_KEY,token);else localStorage.removeItem(PENDING_VEHICLE_CLAIM_KEY)}catch{}
+}
 
 function readPendingSignupEmail(){
   try{return localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY)?.trim()??''}catch{return''}
@@ -164,6 +172,28 @@ export function AccessPage({setView}:{setView:(view:AppView)=>void}){
     initialTab()==='confirmed'?'checking':'success'
   );
   const [confirmationError,setConfirmationError]=useState('');
+  const claimTokenFromUrl=new URLSearchParams(location.search).get('claim')?.trim()??'';
+  const claimPage=location.pathname.replace(/\/+$/,'').endsWith('/fahrzeug-uebernehmen');
+  const [claimPreview,setClaimPreview]=useState<VehicleClaimPreview|null>(null);
+  const [claimLoading,setClaimLoading]=useState(Boolean(claimPage&&claimTokenFromUrl));
+  const [claimAccountMode,setClaimAccountMode]=useState<'login'|'register'>('register');
+  const [claimSignedIn,setClaimSignedIn]=useState(false);
+
+  useEffect(()=>{
+    const token=claimTokenFromUrl||new URLSearchParams(location.search).get('claim')?.trim()||'';
+    if(token)savePendingVehicleClaim(token);
+    if(!claimPage||!token)return;
+    let cancelled=false;
+    setClaimLoading(true);
+    getVehicleClaimPreview(token)
+      .then(preview=>{if(!cancelled)setClaimPreview(preview)})
+      .catch(()=>{if(!cancelled)setClaimPreview(null)})
+      .finally(()=>{if(!cancelled)setClaimLoading(false)});
+    if(supabase){
+      supabase.auth.getUser().then(({data})=>{if(!cancelled)setClaimSignedIn(Boolean(data.user))}).catch(()=>{});
+    }
+    return()=>{cancelled=true};
+  },[claimPage,claimTokenFromUrl]);
 
   const setTab=(next:Tab)=>{
     setMessage('');
