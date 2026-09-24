@@ -294,6 +294,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
  const [notificationAppointmentId,setNotificationAppointmentId]=useState<string|null>(null);
  const [supportAdmin,setSupportAdmin]=useState(false);
+ const [supportClaimTargetId,setSupportClaimTargetId]=useState<string|null>(null);
  const [pendingNotification,setPendingNotification]=useState<AppNotification|null>(()=>{
    const raw=sessionStorage.getItem('motoratlas_pending_notification');
    if(!raw)return null;
@@ -471,6 +472,18 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
 
  const openNotification=(notification:AppNotification)=>{
    const targetType=notification.targetType;
+   if(targetType==='vehicle_claim_request'||notification.kind==='support_claim'){
+     setSupportClaimTargetId(notification.targetId??null);
+     openSection('Support');
+     return true;
+   }
+   if(targetType==='vehicle'||notification.kind==='vehicle'||notification.kind==='vehicle_removed'||notification.kind==='vehicle_claim_rejected'){
+     if(notification.targetId)sessionStorage.setItem('motoratlas_customer_vehicle_target',notification.targetId);
+     else sessionStorage.removeItem('motoratlas_customer_vehicle_target');
+     sessionStorage.setItem('motoratlas_customer_section','Fahrzeuge');
+     setView('customer');
+     return true;
+   }
    if(targetType==='customer_request'||notification.kind==='customer_request'){
      openSection('Kunden');
      if(notification.targetId){
@@ -757,7 +770,7 @@ export function OfficeDashboard({setView}:{setView:(v:AppView)=>void}){
 
    {section==='Support'&&supportAdmin&&<>
      <PageHead title="MotorAtlas Support" subtitle="Manuelle Besitzerwechsel prüfen und Fahrzeugzuordnungen nach Nachweis freigeben."/>
-     <SupportVehicleClaimsPanel/>
+     <SupportVehicleClaimsPanel focusClaimId={supportClaimTargetId}/>
    </>}
  </div>
  {selected&&<VehicleChat open={chat} onClose={()=>setChat(false)} audience="workshop" workOrderId={live.isLive?selected.id:null} vehicleLabel={selected.vehicle} plate={selected.plate} orderNumber={selected.orderNumber??selected.id.slice(-6)} chatEnabled={live.identity?.chatEnabled}/>}
@@ -895,6 +908,19 @@ export function WorkshopBoard({setView}:{setView:(v:AppView)=>void}){
 
  const openWorkshopNotification=(notification:AppNotification)=>{
    const targetType=notification.targetType;
+   if(targetType==='vehicle_claim_request'||notification.kind==='support_claim'){
+     sessionStorage.setItem('motoratlas_pending_notification',JSON.stringify(notification));
+     sessionStorage.setItem('motoratlas_office_section','Support');
+     setView('office');
+     return;
+   }
+   if(targetType==='vehicle'||notification.kind==='vehicle'||notification.kind==='vehicle_removed'||notification.kind==='vehicle_claim_rejected'){
+     if(notification.targetId)sessionStorage.setItem('motoratlas_customer_vehicle_target',notification.targetId);
+     else sessionStorage.removeItem('motoratlas_customer_vehicle_target');
+     sessionStorage.setItem('motoratlas_customer_section','Fahrzeuge');
+     setView('customer');
+     return;
+   }
    const orderId=(targetType==='work_order'?notification.targetId:null)??notification.workOrderId;
    if((targetType==='chat_thread'||notification.kind==='chat')&&orderId&&queue.some(job=>job.id===orderId)){
      setSelectedId(orderId);
@@ -1037,12 +1063,20 @@ function VehicleCard({name,plate,detail,active,tone,stage='approval',demo=false,
 
 export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const live=useCustomerWorkspace();
- const [section,setSection]=useState<ShellSection>('Übersicht');
+ const [section,setSection]=useState<ShellSection>(()=>{
+   const pending=sessionStorage.getItem('motoratlas_customer_section') as ShellSection|null;
+   sessionStorage.removeItem('motoratlas_customer_section');
+   return pending&&['Übersicht','Termine','Fahrzeuge','Dokumente','Stammwerkstatt'].includes(pending)?pending:'Übersicht';
+ });
  const [chatTarget,setChatTarget]=useState<'order'|'workshop'|null>(null);
  const [notificationChatThreadId,setNotificationChatThreadId]=useState<string|null>(null);
  const [notificationOrderId,setNotificationOrderId]=useState<string|null>(null);
  const [notificationScrollId,setNotificationScrollId]=useState<string|null>(null);
- const [garageVehicleId,setGarageVehicleId]=useState<string|null>(null);
+ const [garageVehicleId,setGarageVehicleId]=useState<string|null>(()=>{
+   const pending=sessionStorage.getItem('motoratlas_customer_vehicle_target');
+   sessionStorage.removeItem('motoratlas_customer_vehicle_target');
+   return pending||null;
+ });
  const [garageHistory,setGarageHistory]=useState<VehicleHistoryEntry[]>([]);
  const [garageHistoryBusy,setGarageHistoryBusy]=useState(false);
  const [editVehicleId,setEditVehicleId]=useState<string|null>(null);
@@ -1079,7 +1113,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
  const activeVehicle=(activeVehicleId?live.vehicles.find(vehicle=>vehicle.id===activeVehicleId):null)??live.vehicles[0]??null;
 
  useEffect(()=>{
-   if(!garageVehicleId)return;
+   if(!garageVehicleId||!live.vehicles.length)return;
    if(live.vehicles.some(vehicle=>vehicle.id===garageVehicleId))return;
    setGarageVehicleId(null);
  },[live.vehicles,garageVehicleId]);
@@ -1534,7 +1568,7 @@ export function CustomerPortal({setView}:{setView:(v:AppView)=>void}){
        return;
      }
      setNotificationOrderId(null);
-     if(targetType==='vehicle'||notification.kind==='vehicle'){
+     if(targetType==='vehicle'||notification.kind==='vehicle'||notification.kind==='vehicle_removed'||notification.kind==='vehicle_claim_rejected'){
        setSection('Fahrzeuge');
        if(notification.targetId){
          if(live.vehicles.some(vehicle=>vehicle.id===notification.targetId))setGarageVehicleId(notification.targetId);
