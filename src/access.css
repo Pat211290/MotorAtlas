@@ -62,3 +62,26 @@
 .access-verify-paths article>div{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
 .access-verify-paths article>div button{border:1px solid #e5d3ae;background:#fff;border-radius:9px;padding:7px 9px;font-size:8px;font-weight:800;color:#70561f}
 @media(max-width:520px){.access-verify-paths{grid-template-columns:1fr}}
+
+.vehicle-claim-access .access-story h1{max-width:760px}
+.vehicle-claim-access-card{align-self:center}
+.vehicle-claim-preview{text-align:center;border:1px solid #dce7ea;background:linear-gradient(145deg,#f7fbfb,#fff);border-radius:18px;padding:20px;margin-bottom:18px}
+.vehicle-claim-preview>span{display:block;font-size:8px;letter-spacing:1.2px;font-weight:900;color:var(--brand)}
+.vehicle-claim-preview>svg{width:54px;height:54px;color:var(--brand);margin:14px auto 8px;padding:12px;border-radius:16px;background:var(--brand-soft)}
+.vehicle-claim-preview h2{font:800 23px Manrope;color:#405762;margin:0}
+.vehicle-claim-preview>b{display:inline-block;margin-top:8px;padding:6px 9px;border:1px solid #d9e3e6;border-radius:8px;background:#fff;font-size:10px;color:#506771}
+.vehicle-claim-preview>small{display:block;margin-top:9px;font-size:8px;color:#8b989e}
+.vehicle-claim-tabs{grid-template-columns:1fr 1fr;margin-bottom:20px}
+.vehicle-claim-signed-in{display:grid;gap:12px}
+.vehicle-claim-signed-in>svg{width:42px;height:42px;color:var(--brand);padding:10px;border-radius:13px;background:var(--brand-soft);margin:auto}
+.vehicle-claim-signed-in>div:not(.auth-message){text-align:center}
+.vehicle-claim-signed-in b{display:block;font:800 14px Manrope;color:#405762}
+.vehicle-claim-signed-in span{display:block;font-size:9px;line-height:1.5;color:#74858d;margin-top:4px}
+.vehicle-claim-access .auth-message{padding:10px 12px;border:1px solid #d7e7ea;background:#f2f8f8;border-radius:11px;color:#4e6974;font-size:10px}
+.vehicle-claim-access .show-password{border:0;background:none;padding:5px}
+.vehicle-claim-access .show-password svg{width:16px}
+@media(max-width:520px){
+  .vehicle-claim-preview{padding:16px}
+  .vehicle-claim-preview h2{font-size:20px}
+}
+
