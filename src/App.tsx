@@ -111,6 +111,7 @@ const viewHashes:Record<AppView,string>={
 };
 
 function viewFromHash(hash:string):AppView|null{
+  if(hash.startsWith('#/fahrzeug-uebernehmen'))return'login';
   if(hash.startsWith('#/werkstatt/')){
     sessionStorage.setItem('motoratlas_selected_workshop_slug',decodeURIComponent(hash.slice('#/werkstatt/'.length)));
     return 'workshop-profile';
