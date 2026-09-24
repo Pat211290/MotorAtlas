@@ -4,9 +4,9 @@ import { createServiceRequestDraft, submitServiceRequest, uploadRequestImage, ty
 import { QuarterHourDateTime } from './QuarterHourDateTime';
 
 export function ServiceRequestModal({
-  open,onClose,onDone,vehicles,workshops
+  open,onClose,onDone,vehicles,workshops,initialVehicleId
 }:{
-  open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void;vehicles:CustomerVehicle[];workshops:CustomerWorkshop[];
+  open:boolean;onClose:()=>void;onDone:()=>Promise<void>|void;vehicles:CustomerVehicle[];workshops:CustomerWorkshop[];initialVehicleId?:string|null;
 }){
   const primary=workshops.find(w=>w.isPrimary)??workshops[0];
   const [vehicleId,setVehicleId]=useState('');
@@ -25,7 +25,8 @@ export function ServiceRequestModal({
     if(!open)return;
     const nextPrimary=workshops.find(w=>w.isPrimary)??workshops[0];
     if(!workshopId&&nextPrimary)setWorkshopId(nextPrimary.workshopId);
-  },[open,workshops,workshopId]);
+    setVehicleId(initialVehicleId&&vehicles.some(vehicle=>vehicle.id===initialVehicleId)?initialVehicleId:'');
+  },[open,workshops,workshopId,initialVehicleId,vehicles]);
 
   if(!open)return null;
   const reset=()=>{setVehicleId('');setComplaint('');setNotes('');setDesired('');setRequestIntent('diagnosis_then_quote');setDriveable('yes');setWarning('unknown');setImage(null);setError(null)};
