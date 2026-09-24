@@ -40,12 +40,19 @@ function Shell({
   const unread=notifications.filter(item=>!item.readAt).length;
   const initials=title.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')||'MA';
 
-  const openNotification=async(notification:AppNotification)=>{
-    if(!notification.readAt){
-      try{await markNotificationRead(notification.id);await onNotificationsChanged?.()}catch{}
-    }
-    onNotificationOpen?.(notification);
+  const openNotification=(notification:AppNotification)=>{
+    // Open the target immediately. Waiting for the read-status roundtrip first
+    // can remove/reload the notification context on slower mobile connections.
     setNotificationOpen(false);
+    onNotificationOpen?.(notification);
+    if(!notification.readAt){
+      void (async()=>{
+        try{
+          await markNotificationRead(notification.id);
+          await onNotificationsChanged?.();
+        }catch{}
+      })();
+    }
   };
 
   const readAll=async()=>{
@@ -78,7 +85,7 @@ function Shell({
           </button>
           {notificationOpen&&<div className="notification-popover">
             <header><div><small>BENACHRICHTIGUNGEN</small><b>{unread?unread+' neu':'Alles gelesen'}</b></div>{unread>0&&<button onClick={()=>void readAll()}>Alle gelesen</button>}</header>
-            <div>{notifications.length?notifications.slice(0,12).map(item=><button key={item.id} className={item.readAt?'':'unread'} onClick={()=>void openNotification(item)}>
+            <div>{notifications.length?notifications.slice(0,12).map(item=><button key={item.id} className={item.readAt?'':'unread'} onClick={()=>openNotification(item)}>
               <span className="notification-dot"/><div><b>{item.title}</b><p>{item.body||'Neue Aktivität in MotorAtlas.'}</p><small>{new Date(item.createdAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}</small></div>
             </button>):<div className="notification-empty"><Bell/><b>Keine neuen Meldungen.</b><span>Neue Anfragen und Terminantworten erscheinen hier automatisch.</span></div>}</div>
           </div>}
