@@ -410,6 +410,102 @@
   .garage-detail-actions .btn{width:100%}
 }
 
+.workshop-customer-manager{display:grid;gap:12px}
+.workshop-customer-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px}
+.workshop-customer-search{flex:1;min-width:0;display:flex;align-items:center;gap:9px;border:1px solid #dfe7ea;background:#fff;border-radius:11px;padding:0 11px}
+.workshop-customer-search>svg{width:17px;color:#8a989e;flex:0 0 17px}
+.workshop-customer-search input{width:100%;border:0;outline:0;background:transparent;padding:11px 0;font:inherit;color:#405762}
+.workshop-customer-layout{display:grid;grid-template-columns:minmax(320px,400px) minmax(0,1fr);gap:12px;align-items:start}
+.workshop-customer-list{padding:0;overflow:hidden}
+.workshop-customer-list>header{padding:14px 15px;border-bottom:1px solid #e7edef}
+.workshop-customer-list>header h3{font:800 15px Manrope;margin:3px 0 0;color:#405762}
+.workshop-customer-list>div{max-height:680px;overflow:auto}
+.workshop-customer-row{width:100%;border:0;border-bottom:1px solid #edf1f3;background:#fff;padding:10px 11px;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;cursor:pointer}
+.workshop-customer-row:hover{background:#fafcfc}
+.workshop-customer-row.active{background:var(--brand-soft);box-shadow:inset 3px 0 0 var(--brand)}
+.workshop-customer-row-main{min-width:0}
+.workshop-customer-row-main b{display:block;font-size:10px;color:#405762}
+.workshop-customer-row-main small{display:block;font-size:8px;color:#73858d;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workshop-customer-row-main p{font-size:7px;color:#929fa5;margin:4px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workshop-customer-row-meta{text-align:right;min-width:88px}
+.workshop-customer-row-meta strong{display:block;font-size:7px;color:var(--brand);font-weight:900}
+.workshop-customer-row-meta small{display:block;font-size:7px;color:#8e9ba1;margin-top:4px}
+.workshop-customer-placeholder{min-height:320px;display:grid;place-items:center;text-align:center;padding:40px}
+.workshop-customer-placeholder>svg{width:48px;height:48px;color:#a7b3b8}
+.workshop-customer-placeholder h3{font:800 18px Manrope;color:#405762;margin:8px 0 0}
+.workshop-customer-placeholder p{max-width:420px;font-size:10px;line-height:1.5;color:#7e8d94;margin:4px auto 0}
+
+.workshop-customer-detail{padding:0;overflow:hidden}
+.workshop-customer-detail-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border-bottom:1px solid #e7edef}
+.workshop-customer-detail-head h2{font:800 20px Manrope;color:#405762;margin:3px 0}
+.workshop-customer-detail-head p{font-size:10px;color:#7e8d94;margin:0}
+.workshop-customer-detail-head>div:last-child{display:flex;gap:8px;flex-wrap:wrap}
+.workshop-customer-contact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:#e7edef}
+.workshop-customer-contact>div{background:#fff;padding:12px 13px;display:flex;gap:9px;align-items:flex-start;min-width:0}
+.workshop-customer-contact svg{width:16px;flex:0 0 16px;color:var(--brand);margin-top:1px}
+.workshop-customer-contact small,.workshop-customer-vehicle-data small{display:block;font-size:7px;font-weight:900;letter-spacing:.5px;color:#93a0a6}
+.workshop-customer-contact b,.workshop-customer-vehicle-data b{display:block;font-size:9px;color:#465e68;margin-top:3px;overflow-wrap:anywhere}
+.workshop-customer-vehicle-data{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:#e7edef;border-top:1px solid #e7edef;border-bottom:1px solid #e7edef}
+.workshop-customer-vehicle-data>div{background:#fbfcfd;padding:12px 13px;min-width:0}
+
+.vehicle-history,.garage-history-panel{margin:14px;border:1px solid #dfe7ea;border-radius:13px;overflow:hidden;background:#fff}
+.vehicle-history>header,.garage-history-panel>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 13px;border-bottom:1px solid #edf1f3;background:#fbfcfd}
+.vehicle-history>header>div,.garage-history-panel>header>div{display:flex;align-items:center;gap:9px}
+.vehicle-history>header svg,.garage-history-panel>header svg{width:22px;color:var(--brand)}
+.vehicle-history>header small,.garage-history-panel>header small{display:block;font-size:7px;font-weight:900;letter-spacing:.6px;color:var(--brand)}
+.vehicle-history>header b,.garage-history-panel>header h3{display:block;font:800 12px Manrope;color:#405762;margin:2px 0 0}
+.vehicle-history>header strong,.garage-history-panel>header strong{font-size:11px;color:#60737c;background:#eef3f4;border-radius:999px;padding:4px 7px}
+.vehicle-history-list,.garage-history-list{display:grid}
+.vehicle-history-list article,.garage-history-list article{display:grid;grid-template-columns:15px minmax(0,1fr);gap:8px;padding:11px 13px;border-bottom:1px solid #edf1f3}
+.vehicle-history-list article:last-child,.garage-history-list article:last-child{border-bottom:0}
+.vehicle-history-list article>i,.garage-history-list article>i{width:9px;height:9px;border:2px solid var(--brand);border-radius:50%;margin-top:5px;position:relative}
+.vehicle-history-list article>i:after,.garage-history-list article>i:after{content:"";position:absolute;top:8px;left:2px;width:1px;height:calc(100% + 17px);background:#dfe7ea}
+.vehicle-history-list article:last-child>i:after,.garage-history-list article:last-child>i:after{display:none}
+.vehicle-history-list small,.garage-history-list small{display:block;font-size:7px;color:#8a989f}
+.vehicle-history-list b,.garage-history-list b{display:block;font-size:10px;color:#405762;margin-top:2px}
+.vehicle-history-list p,.garage-history-list p{font-size:9px;line-height:1.45;color:#6f8189;margin:3px 0 0}
+.vehicle-history-list span,.garage-history-list span{display:block;font-size:8px;color:#8c999f;margin-top:4px}
+
+.vehicle-claim-modal{width:min(620px,calc(100vw - 28px))}
+.vehicle-claim-mode{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.vehicle-claim-mode>button{border:1px solid #dfe7ea;background:#fff;border-radius:12px;padding:11px;display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;text-align:left;cursor:pointer}
+.vehicle-claim-mode>button.active{border-color:rgba(var(--brand-rgb),.35);background:var(--brand-soft);box-shadow:0 0 0 2px rgba(var(--brand-rgb),.09)}
+.vehicle-claim-mode>button:disabled{opacity:.5;cursor:not-allowed}
+.vehicle-claim-mode svg{width:26px;height:26px;padding:5px;border-radius:8px;background:#f0f5f6;color:var(--brand)}
+.vehicle-claim-mode b{display:block;font-size:9px;color:#405762}
+.vehicle-claim-mode small{display:block;font-size:8px;line-height:1.4;color:#7e8d94;margin-top:3px}
+.vehicle-claim-privacy{display:flex;gap:9px;align-items:flex-start;background:#f7fbf9;border:1px solid #dce9e2;border-radius:11px;padding:10px 11px;margin-bottom:12px}
+.vehicle-claim-privacy svg{width:18px;flex:0 0 18px;color:var(--brand)}
+.vehicle-claim-privacy p{font-size:8px;line-height:1.45;color:#687b83;margin:0}
+.vehicle-claim-code{text-align:center;display:grid;justify-items:center;gap:7px}
+.vehicle-claim-code img{width:min(300px,78vw);height:auto;border:1px solid #e0e7ea;border-radius:12px;background:#fff;padding:9px}
+.vehicle-claim-code>b{font:800 15px Manrope;color:#405762}
+.vehicle-claim-code>span{font-size:10px;font-weight:900;color:#586d76}
+.vehicle-claim-code>small{font-size:8px;color:#8a989f}
+
+.workshop-customer-create-modal{width:min(820px,calc(100vw - 28px));max-height:92vh;overflow:auto}
+.workshop-customer-create-modal form{display:grid;gap:11px}
+.workshop-customer-create-modal form>h3{font:800 12px Manrope;color:#405762;margin:6px 0 -2px;padding-top:8px;border-top:1px solid #e7edef}
+.inline-fields{display:grid;grid-template-columns:minmax(86px,.4fr) minmax(0,1fr);gap:7px}
+
+@media(max-width:900px){
+  .workshop-customer-layout{grid-template-columns:1fr}
+  .workshop-customer-list>div{max-height:430px}
+  .workshop-customer-vehicle-data{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .workshop-customer-toolbar{display:grid}
+  .workshop-customer-toolbar .btn{width:100%}
+  .workshop-customer-row{grid-template-columns:36px minmax(0,1fr)}
+  .workshop-customer-row-meta{grid-column:2;text-align:left;display:flex;gap:8px;align-items:center}
+  .workshop-customer-detail-head{align-items:flex-start;display:grid}
+  .workshop-customer-detail-head>div:last-child{display:grid;grid-template-columns:1fr 1fr}
+  .workshop-customer-contact{grid-template-columns:1fr}
+  .workshop-customer-vehicle-data{grid-template-columns:1fr 1fr}
+  .vehicle-claim-mode{grid-template-columns:1fr}
+  .inline-fields{grid-template-columns:1fr}
+}
+
 .customer-document-list{display:grid;gap:9px}.customer-document-row{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(180px,1fr) auto auto;gap:14px;align-items:center;padding:14px 16px}.customer-document-type{display:flex;align-items:center;gap:10px}.customer-document-type>svg{width:24px;color:var(--brand)}.customer-document-type small{display:block;font-size:7px;letter-spacing:.8px;font-weight:900;color:var(--brand)}.customer-document-type b{display:block;font-size:11px;color:#405762;margin-top:2px}.customer-document-context span{display:block;font-size:10px;color:#586f79}.customer-document-context small{display:block;font-size:8px;color:#8c999f;margin-top:2px}.customer-document-row>strong{font:800 13px Manrope;color:#405762}
 
 .customer-workshop-view{display:grid;gap:14px}.customer-workshop-hero{display:grid;grid-template-columns:120px 1fr;gap:20px;align-items:center;padding:22px}.customer-workshop-logo{width:120px;height:120px;border-radius:18px;background:#f4f7f8;display:grid;place-items:center;overflow:hidden;border:1px solid #e0e7e9}.customer-workshop-logo img{width:100%;height:100%;object-fit:contain;padding:10px}.customer-workshop-logo svg{width:42px;color:var(--brand)}.customer-workshop-hero h2{font:800 27px Manrope;margin:4px 0;color:#405762}.customer-workshop-hero p{font-size:11px;line-height:1.5;color:#71838b;margin:6px 0}.customer-workshop-address{display:flex;align-items:center;gap:6px;font-size:10px;color:#5d727c;margin-top:10px}.customer-workshop-address svg{width:15px;color:var(--brand)}
