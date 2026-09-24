@@ -1154,6 +1154,132 @@ export async function uploadOfficialDocument(input:{
 }
 
 
+export type WorkshopCustomerDirectoryItem={
+  customerId?:string|null;linkedUserId?:string|null;customerName:string;phone?:string|null;email?:string|null;
+  street?:string|null;postalCode?:string|null;city?:string|null;vehicleId:string;make:string;model:string;variant?:string|null;
+  licensePlate:string;vin?:string|null;mileage?:number|null;ownerUserId?:string|null;identityVerifiedAt?:string|null;
+  lastHistoryAt?:string|null;historyCount:number;
+};
+
+export type VehicleHistoryEntry={
+  id:string;entryType:'diagnosis'|'repair'|'maintenance'|'inspection'|'service'|'note';title:string;
+  summary?:string|null;mileage?:number|null;occurredAt:string;workshopName:string;workOrderId?:string|null;orderNumber?:string|null;
+};
+
+export type VehicleClaimPreview={
+  vehicleId:string;make:string;model:string;variant?:string|null;licensePlate:string;workshopName:string;
+  claimMode:'onboarding'|'transfer';expiresAt:string;valid:boolean;
+};
+
+export async function listWorkshopCustomerDirectory(workshopId:string,search=''):Promise<WorkshopCustomerDirectoryItem[]>{
+  const {data,error}=await db().rpc('list_workshop_customer_directory',{p_workshop_id:workshopId,p_search:search.trim()||null});
+  if(error)throw error;
+  return((data??[]) as any[]).map(row=>({
+    customerId:row.customer_id??null,linkedUserId:row.linked_user_id??null,customerName:row.customer_name??'Kunde',
+    phone:row.phone??null,email:row.email??null,street:row.street??null,postalCode:row.postal_code??null,city:row.city??null,
+    vehicleId:row.vehicle_id,make:row.make??'',model:row.model??'',variant:row.variant??null,licensePlate:row.license_plate??'—',
+    vin:row.vin??null,mileage:row.mileage??null,ownerUserId:row.owner_user_id??null,identityVerifiedAt:row.identity_verified_at??null,
+    lastHistoryAt:row.last_history_at??null,historyCount:Number(row.history_count??0)
+  }));
+}
+
+export async function createWorkshopCustomerVehicle(input:{
+  workshopId:string;fullName:string;phone?:string;email?:string;street?:string;postalCode?:string;city?:string;
+  make:string;model:string;variant?:string;firstRegistration?:string;licensePlate:string;hsn?:string;tsn?:string;vin?:string;
+  mileage?:number|null;typeVariantVersion?:string;engineCode?:string;displacementCcm?:number|null;powerKw?:number|null;
+  fuelType?:string;transmissionCode?:string;driveType?:string;
+}){
+  const {data,error}=await db().rpc('create_workshop_customer_vehicle',{
+    p_workshop_id:input.workshopId,p_full_name:input.fullName.trim(),p_phone:input.phone?.trim()||null,
+    p_email:input.email?.trim().toLowerCase()||null,p_street:input.street?.trim()||null,p_postal_code:input.postalCode?.trim()||null,
+    p_city:input.city?.trim()||null,p_make:input.make.trim(),p_model:input.model.trim(),p_variant:input.variant?.trim()||null,
+    p_first_registration:input.firstRegistration||null,p_license_plate:input.licensePlate.trim().toUpperCase(),p_hsn:input.hsn?.trim()||null,
+    p_tsn:input.tsn?.trim().toUpperCase()||null,p_vin:input.vin?.trim().toUpperCase()||null,p_mileage:input.mileage??null,
+    p_type_variant_version:input.typeVariantVersion?.trim()||null,p_engine_code:input.engineCode?.trim().toUpperCase()||null,
+    p_displacement_ccm:input.displacementCcm??null,p_power_kw:input.powerKw??null,p_fuel_type:input.fuelType?.trim()||null,
+    p_transmission_code:input.transmissionCode?.trim().toUpperCase()||null,p_drive_type:input.driveType?.trim()||null
+  });
+  if(error){
+    const message=error.message.includes('vehicles_vin_unique_idx')||error.message.includes('duplicate key')
+      ?'Diese FIN/VIN ist bereits einem Fahrzeug in MotorAtlas zugeordnet.'
+      :error.message.includes('customer_name_required')
+        ?'Bitte den Kundennamen eintragen.'
+        :error.message.includes('license_plate_required')
+          ?'Bitte das Kennzeichen eintragen.'
+          :error.message;
+    throw new Error(message);
+  }
+  return Array.isArray(data)?data[0]:data;
+}
+
+export async function getVehicleHistory(vehicleId:string):Promise<VehicleHistoryEntry[]>{
+  const {data,error}=await db().rpc('get_vehicle_history',{p_vehicle_id:vehicleId});
+  if(error)throw error;
+  return((data??[]) as any[]).map(row=>({
+    id:row.id,entryType:row.entry_type,title:row.title,summary:row.summary??null,mileage:row.mileage??null,
+    occurredAt:row.occurred_at,workshopName:row.workshop_name,workOrderId:row.work_order_id??null,orderNumber:row.order_number??null
+  }));
+}
+
+export async function addVehicleHistoryEntry(input:{
+  vehicleId:string;workshopId:string;entryType:VehicleHistoryEntry['entryType'];title:string;summary?:string;
+  mileage?:number|null;occurredAt?:string;
+}){
+  const {data,error}=await db().rpc('add_vehicle_history_entry',{
+    p_vehicle_id:input.vehicleId,p_workshop_id:input.workshopId,p_entry_type:input.entryType,p_title:input.title.trim(),
+    p_summary:input.summary?.trim()||null,p_mileage:input.mileage??null,p_occurred_at:input.occurredAt||new Date().toISOString()
+  });
+  if(error)throw error;return data;
+}
+
+export async function createVehicleClaimToken(input:{
+  vehicleId:string;workshopId:string;customerId?:string|null;claimMode?:'onboarding'|'transfer';
+}):Promise<{token:string;expiresAt:string}>{
+  const {data,error}=await db().rpc('create_vehicle_claim_token',{
+    p_vehicle_id:input.vehicleId,p_workshop_id:input.workshopId,p_customer_id:input.customerId??null,p_claim_mode:input.claimMode??'onboarding'
+  });
+  if(error){
+    const message=error.message.includes('vehicle_already_claimed')
+      ?'Das Fahrzeug ist bereits einem MotorAtlas-Konto zugeordnet.'
+      :error.message.includes('active_owner_must_release_vehicle')
+        ?'Der bisherige MotorAtlas-Besitzer muss das Fahrzeug zuerst als verkauft aus seiner Garage nehmen.'
+        :error.message;
+    throw new Error(message);
+  }
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  return{token:row.token,expiresAt:row.expires_at};
+}
+
+export async function getVehicleClaimPreview(token:string):Promise<VehicleClaimPreview|null>{
+  const {data,error}=await db().rpc('get_vehicle_claim_preview',{p_token:token});
+  if(error)throw error;
+  const row=(Array.isArray(data)?data[0]:data) as any;
+  if(!row)return null;
+  return{
+    vehicleId:row.vehicle_id,make:row.make??'',model:row.model??'',variant:row.variant??null,licensePlate:row.license_plate??'—',
+    workshopName:row.workshop_name??'Werkstatt',claimMode:row.claim_mode,expiresAt:row.expires_at,valid:Boolean(row.valid)
+  };
+}
+
+export async function claimVehicleWithToken(token:string){
+  const {data,error}=await db().rpc('claim_vehicle_with_token',{p_token:token});
+  if(error){
+    const message=error.message.includes('claim_expired')
+      ?'Dieser QR-Code ist abgelaufen. Bitte lass dir von der Werkstatt einen neuen erzeugen.'
+      :error.message.includes('claim_already_used')
+        ?'Dieser QR-Code wurde bereits verwendet.'
+        :error.message.includes('claim_revoked')
+          ?'Dieser QR-Code wurde von der Werkstatt ersetzt oder widerrufen.'
+          :error.message.includes('vehicle_has_active_owner')
+            ?'Das Fahrzeug ist noch einem anderen aktiven MotorAtlas-Konto zugeordnet.'
+            :error.message.includes('claim_not_found')
+              ?'Dieser Fahrzeug-Code ist ungültig.'
+              :error.message;
+    throw new Error(message);
+  }
+  return data;
+}
+
 export type CustomerProfile={
   id:string;fullName:string;email?:string|null;phone?:string|null;street?:string|null;postalCode?:string|null;city?:string|null;countryCode:string;
 };
